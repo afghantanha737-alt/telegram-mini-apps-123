@@ -2,12 +2,13 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
+
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     >
 
-    <title>Mini App</title>
+    <title>Amir Mini App</title>
 
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
@@ -18,125 +19,373 @@
             padding: 0;
         }
 
+        :root {
+            --bg: #f5f7fb;
+            --card: #ffffff;
+            --text: #172033;
+            --muted: #7b8497;
+            --primary: #6c5ce7;
+            --primary-dark: #5545d4;
+            --gold: #f5b942;
+            --green: #20b486;
+            --border: #e9ecf3;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            background: #f5f7fb;
-            color: #222;
+            font-family:
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                Tahoma,
+                Arial,
+                sans-serif;
+
+            background:
+                radial-gradient(
+                    circle at 80% 0%,
+                    rgba(108, 92, 231, 0.13),
+                    transparent 35%
+                ),
+                var(--bg);
+
+            color: var(--text);
             min-height: 100vh;
-            padding-bottom: 80px;
+            padding-bottom: 92px;
         }
 
-        .header {
-            background: #ffffff;
-            padding: 22px 18px;
-            text-align: center;
-            border-bottom: 1px solid #e5e7eb;
+        button {
+            font-family: inherit;
         }
 
-        .header h1 {
-            font-size: 24px;
-            margin-bottom: 7px;
-        }
-
-        .header p {
-            color: #777;
-            font-size: 14px;
-        }
-
-        .container {
-            padding: 18px;
-            max-width: 600px;
+        .app {
+            max-width: 650px;
             margin: auto;
         }
 
+        /* =========================
+           TOP
+        ========================= */
+
+        .top {
+            padding: 22px 18px 12px;
+        }
+
+        .top-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .user-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .avatar {
+            width: 52px;
+            height: 52px;
+            border-radius: 17px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #7c68ee,
+                    #4c3dc7
+                );
+
+            color: white;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-size: 22px;
+            font-weight: 800;
+
+            box-shadow:
+                0 8px 22px
+                rgba(108, 92, 231, 0.25);
+        }
+
+        .hello {
+            color: var(--muted);
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        .username {
+            font-size: 18px;
+            font-weight: 800;
+        }
+
+        .notification {
+            width: 43px;
+            height: 43px;
+
+            border: 1px solid var(--border);
+            background: var(--card);
+
+            border-radius: 14px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-size: 19px;
+        }
+
+        /* =========================
+           BALANCE
+        ========================= */
+
+        .balance-card {
+            margin: 12px 18px 18px;
+            padding: 24px;
+
+            border-radius: 26px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #7563ed,
+                    #4f3dc7
+                );
+
+            color: white;
+
+            position: relative;
+            overflow: hidden;
+
+            box-shadow:
+                0 15px 35px
+                rgba(91, 73, 211, 0.25);
+        }
+
+        .balance-card::before {
+            content: "";
+
+            position: absolute;
+
+            width: 180px;
+            height: 180px;
+
+            border-radius: 50%;
+
+            background: rgba(255,255,255,0.08);
+
+            left: -70px;
+            top: -70px;
+        }
+
+        .balance-card::after {
+            content: "";
+
+            position: absolute;
+
+            width: 140px;
+            height: 140px;
+
+            border-radius: 50%;
+
+            background: rgba(255,255,255,0.07);
+
+            right: -50px;
+            bottom: -60px;
+        }
+
+        .balance-label {
+            font-size: 13px;
+            opacity: 0.82;
+        }
+
+        .balance {
+            font-size: 39px;
+            font-weight: 900;
+            margin: 7px 0;
+            position: relative;
+            z-index: 2;
+        }
+
+        .balance-name {
+            font-size: 13px;
+            opacity: 0.82;
+        }
+
+        .balance-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+
+            margin-top: 20px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .balance-stat {
+            background: rgba(255,255,255,0.12);
+            border-radius: 15px;
+            padding: 12px;
+        }
+
+        .balance-stat strong {
+            display: block;
+            font-size: 18px;
+            margin-bottom: 3px;
+        }
+
+        .balance-stat span {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        /* =========================
+           PAGE
+        ========================= */
+
         .page {
             display: none;
+            padding: 0 18px;
+            animation: fadeIn 0.2s ease;
         }
 
         .page.active {
             display: block;
         }
 
-        .welcome {
-            background: white;
-            border-radius: 18px;
-            padding: 20px;
-            margin-bottom: 15px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
-        .welcome h2 {
-            margin-bottom: 8px;
+        .section-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+
+            margin: 10px 0 13px;
         }
 
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin-bottom: 18px;
+        .section-title h2 {
+            font-size: 19px;
         }
 
-        .stat {
-            background: white;
-            border-radius: 15px;
-            padding: 16px 8px;
-            text-align: center;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.05);
-        }
-
-        .stat-number {
-            font-size: 21px;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-
-        .stat-title {
-            color: #777;
+        .section-title span {
+            color: var(--muted);
             font-size: 12px;
         }
 
-        .card {
-            background: white;
-            border-radius: 18px;
-            padding: 18px;
-            margin-bottom: 15px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
-        }
+        /* =========================
+           QUICK CARDS
+        ========================= */
 
-        .card h3 {
-            margin-bottom: 10px;
-        }
-
-        .card p {
-            color: #666;
-            line-height: 1.7;
-            font-size: 14px;
-        }
-
-        .task {
-            background: white;
-            border-radius: 18px;
-            padding: 18px;
-            margin-bottom: 15px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
-        }
-
-        .task-header {
-            display: flex;
-            align-items: center;
+        .quick-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 12px;
-            margin-bottom: 12px;
         }
 
-        .task-icon {
-            width: 48px;
-            height: 48px;
+        .quick-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+
+            border-radius: 20px;
+            padding: 18px;
+
+            cursor: pointer;
+
+            transition:
+                transform 0.15s ease,
+                box-shadow 0.15s ease;
+        }
+
+        .quick-card:active {
+            transform: scale(0.97);
+        }
+
+        .quick-icon {
+            width: 45px;
+            height: 45px;
+
             border-radius: 14px;
-            background: #eef6ff;
+
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 25px;
+
+            font-size: 21px;
+            margin-bottom: 12px;
+        }
+
+        .purple {
+            background: #eeeaff;
+        }
+
+        .yellow {
+            background: #fff4d9;
+        }
+
+        .green {
+            background: #e5f8f1;
+        }
+
+        .blue {
+            background: #e5f2ff;
+        }
+
+        .quick-card h3 {
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .quick-card p {
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        /* =========================
+           TASKS
+        ========================= */
+
+        .task-card {
+            background: var(--card);
+
+            border: 1px solid var(--border);
+
+            border-radius: 22px;
+
+            padding: 17px;
+
+            margin-bottom: 12px;
+        }
+
+        .task-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .task-icon {
+            width: 50px;
+            height: 50px;
+
+            border-radius: 16px;
+
+            background: #eeeaff;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-size: 24px;
         }
 
         .task-info {
@@ -144,637 +393,1035 @@
         }
 
         .task-info h3 {
-            font-size: 16px;
+            font-size: 15px;
             margin-bottom: 5px;
         }
 
         .task-info p {
-            color: #777;
-            font-size: 13px;
-        }
-
-        .reward {
-            color: #e09b00;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-
-        button,
-        .button {
-            width: 100%;
-            border: none;
-            border-radius: 13px;
-            padding: 13px;
-            font-size: 15px;
-            font-weight: bold;
-            cursor: pointer;
-            text-decoration: none;
-            display: block;
-            text-align: center;
-            margin-top: 9px;
-        }
-
-        .primary {
-            background: #2481cc;
-            color: white;
-        }
-
-        .secondary {
-            background: #eef2f7;
-            color: #222;
-        }
-
-        .success {
-            background: #22a06b;
-            color: white;
-        }
-
-        .disabled {
-            background: #d1d5db;
-            color: #666;
-            pointer-events: none;
-        }
-
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 68px;
-            background: white;
-            border-top: 1px solid #e5e7eb;
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            z-index: 1000;
-        }
-
-        .nav-button {
-            background: transparent;
-            border: none;
-            width: 33.33%;
-            margin: 0;
-            padding: 7px 2px;
-            color: #777;
+            color: var(--muted);
             font-size: 12px;
         }
 
-        .nav-button .icon {
-            display: block;
-            font-size: 21px;
-            margin-bottom: 3px;
+        .reward {
+            margin-top: 14px;
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .reward span {
+            color: #c58900;
+            background: #fff5d9;
+
+            padding: 7px 10px;
+            border-radius: 10px;
+
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .task-button {
+            width: 100%;
+
+            border: none;
+
+            background: var(--primary);
+            color: white;
+
+            padding: 12px;
+
+            border-radius: 13px;
+
+            margin-top: 12px;
+
+            font-size: 13px;
+            font-weight: 800;
+
+            cursor: pointer;
+        }
+
+        /* =========================
+           REFERRAL
+        ========================= */
+
+        .ref-card {
+            background: var(--card);
+
+            border: 1px solid var(--border);
+
+            border-radius: 22px;
+
+            padding: 20px;
+
+            margin-bottom: 14px;
+        }
+
+        .ref-icon {
+            width: 58px;
+            height: 58px;
+
+            border-radius: 18px;
+
+            background: #eeeaff;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-size: 27px;
+
+            margin-bottom: 14px;
+        }
+
+        .ref-card h2 {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+
+        .ref-card p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        .ref-link {
+            background: #f5f6fa;
+
+            border: 1px solid var(--border);
+
+            padding: 13px;
+
+            border-radius: 13px;
+
+            font-size: 11px;
+
+            margin-top: 15px;
+
+            word-break: break-all;
+
+            direction: ltr;
+            text-align: left;
+        }
+
+        .ref-button {
+            width: 100%;
+
+            border: none;
+
+            background: var(--primary);
+            color: white;
+
+            padding: 13px;
+
+            border-radius: 14px;
+
+            margin-top: 10px;
+
+            font-weight: 800;
+            font-size: 13px;
+        }
+
+        /* =========================
+           POINTS
+        ========================= */
+
+        .points-card {
+            background: var(--card);
+
+            border: 1px solid var(--border);
+
+            border-radius: 22px;
+
+            padding: 22px;
+
+            text-align: center;
+        }
+
+        .points-star {
+            width: 70px;
+            height: 70px;
+
+            margin: auto auto 13px;
+
+            border-radius: 23px;
+
+            background: #fff4d5;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-size: 34px;
+        }
+
+        .points-number {
+            font-size: 35px;
+            font-weight: 900;
+        }
+
+        .points-label {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        /* =========================
+           EMPTY
+        ========================= */
+
+        .empty {
+            background: var(--card);
+
+            border: 1px solid var(--border);
+
+            border-radius: 22px;
+
+            padding: 35px 20px;
+
+            text-align: center;
+
+            color: var(--muted);
+        }
+
+        .empty-icon {
+            font-size: 42px;
+            margin-bottom: 12px;
+        }
+
+        /* =========================
+           NAV
+        ========================= */
+
+        .bottom-nav {
+            position: fixed;
+
+            left: 50%;
+            transform: translateX(-50%);
+
+            bottom: 12px;
+
+            width: calc(100% - 24px);
+            max-width: 620px;
+
+            height: 68px;
+
+            background: rgba(255,255,255,0.95);
+
+            backdrop-filter: blur(14px);
+
+            border: 1px solid var(--border);
+
+            border-radius: 23px;
+
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+
+            box-shadow:
+                0 10px 35px
+                rgba(20, 30, 60, 0.12);
+
+            z-index: 999;
+        }
+
+        .nav-button {
+            border: none;
+            background: transparent;
+
+            color: #8991a2;
+
+            font-size: 10px;
+
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+
+            gap: 4px;
+
+            cursor: pointer;
+        }
+
+        .nav-icon {
+            font-size: 20px;
         }
 
         .nav-button.active {
-            color: #2481cc;
+            color: var(--primary);
+            font-weight: 800;
         }
 
-        .referral-box {
-            background: #f0f7ff;
-            border-radius: 15px;
-            padding: 15px;
-            margin-top: 12px;
-            word-break: break-all;
-            font-size: 13px;
-            color: #555;
-        }
+        /* =========================
+           SMALL SCREEN
+        ========================= */
 
-        .message {
-            display: none;
-            padding: 13px;
-            border-radius: 12px;
-            margin-bottom: 15px;
-            text-align: center;
-            font-size: 14px;
-        }
+        @media (max-width: 360px) {
 
-        .message.show {
-            display: block;
-        }
+            .balance {
+                font-size: 33px;
+            }
 
-        .message.info {
-            background: #eaf4ff;
-            color: #1769aa;
-        }
+            .quick-grid {
+                gap: 8px;
+            }
 
-        .message.success-message {
-            background: #eaf8f1;
-            color: #16734b;
-        }
+            .quick-card {
+                padding: 14px;
+            }
 
-        .message.error {
-            background: #fff0f0;
-            color: #b42318;
         }
     </style>
 </head>
 
+
 <body>
 
-    <div class="header">
-        <h1>🚀 Mini App</h1>
-        <p>به برنامه ما خوش آمدی</p>
-    </div>
+<div class="app">
 
-    <div class="container">
+    <!-- =========================
+         HEADER
+    ========================== -->
 
-        <!-- =========================
-             HOME
-        ========================== -->
+    <header class="top">
 
-        <section id="homePage" class="page active">
+        <div class="top-row">
 
-            <div class="welcome">
-                <h2 id="welcomeText">سلام 👋</h2>
-                <p>خوش آمدی! از بخش‌های مختلف برنامه استفاده کن.</p>
-            </div>
+            <div class="user-area">
 
-            <div class="stats">
+                <div class="avatar" id="avatar">
+                    A
+                </div>
 
-                <div class="stat">
+                <div>
+
+                    <div class="hello">
+                        خوش آمدی 👋
+                    </div>
+
                     <div
-                        class="stat-number"
-                        id="pointsValue"
+                        class="username"
+                        id="username"
                     >
-                        0
+                        کاربر
                     </div>
 
-                    <div class="stat-title">
-                        ⭐ امتیاز
-                    </div>
-                </div>
-
-                <div class="stat">
-                    <div
-                        class="stat-number"
-                        id="referralsValue"
-                    >
-                        0
-                    </div>
-
-                    <div class="stat-title">
-                        👥 دعوت
-                    </div>
-                </div>
-
-                <div class="stat">
-                    <div
-                        class="stat-number"
-                        id="tasksValue"
-                    >
-                        0
-                    </div>
-
-                    <div class="stat-title">
-                        📋 تسک
-                    </div>
                 </div>
 
             </div>
 
-            <div class="card">
-                <h3>🎯 شروع کن</h3>
-
-                <p>
-                    با انجام تسک‌ها امتیاز بگیر و دوستانت را دعوت کن.
-                </p>
+            <div class="notification">
+                🔔
             </div>
 
-        </section>
+        </div>
+
+    </header>
 
 
-        <!-- =========================
-             REFERRAL
-        ========================== -->
+    <!-- =========================
+         BALANCE
+    ========================== -->
 
-        <section id="referralPage" class="page">
+    <div class="balance-card">
 
-            <div class="card">
+        <div class="balance-label">
+            موجودی امتیاز شما
+        </div>
 
-                <h2>👥 دعوت دوستان</h2>
+        <div class="balance">
+            <span id="points">
+                0
+            </span>
 
-                <p>
-                    دوستانت را دعوت کن و با دعوت‌های موفق امتیاز دریافت کن.
-                </p>
+            ⭐
+        </div>
 
-                <div class="referral-box" id="referralLink">
-                    لینک دعوت در حال آماده‌سازی...
-                </div>
+        <div class="balance-name">
+            Points
+        </div>
 
-                <button
-                    class="primary"
-                    onclick="copyReferralLink()"
-                >
-                    📋 کپی لینک دعوت
-                </button>
+        <div class="balance-stats">
 
-                <button
-                    class="secondary"
-                    onclick="shareReferralLink()"
-                >
-                    🚀 اشتراک‌گذاری لینک
-                </button>
+            <div class="balance-stat">
 
-            </div>
+                <strong id="referrals">
+                    0
+                </strong>
 
-        </section>
-
-
-        <!-- =========================
-             TASKS
-        ========================== -->
-
-        <section id="tasksPage" class="page">
-
-            <div id="taskMessage" class="message"></div>
-
-            <div class="card">
-                <h2>📋 تسک‌ها</h2>
-
-                <p>
-                    تسک‌ها را انجام بده و امتیاز دریافت کن.
-                </p>
-            </div>
-
-
-            <!-- Channel Task -->
-
-            <div class="task">
-
-                <div class="task-header">
-
-                    <div class="task-icon">
-                        📢
-                    </div>
-
-                    <div class="task-info">
-
-                        <h3>
-                            عضویت در کانال
-                        </h3>
-
-                        <p>
-                            در کانال ما عضو شو.
-                        </p>
-
-                    </div>
-
-                </div>
-
-                <div class="reward">
-                    🎁 پاداش: +10 امتیاز
-                </div>
-
-                <a
-                    class="button primary"
-                    href="https://t.me/AmirCryptoHub"
-                    target="_blank"
-                    onclick="openChannel()"
-                >
-                    📢 عضویت در کانال
-                </a>
-
-                <button
-                    id="checkChannelButton"
-                    class="success"
-                    onclick="checkChannel()"
-                >
-                    ✅ بررسی عضویت
-                </button>
+                <span>
+                    👥 دعوت موفق
+                </span>
 
             </div>
 
-        </section>
+            <div class="balance-stat">
+
+                <strong id="tasks">
+                    0
+                </strong>
+
+                <span>
+                    🎯 تسک انجام‌شده
+                </span>
+
+            </div>
+
+        </div>
 
     </div>
 
 
     <!-- =========================
-         BOTTOM NAVIGATION
+         HOME
     ========================== -->
 
-    <nav class="bottom-nav">
+    <section
+        id="home"
+        class="page active"
+    >
 
-        <button
-            class="nav-button active"
-            id="homeNav"
-            onclick="showPage('home')"
-        >
-            <span class="icon">🏠</span>
-            Home
-        </button>
+        <div class="section-title">
 
-        <button
-            class="nav-button"
-            id="referralNav"
-            onclick="showPage('referral')"
-        >
-            <span class="icon">👥</span>
-            Referral
-        </button>
+            <h2>
+                دسترسی سریع
+            </h2>
 
-        <button
-            class="nav-button"
-            id="tasksNav"
-            onclick="showPage('tasks')"
-        >
-            <span class="icon">📋</span>
-            Tasks
-        </button>
+            <span>
+                امکانات
+            </span>
 
-    </nav>
+        </div>
 
 
-    <script>
+        <div class="quick-grid">
 
-        // ==========================================
-        // Telegram WebApp
-        // ==========================================
+            <div
+                class="quick-card"
+                onclick="showPage('tasks')"
+            >
 
-        const tg = window.Telegram.WebApp;
+                <div class="quick-icon purple">
+                    🎯
+                </div>
 
-        tg.ready();
-        tg.expand();
+                <h3>
+                    تسک‌ها
+                </h3>
 
+                <p>
+                    انجام تسک و دریافت امتیاز
+                </p>
 
-        // ==========================================
-        // اطلاعات کاربر
-        // ==========================================
-
-        const telegramUser =
-            tg.initDataUnsafe &&
-            tg.initDataUnsafe.user
-                ? tg.initDataUnsafe.user
-                : null;
-
-
-        if (telegramUser) {
-
-            const firstName =
-                telegramUser.first_name || "دوست عزیز";
-
-            document.getElementById(
-                "welcomeText"
-            ).textContent =
-                "سلام " + firstName + " 👋";
-
-        }
+            </div>
 
 
-        // ==========================================
-        // نمایش صفحات
-        // ==========================================
+            <div
+                class="quick-card"
+                onclick="showPage('referral')"
+            >
 
-        function showPage(page) {
+                <div class="quick-icon yellow">
+                    👥
+                </div>
 
-            document
-                .querySelectorAll(".page")
-                .forEach(function(element) {
+                <h3>
+                    دعوت دوستان
+                </h3>
 
-                    element.classList.remove("active");
+                <p>
+                    دوستانت را دعوت کن
+                </p>
 
-                });
-
-
-            document
-                .querySelectorAll(".nav-button")
-                .forEach(function(element) {
-
-                    element.classList.remove("active");
-
-                });
+            </div>
 
 
-            if (page === "home") {
+            <div
+                class="quick-card"
+                onclick="showPage('points')"
+            >
 
-                document
-                    .getElementById("homePage")
-                    .classList.add("active");
+                <div class="quick-icon green">
+                    ⭐
+                </div>
 
-                document
-                    .getElementById("homeNav")
-                    .classList.add("active");
+                <h3>
+                    امتیازات
+                </h3>
 
-            }
+                <p>
+                    مشاهده موجودی امتیاز
+                </p>
 
-
-            if (page === "referral") {
-
-                document
-                    .getElementById("referralPage")
-                    .classList.add("active");
-
-                document
-                    .getElementById("referralNav")
-                    .classList.add("active");
-
-            }
+            </div>
 
 
-            if (page === "tasks") {
+            <div
+                class="quick-card"
+                onclick="showPage('tasks')"
+            >
 
-                document
-                    .getElementById("tasksPage")
-                    .classList.add("active");
+                <div class="quick-icon blue">
+                    🚀
+                </div>
 
-                document
-                    .getElementById("tasksNav")
-                    .classList.add("active");
+                <h3>
+                    شروع کسب امتیاز
+                </h3>
 
-            }
+                <p>
+                    همین حالا شروع کن
+                </p>
 
-        }
+            </div>
+
+        </div>
+
+    </section>
 
 
-        // ==========================================
-        // Referral Link
-        // ==========================================
+    <!-- =========================
+         TASKS
+    ========================== -->
 
-        function getReferralLink() {
+    <section
+        id="tasksPage"
+        class="page"
+    >
 
-            if (!telegramUser) {
+        <div class="section-title">
 
-                return "https://t.me/AmirAFG123_bot";
+            <h2>
+                🎯 تسک‌ها
+            </h2>
 
-            }
+            <span>
+                پاداش بگیر
+            </span>
 
-            return (
-                "https://t.me/AmirAFG123_bot?start=ref_"
-                + telegramUser.id
-            );
+        </div>
 
-        }
+
+        <div class="task-card">
+
+            <div class="task-top">
+
+                <div class="task-icon">
+                    📢
+                </div>
+
+                <div class="task-info">
+
+                    <h3>
+                        عضویت در کانال
+                    </h3>
+
+                    <p>
+                        در کانال رسمی ما عضو شو.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <div class="reward">
+
+                <span>
+                    +10 ⭐
+                </span>
+
+            </div>
+
+
+            <button
+                class="task-button"
+                onclick="joinChannel()"
+            >
+                📢 عضویت در کانال
+            </button>
+
+
+            <button
+                class="task-button"
+                onclick="checkMembership()"
+            >
+                ✅ بررسی عضویت
+            </button>
+
+        </div>
+
+
+        <div class="task-card">
+
+            <div class="task-top">
+
+                <div class="task-icon">
+                    👥
+                </div>
+
+                <div class="task-info">
+
+                    <h3>
+                        دعوت یک دوست
+                    </h3>
+
+                    <p>
+                        یک دوست را با لینک دعوت خودت بیاور.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <div class="reward">
+
+                <span>
+                    +5 ⭐
+                </span>
+
+            </div>
+
+
+            <button
+                class="task-button"
+                onclick="showReferral()"
+            >
+                👥 دعوت دوستان
+            </button>
+
+        </div>
+
+
+        <div class="empty">
+
+            <div class="empty-icon">
+                ✨
+            </div>
+
+            <p>
+                به‌زودی تسک‌های بیشتری اضافه می‌شود.
+            </p>
+
+        </div>
+
+    </section>
+
+
+    <!-- =========================
+         REFERRAL
+    ========================== -->
+
+    <section
+        id="referralPage"
+        class="page"
+    >
+
+        <div class="ref-card">
+
+            <div class="ref-icon">
+                👥
+            </div>
+
+            <h2>
+                دعوت دوستان
+            </h2>
+
+            <p>
+                دوستانت را دعوت کن و از فعالیت آن‌ها
+                امتیاز دریافت کن.
+            </p>
+
+
+            <div
+                class="ref-link"
+                id="referralLink"
+            >
+                در حال آماده‌سازی...
+            </div>
+
+
+            <button
+                class="ref-button"
+                onclick="copyReferral()"
+            >
+                📋 کپی لینک دعوت
+            </button>
+
+
+            <button
+                class="ref-button"
+                onclick="shareReferral()"
+            >
+                🚀 اشتراک‌گذاری
+            </button>
+
+        </div>
+
+    </section>
+
+
+    <!-- =========================
+         POINTS
+    ========================== -->
+
+    <section
+        id="pointsPage"
+        class="page"
+    >
+
+        <div class="section-title">
+
+            <h2>
+                ⭐ امتیازات
+            </h2>
+
+        </div>
+
+
+        <div class="points-card">
+
+            <div class="points-star">
+                ⭐
+            </div>
+
+            <div
+                class="points-number"
+                id="pointsBig"
+            >
+                0
+            </div>
+
+            <div class="points-label">
+                امتیاز فعلی
+            </div>
+
+        </div>
+
+    </section>
+
+</div>
+
+
+<!-- =========================
+     NAVIGATION
+========================== -->
+
+<nav class="bottom-nav">
+
+    <button
+        class="nav-button active"
+        id="navHome"
+        onclick="showPage('home')"
+    >
+
+        <span class="nav-icon">
+            🏠
+        </span>
+
+        خانه
+
+    </button>
+
+
+    <button
+        class="nav-button"
+        id="navTasks"
+        onclick="showPage('tasks')"
+    >
+
+        <span class="nav-icon">
+            🎯
+        </span>
+
+        تسک‌ها
+
+    </button>
+
+
+    <button
+        class="nav-button"
+        id="navReferral"
+        onclick="showPage('referral')"
+    >
+
+        <span class="nav-icon">
+            👥
+        </span>
+
+        دعوت
+
+    </button>
+
+
+    <button
+        class="nav-button"
+        id="navPoints"
+        onclick="showPage('points')"
+    >
+
+        <span class="nav-icon">
+            ⭐
+        </span>
+
+        امتیاز
+
+    </button>
+
+</nav>
+
+
+<script>
+
+    // ==========================================
+    // Telegram
+    // ==========================================
+
+    const tg = window.Telegram.WebApp;
+
+    tg.ready();
+    tg.expand();
+
+
+    // ==========================================
+    // User
+    // ==========================================
+
+    const user =
+        tg.initDataUnsafe &&
+        tg.initDataUnsafe.user
+            ? tg.initDataUnsafe.user
+            : null;
+
+
+    if (user) {
+
+        const name =
+            user.first_name || "کاربر";
+
+        document.getElementById(
+            "username"
+        ).textContent = name;
 
 
         document.getElementById(
-            "referralLink"
-        ).textContent = getReferralLink();
+            "avatar"
+        ).textContent =
+            name.charAt(0).toUpperCase();
+
+    }
 
 
-        function copyReferralLink() {
+    // ==========================================
+    // Navigation
+    // ==========================================
 
-            const link = getReferralLink();
+    function showPage(page) {
 
-            navigator.clipboard
-                .writeText(link)
-                .then(function() {
+        document
+            .querySelectorAll(".page")
+            .forEach(function(element) {
 
-                    showMessage(
-                        "لینک دعوت کپی شد ✅",
-                        "success-message"
-                    );
+                element.classList.remove("active");
 
-                })
-                .catch(function() {
+            });
 
-                    showMessage(
-                        "کپی لینک انجام نشد.",
-                        "error"
-                    );
 
+        document
+            .querySelectorAll(".nav-button")
+            .forEach(function(element) {
+
+                element.classList.remove("active");
+
+            });
+
+
+        if (page === "home") {
+
+            document
+                .getElementById("home")
+                .classList.add("active");
+
+            document
+                .getElementById("navHome")
+                .classList.add("active");
+
+        }
+
+
+        if (page === "tasks") {
+
+            document
+                .getElementById("tasksPage")
+                .classList.add("active");
+
+            document
+                .getElementById("navTasks")
+                .classList.add("active");
+
+        }
+
+
+        if (page === "referral") {
+
+            document
+                .getElementById("referralPage")
+                .classList.add("active");
+
+            document
+                .getElementById("navReferral")
+                .classList.add("active");
+
+        }
+
+
+        if (page === "points") {
+
+            document
+                .getElementById("pointsPage")
+                .classList.add("active");
+
+            document
+                .getElementById("navPoints")
+                .classList.add("active");
+
+        }
+
+    }
+
+
+    // ==========================================
+    // Referral
+    // ==========================================
+
+    function getReferralLink() {
+
+        if (!user) {
+            return "https://t.me/AmirAFG123_bot";
+        }
+
+        return (
+            "https://t.me/AmirAFG123_bot?start=ref_"
+            + user.id
+        );
+
+    }
+
+
+    document.getElementById(
+        "referralLink"
+    ).textContent =
+        getReferralLink();
+
+
+    function copyReferral() {
+
+        const link =
+            getReferralLink();
+
+        navigator.clipboard
+            .writeText(link)
+            .then(function() {
+
+                tg.showPopup({
+                    title: "انجام شد",
+                    message: "لینک دعوت کپی شد ✅",
+                    buttons: [
+                        {
+                            type: "ok"
+                        }
+                    ]
                 });
 
-        }
+            });
+
+    }
 
 
-        function shareReferralLink() {
+    function shareReferral() {
 
-            const link = getReferralLink();
+        const link =
+            getReferralLink();
 
-            if (tg.openTelegramLink) {
+        const shareUrl =
+            "https://t.me/share/url?url="
+            + encodeURIComponent(link);
 
-                const shareUrl =
-                    "https://t.me/share/url?url="
-                    + encodeURIComponent(link);
+        tg.openTelegramLink(
+            shareUrl
+        );
 
-                tg.openTelegramLink(shareUrl);
-
-            } else {
-
-                window.open(
-                    "https://t.me/share/url?url="
-                    + encodeURIComponent(link),
-                    "_blank"
-                );
-
-            }
-
-        }
+    }
 
 
-        // ==========================================
-        // عضویت در کانال
-        // ==========================================
+    // ==========================================
+    // Channel
+    // ==========================================
 
-        function openChannel() {
+    function joinChannel() {
 
-            showMessage(
-                "بعد از عضویت در کانال، به Mini App برگرد و روی «بررسی عضویت» بزن.",
-                "info"
-            );
+        tg.openTelegramLink(
+            "https://t.me/AmirCryptoHub"
+        );
 
-        }
-
-
-        // ==========================================
-        // بررسی عضویت
-        // ==========================================
-
-        function checkChannel() {
-
-            const button =
-                document.getElementById(
-                    "checkChannelButton"
-                );
-
-            button.disabled = true;
-
-            button.textContent =
-                "⏳ در حال بررسی...";
+    }
 
 
-            /*
-             * اطلاعات را به ربات تلگرام می‌فرستیم.
-             *
-             * برای تأیید واقعی عضویت، bot.py
-             * باید WebAppData را دریافت کند.
-             */
+    // ==========================================
+    // Membership
+    // ==========================================
 
-            const data = {
-                action: "check_channel",
-                task: "channel_membership"
-            };
+    function checkMembership() {
 
+        tg.showPopup({
+            title: "بررسی عضویت",
+            message:
+                "در مرحله بعد این دکمه به سیستم بررسی واقعی عضویت وصل می‌شود.",
+            buttons: [
+                {
+                    type: "ok"
+                }
+            ]
+        });
 
-            if (tg.sendData) {
-
-                tg.sendData(
-                    JSON.stringify(data)
-                );
-
-                showMessage(
-                    "درخواست بررسی برای ربات ارسال شد.",
-                    "info"
-                );
-
-            } else {
-
-                showMessage(
-                    "Mini App باید از داخل تلگرام باز شود.",
-                    "error"
-                );
-
-            }
+    }
 
 
-            setTimeout(function() {
+    // ==========================================
+    // Referral shortcut
+    // ==========================================
 
-                button.disabled = false;
+    function showReferral() {
 
-                button.textContent =
-                    "🔄 بررسی عضویت";
+        showPage("referral");
 
-            }, 3000);
-
-        }
-
-
-        // ==========================================
-        // پیام
-        // ==========================================
-
-        function showMessage(
-            text,
-            type
-        ) {
-
-            const message =
-                document.getElementById(
-                    "taskMessage"
-                );
-
-            message.textContent = text;
-
-            message.className =
-                "message show " + type;
+    }
 
 
-            setTimeout(function() {
+    // ==========================================
+    // Initial data
+    // ==========================================
 
-                message.classList.remove("show");
-
-            }, 5000);
-
-        }
+    document.getElementById(
+        "points"
+    ).textContent = "0";
 
 
-        // ==========================================
-        // مقدار اولیه
-        // ==========================================
+    document.getElementById(
+        "pointsBig"
+    ).textContent = "0";
 
-        showPage("home");
 
-    </script>
+    document.getElementById(
+        "referrals"
+    ).textContent = "0";
+
+
+    document.getElementById(
+        "tasks"
+    ).textContent = "0";
+
+</script>
 
 </body>
 </html>

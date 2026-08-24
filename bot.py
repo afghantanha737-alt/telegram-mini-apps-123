@@ -1,612 +1,430 @@
+"""
+Telegram Bot for Amir Crypto Hub Mini App
+Manages channel membership checks and point distribution
+"""
+
 import os
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import requests
+from dotenv import load_dotenv
+from database import Database
 import logging
 
-from flask import Flask, request, jsonify
-from threading import Thread
+# Load environment variables
+load_dotenv()
 
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    WebAppInfo,
-)
-
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-)
-
-from database import (
-    init_db,
-    add_or_update_user,
-    add_referral,
-    get_user_stats,
-    complete_task,
-)
-
-
-# ==========================================
-# تنظیمات
-# ==========================================
-
-BOT_TOKEN = os.getenv("8587885341:AAELW-nePD8TlwCOGmbKESFzXAEbgu-DLKU")
-
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN is not set")
-
-
-WEB_APP_URL = (
-    "https://afghantanha737-alt.github.io/"
-    "telegram-mini-apps-123/"
-)
-
-BOT_USERNAME = "AmirAFG123_bot"
-
-CHANNEL_USERNAME = "@AmirCryptoHub"
-
-CHANNEL_TASK_POINTS = 10
-
-
-# ==========================================
-# Logging
-# ==========================================
-
-logging.basicConfig(
-    format=(
-        "%(asctime)s - "
-        "%(name)s - "
-        "%(levelname)s - "
-        "%(message)s"
-    ),
-    level=logging.INFO,
-)
-
+# Setup logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Configuration
+BOT_TOKEN = os.getenv('BOT_TOKEN', '8587885341:AAELW-nePD8TlwCOGmbKESFzXAEbgu-DLKU')
+TELEGRAM_API_URL = f'https://api.telegram.org/bot{BOT_TOKEN}'
+CHANNEL_USERNAME = 'AmirCryptoHub'
 
-# ==========================================
-# Flask
-# ==========================================
+# Initialize Flask
+app = Flask(__name__)
+CORS(app)
 
-web_app = Flask(__name__)
+# Initialize Database
+db = Database()
 
+# ===========================
+# HELPER FUNCTIONS
+# ===========================
 
-@web_app.route("/")
-def home():
+def check_user_membership(user_id: int) -> dict:
+    """
+    Check if user is member of the channel
+    Returns: {is_member: bool, status: str, error: str}
+    """
+    try:
+        # Get channel chat member
+        url = f'{TELEGRAM_API_URL}/getChatMember'
+        params = {
+            'chat_id': f'@{CHANNEL_USERNAME}',
+            'user_id': user_id
+        }
 
-    return "Bot is running."
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
 
+        if not data.get('ok'):
+            error_msg = data.get('description', 'Unknown error')
+            logger.error(f"Telegram API error: {error_msg}")
+            return {
+                'is_member': False,
+                'status': 'error',
+                'error': error_msg
+            }
 
-@web_app.route("/health")
-def health():
+        user_status = data['result']['status']
+        
+        # Check membership status
+        is_member = user_status in ['member', 'administrator', 'creator']
+        
+        return {
+            'is_member': is_member,
+            'status': user_status,
+            'error': None
+        }
 
+    except requests.exceptions.Timeout:
+        logger.error(f"Timeout checking membership for user {user_id}")
+        return {
+            'is_member': False,
+            'status': 'timeout',
+            'error': 'Connection timeout'
+        }
+    except Exception as e:
+        logger.error(f"Error checking membership: {str(e)}")
+        return {
+            'is_member': False,
+            'status': 'error',
+            'error': str(e)
+        }
+
+def send_notification(user_id: int, message: str) -> bool:
+    """Send message to user via bot"""
+    try:
+        url = f'{TELEGRAM_API_URL}/sendMessage'
+        params = {
+            'chat_id': user_id,
+            'text': message,
+            'parse_mode': 'HTML'
+        }
+
+        response = requests.post(url, json=params, timeout=10)
+        return response.json().get('ok', False)
+
+    except Exception as e:
+        logger.error(f"Error sending notification: {str(e)}")
+        return False
+
+# ===========================
+# API ROUTES
+# ===========================
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
     return jsonify({
-        "status": "ok",
-        "bot": "online",
+        'status': 'ok',
+        'message': 'Bot is running',
+        'timestamp': str(__import__('datetime').datetime.now())
     })
 
-
-# ==========================================
-# /start
-# ==========================================
-
-async def start(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    user = update.effective_user
-
-    if user is None:
-        return
-
-    user_id = user.id
-
-    add_or_update_user(
-        user_id=user_id,
-        username=user.username,
-        first_name=user.first_name,
-        last_name=user.last_name,
-    )
-
-    # ======================================
-    # Referral
-    # ======================================
-
-    if context.args:
-
-        start_parameter = context.args[0]
-
-        if start_parameter.startswith("ref_"):
-
-            referral_id = start_parameter[4:]
-
-            try:
-
-                referrer_id = int(referral_id)
-
-                add_referral(
-                    referrer_id=referrer_id,
-                    invited_user_id=user_id,
-                )
-
-            except ValueError:
-
-                logger.warning(
-                    "Invalid referral ID: %s",
-                    referral_id,
-                )
-
-    # ======================================
-    # آمار
-    # ======================================
-
-    stats = get_user_stats(user_id)
-
-    points = stats["points"]
-    referrals = stats["referrals"]
-    tasks = stats["tasks"]
-
-    # ======================================
-    # Referral Link
-    # ======================================
-
-    referral_link = (
-        f"https://t.me/{BOT_USERNAME}"
-        f"?start=ref_{user_id}"
-    )
-
-    # ======================================
-    # Buttons
-    # ======================================
-
-    keyboard = [
-
-        [
-            InlineKeyboardButton(
-                text="🚀 باز کردن Mini App",
-                web_app=WebAppInfo(
-                    url=WEB_APP_URL
-                ),
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                text="📋 تسک‌ها",
-                callback_data="tasks",
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                text="👥 دعوت دوستان",
-                url=referral_link,
-            )
-        ],
-
-    ]
-
-    reply_markup = InlineKeyboardMarkup(
-        keyboard
-    )
-
-    # ======================================
-    # Welcome
-    # ======================================
-
-    first_name = (
-        user.first_name
-        or "دوست عزیز"
-    )
-
-    text = (
-        f"سلام {first_name} 👋\n\n"
-        "به ربات ما خوش آمدی! 🎉\n\n"
-        f"⭐ امتیاز: {points}\n"
-        f"👥 دعوت‌های موفق: {referrals}\n"
-        f"📋 وظایف: {tasks}\n\n"
-        "برای ورود به Mini App روی "
-        "دکمه زیر بزن."
-    )
-
-    await update.message.reply_text(
-        text=text,
-        reply_markup=reply_markup,
-    )
-
-
-# ==========================================
-# Tasks
-# ==========================================
-
-async def show_tasks(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    query = update.callback_query
-
-    await query.answer()
-
-    keyboard = [
-
-        [
-            InlineKeyboardButton(
-                text="📢 عضویت در کانال",
-                url="https://t.me/AmirCryptoHub",
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                text="✅ بررسی عضویت",
-                callback_data="check_channel",
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                text="🔙 برگشت",
-                callback_data="back_start",
-            )
-        ],
-
-    ]
-
-    reply_markup = InlineKeyboardMarkup(
-        keyboard
-    )
-
-    text = (
-        "📋 تسک‌های فعال\n\n"
-        "1️⃣ عضویت در کانال\n\n"
-        f"🎁 پاداش: "
-        f"{CHANNEL_TASK_POINTS} امتیاز\n\n"
-        "ابتدا عضو کانال شو، سپس روی "
-        "«✅ بررسی عضویت» بزن."
-    )
-
-    await query.edit_message_text(
-        text=text,
-        reply_markup=reply_markup,
-    )
-
-
-# ==========================================
-# Check Channel Membership
-# ==========================================
-
-async def check_channel_membership(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    query = update.callback_query
-
-    await query.answer()
-
-    user = query.from_user
-
+@app.route('/api/user/init', methods=['POST'])
+def user_init():
+    """Initialize user when Mini App opens"""
     try:
+        data = request.json
+        user_id = data.get('user_id')
+        username = data.get('username', 'unknown')
+        first_name = data.get('first_name', 'User')
 
-        member = await context.bot.get_chat_member(
-            chat_id=CHANNEL_USERNAME,
-            user_id=user.id,
-        )
+        if not user_id:
+            return jsonify({'success': False, 'message': 'Missing user_id'}), 400
 
-        status = member.status
+        # Get or create user
+        user = db.get_or_create_user(user_id, username, first_name)
 
-        is_member = status in [
-            "member",
-            "administrator",
-            "creator",
-        ]
+        # Get stats
+        stats = db.get_user_stats(user_id)
 
-        if not is_member:
+        return jsonify({
+            'success': True,
+            'user': user,
+            'stats': stats
+        })
 
-            await query.edit_message_text(
-                text=(
-                    "❌ هنوز عضو کانال نیستی.\n\n"
-                    "ابتدا عضو کانال شو و سپس "
-                    "دوباره بررسی کن."
-                ),
-                reply_markup=InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton(
-                            text="📢 عضویت در کانال",
-                            url=(
-                                "https://t.me/"
-                                "AmirCryptoHub"
-                            ),
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text="🔄 بررسی دوباره",
-                            callback_data=(
-                                "check_channel"
-                            ),
-                        )
-                    ],
-                ]),
-            )
+    except Exception as e:
+        logger.error(f"Error in user_init: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
-            return
+@app.route('/api/check-membership', methods=['POST'])
+def check_membership():
+    """
+    Check if user is member of channel
+    Verify membership and award points if applicable
+    """
+    try:
+        data = request.json
+        user_id = data.get('userID')
+        username = data.get('username')
 
-        # ==================================
-        # Complete Task
-        # ==================================
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'message': 'Missing userID'
+            }), 400
 
-        success = complete_task(
-            user_id=user.id,
-            task_name="channel_membership",
-            points=CHANNEL_TASK_POINTS,
-        )
+        # Ensure user exists
+        user = db.get_or_create_user(user_id, username, 'User')
 
-        stats = get_user_stats(user.id)
+        # Check if already completed this task
+        already_completed = db.is_task_completed(user_id, 'channel_join')
+
+        # Check membership
+        membership = check_user_membership(user_id)
+
+        if not membership['is_member']:
+            return jsonify({
+                'success': True,
+                'isMember': False,
+                'message': 'User is not a member of the channel'
+            })
+
+        # User is member
+        if already_completed:
+            return jsonify({
+                'success': True,
+                'isMember': True,
+                'alreadyRewarded': True,
+                'message': 'Already rewarded for this task'
+            })
+
+        # Award points
+        success, points = db.complete_task(user_id, 'channel_join', 10)
 
         if success:
-
-            message = (
-                "🎉 تبریک!\n\n"
-                "عضویت شما تأیید شد.\n\n"
-                f"⭐ +{CHANNEL_TASK_POINTS} "
-                "امتیاز دریافت کردی!\n\n"
-                f"💰 امتیاز فعلی: "
-                f"{stats['points']}"
+            # Send notification
+            send_notification(
+                user_id,
+                f'<b>🎉 تبریک!</b>\n\nبرای عضویت در کانال <b>۱۰ امتیاز</b> دریافت کردید!\n\n'
+                f'💰 کل امتیاز شما: <b>{points}</b>'
             )
 
+            return jsonify({
+                'success': True,
+                'isMember': True,
+                'alreadyRewarded': False,
+                'pointsAwarded': 10,
+                'totalPoints': points,
+                'message': 'Points awarded successfully'
+            })
         else:
+            return jsonify({
+                'success': False,
+                'message': 'Error awarding points'
+            }), 500
 
-            message = (
-                "✅ این تسک قبلاً انجام شده است.\n\n"
-                f"⭐ امتیاز شما: "
-                f"{stats['points']}"
+    except Exception as e:
+        logger.error(f"Error in check_membership: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+@app.route('/api/user/stats', methods=['GET'])
+def get_user_stats():
+    """Get user statistics"""
+    try:
+        user_id = request.args.get('user_id', type=int)
+
+        if not user_id:
+            return jsonify({'success': False, 'message': 'Missing user_id'}), 400
+
+        stats = db.get_user_stats(user_id)
+
+        if not stats:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+
+    except Exception as e:
+        logger.error(f"Error in get_user_stats: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/user/points', methods=['GET'])
+def get_user_points():
+    """Get user's current points"""
+    try:
+        user_id = request.args.get('user_id', type=int)
+
+        if not user_id:
+            return jsonify({'success': False, 'message': 'Missing user_id'}), 400
+
+        points = db.get_points(user_id)
+
+        return jsonify({
+            'success': True,
+            'points': points,
+            'user_id': user_id
+        })
+
+    except Exception as e:
+        logger.error(f"Error in get_user_points: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/referral/process', methods=['POST'])
+def process_referral():
+    """
+    Process referral when referred user joins
+    Called when a new user starts bot with referral code
+    """
+    try:
+        data = request.json
+        referred_user_id = data.get('referred_user_id')
+        referred_username = data.get('referred_username')
+        referral_code = data.get('referral_code')
+
+        if not all([referred_user_id, referred_username, referral_code]):
+            return jsonify({
+                'success': False,
+                'message': 'Missing required fields'
+            }), 400
+
+        # Get referrer by referral code
+        referrer = db.get_user_by_referral_code(referral_code)
+
+        if not referrer:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid referral code'
+            }), 404
+
+        # Ensure referred user exists
+        db.get_or_create_user(referred_user_id, referred_username, 'User')
+
+        # Add referral
+        success = db.add_referral(referrer['user_id'], referred_user_id)
+
+        if success:
+            referrer_points = db.get_points(referrer['user_id'])
+
+            # Notify referrer
+            send_notification(
+                referrer['user_id'],
+                f'<b>👥 دعوت موفق!</b>\n\n'
+                f'کاربر جدید توسط لینک شما عضو شد.\n'
+                f'<b>+5 امتیاز</b> دریافت کردید!\n\n'
+                f'💰 کل امتیاز: <b>{referrer_points}</b>'
             )
 
-        await query.edit_message_text(
-            text=message,
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        text="📋 تسک‌ها",
-                        callback_data="tasks",
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="🏠 برگشت",
-                        callback_data="back_start",
-                    )
-                ],
-            ]),
-        )
+            return jsonify({
+                'success': True,
+                'message': 'Referral processed successfully',
+                'referrer_id': referrer['user_id'],
+                'bonus_points': 5
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Error processing referral'
+            }), 500
 
-    except Exception as error:
+    except Exception as e:
+        logger.error(f"Error in process_referral: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
-        logger.exception(
-            "Membership check error"
-        )
+@app.route('/api/leaderboard', methods=['GET'])
+def get_leaderboard():
+    """Get top users leaderboard"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        limit = min(limit, 100)  # Max 100
 
-        await query.edit_message_text(
-            text=(
-                "⚠️ خطایی هنگام بررسی عضویت "
-                "رخ داد.\n\n"
-                "لطفاً دوباره امتحان کن."
-            ),
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        text="🔄 دوباره امتحان کن",
-                        callback_data=(
-                            "check_channel"
-                        ),
-                    )
-                ]
-            ]),
-        )
+        top_users = db.get_top_users(limit)
 
+        return jsonify({
+            'success': True,
+            'leaderboard': top_users
+        })
 
-# ==========================================
-# Back
-# ==========================================
+    except Exception as e:
+        logger.error(f"Error in get_leaderboard: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
-async def back_start(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+@app.route('/api/tasks/complete', methods=['POST'])
+def complete_task():
+    """Complete a task and award points"""
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        task_name = data.get('task_name')
 
-    query = update.callback_query
+        if not all([user_id, task_name]):
+            return jsonify({
+                'success': False,
+                'message': 'Missing required fields'
+            }), 400
 
-    await query.answer()
+        # Define task points
+        task_points = {
+            'channel_join': 10,
+            'referral': 5,
+            'share': 3
+        }
 
-    user = query.from_user
+        points = task_points.get(task_name, 0)
 
-    stats = get_user_stats(user.id)
+        if points == 0:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid task'
+            }), 400
 
-    referral_link = (
-        f"https://t.me/{BOT_USERNAME}"
-        f"?start=ref_{user.id}"
+        # Complete task
+        success, already_completed = db.complete_task(user_id, task_name, points)
+
+        if not success:
+            return jsonify({
+                'success': False,
+                'message': 'Error completing task'
+            }), 500
+
+        if already_completed:
+            return jsonify({
+                'success': True,
+                'message': 'Task already completed',
+                'alreadyCompleted': True
+            })
+
+        total_points = db.get_points(user_id)
+
+        return jsonify({
+            'success': True,
+            'message': 'Task completed successfully',
+            'pointsAwarded': points,
+            'totalPoints': total_points
+        })
+
+    except Exception as e:
+        logger.error(f"Error in complete_task: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# ===========================
+# ERROR HANDLERS
+# ===========================
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({
+        'success': False,
+        'message': 'Route not found'
+    }), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"Internal server error: {str(error)}")
+    return jsonify({
+        'success': False,
+        'message': 'Internal server error'
+    }), 500
+
+# ===========================
+# RUN APP
+# ===========================
+
+if __name__ == '__main__':
+    # Development mode
+    app.run(
+        host='0.0.0.0',
+        port=int(os.getenv('PORT', 5000)),
+        debug=os.getenv('DEBUG', 'False') == 'True'
     )
-
-    keyboard = [
-
-        [
-            InlineKeyboardButton(
-                text="🚀 باز کردن Mini App",
-                web_app=WebAppInfo(
-                    url=WEB_APP_URL
-                ),
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                text="📋 تسک‌ها",
-                callback_data="tasks",
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                text="👥 دعوت دوستان",
-                url=referral_link,
-            )
-        ],
-
-    ]
-
-    await query.edit_message_text(
-        text=(
-            f"سلام "
-            f"{user.first_name or 'دوست عزیز'} 👋\n\n"
-            "به ربات ما خوش آمدی! 🎉\n\n"
-            f"⭐ امتیاز: {stats['points']}\n"
-            f"👥 دعوت‌های موفق: "
-            f"{stats['referrals']}\n"
-            f"📋 وظایف: {stats['tasks']}"
-        ),
-        reply_markup=InlineKeyboardMarkup(
-            keyboard
-        ),
-    )
-
-
-# ==========================================
-# /help
-# ==========================================
-
-async def help_command(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    await update.message.reply_text(
-        "برای شروع استفاده از ربات، "
-        "دستور /start را ارسال کن."
-    )
-
-
-# ==========================================
-# Flask Server
-# ==========================================
-
-def run_web_server():
-
-    port = int(
-        os.environ.get(
-            "PORT",
-            10000
-        )
-    )
-
-    web_app.run(
-        host="0.0.0.0",
-        port=port,
-    )
-
-
-# ==========================================
-# Main
-# ==========================================
-
-def main():
-
-    # ======================================
-    # Database
-    # ======================================
-
-    init_db()
-
-    logger.info(
-        "Starting Telegram bot..."
-    )
-
-    # ======================================
-    # Flask
-    # ======================================
-
-    web_thread = Thread(
-        target=run_web_server,
-        daemon=True,
-    )
-
-    web_thread.start()
-
-    logger.info(
-        "Web server started."
-    )
-
-    # ======================================
-    # Telegram Application
-    # ======================================
-
-    application = (
-        Application
-        .builder()
-        .token(BOT_TOKEN)
-        .build()
-    )
-
-    # ======================================
-    # Handlers
-    # ======================================
-
-    application.add_handler(
-        CommandHandler(
-            "start",
-            start,
-        )
-    )
-
-    application.add_handler(
-        CommandHandler(
-            "help",
-            help_command,
-        )
-    )
-
-    application.add_handler(
-        CallbackQueryHandler(
-            show_tasks,
-            pattern="^tasks$",
-        )
-    )
-
-    application.add_handler(
-        CallbackQueryHandler(
-            check_channel_membership,
-            pattern="^check_channel$",
-        )
-    )
-
-    application.add_handler(
-        CallbackQueryHandler(
-            back_start,
-            pattern="^back_start$",
-        )
-    )
-
-    logger.info(
-        "Bot is running..."
-    )
-
-    # ======================================
-    # Polling
-    # ======================================
-
-    application.run_polling(
-        drop_pending_updates=True
-    )
-
-
-# ==========================================
-# Start
-# ==========================================
-
-if __name__ == "__main__":
-
-    main()

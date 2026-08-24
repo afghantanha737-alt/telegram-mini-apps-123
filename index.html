@@ -27,7 +27,7 @@
       max-width: 520px;
       margin: auto;
       min-height: 100vh;
-      padding-bottom: 95px;
+      padding-bottom: 100px;
     }
 
     /* Header */
@@ -35,9 +35,8 @@
     .header {
       background: linear-gradient(135deg, #229ed9, #147db0);
       color: white;
-      padding: 25px 20px 70px;
+      padding: 24px 18px 70px;
       border-radius: 0 0 35px 35px;
-      position: relative;
     }
 
     .header-top {
@@ -47,7 +46,7 @@
     }
 
     .logo {
-      font-size: 20px;
+      font-size: 19px;
       font-weight: bold;
     }
 
@@ -64,7 +63,7 @@
       color: #222;
     }
 
-    /* User card */
+    /* User */
 
     .user-card {
       background: white;
@@ -127,7 +126,7 @@
     }
 
     .section-title {
-      font-size: 20px;
+      font-size: 21px;
       font-weight: bold;
       margin-bottom: 15px;
     }
@@ -191,8 +190,95 @@
       display: block;
     }
 
+    /* Referral */
+
+    .referral-box {
+      margin: 22px 18px;
+      background: white;
+      border-radius: 25px;
+      padding: 25px 20px;
+      text-align: center;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.07);
+    }
+
+    .referral-icon {
+      width: 75px;
+      height: 75px;
+      margin: 0 auto 15px;
+      border-radius: 50%;
+      background: #e7f5fc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 35px;
+    }
+
+    .referral-box h2 {
+      margin-bottom: 10px;
+    }
+
+    .referral-description {
+      color: #7a8793;
+      line-height: 1.8;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+
+    .referral-link {
+      width: 100%;
+      border: 1px solid #dfe5eb;
+      background: #f7f9fb;
+      border-radius: 13px;
+      padding: 13px;
+      font-size: 12px;
+      direction: ltr;
+      text-align: center;
+      color: #555;
+      margin-bottom: 12px;
+      outline: none;
+    }
+
+    .copy-btn,
+    .share-btn {
+      width: 100%;
+      border: none;
+      padding: 14px;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    .copy-btn {
+      background: #229ed9;
+      color: white;
+    }
+
+    .share-btn {
+      background: #e8f5fb;
+      color: #1683b8;
+    }
+
+    .copy-btn:active,
+    .share-btn:active {
+      transform: scale(0.98);
+    }
+
+    .referral-code {
+      margin-top: 15px;
+      font-size: 13px;
+      color: #7a8793;
+    }
+
+    .referral-code strong {
+      color: #229ed9;
+    }
+
+    /* Simple pages */
+
     .simple-page {
-      padding: 35px 20px;
+      padding: 45px 20px;
       text-align: center;
     }
 
@@ -210,7 +296,7 @@
       line-height: 1.8;
     }
 
-    /* Bottom navigation */
+    /* Bottom Navigation */
 
     .bottom-nav {
       position: fixed;
@@ -220,7 +306,7 @@
       max-width: 496px;
       margin: auto;
       height: 72px;
-      background: rgba(255,255,255,0.96);
+      background: rgba(255,255,255,0.97);
       backdrop-filter: blur(15px);
       border-radius: 24px;
       display: grid;
@@ -249,10 +335,6 @@
       font-weight: bold;
     }
 
-    .nav-btn.active .icon {
-      transform: scale(1.08);
-    }
-
     @media (min-width: 600px) {
       .bottom-nav {
         left: 50%;
@@ -279,15 +361,20 @@
           Telegram Mini App
         </div>
 
-        <select id="language" class="language" onchange="changeLanguage()">
+        <select id="language"
+                class="language"
+                onchange="changeLanguage()">
+
           <option value="fa">دری</option>
           <option value="ps">پښتو</option>
           <option value="en">English</option>
+
         </select>
 
       </div>
 
     </header>
+
 
     <div class="user-card">
 
@@ -296,57 +383,104 @@
            style="display:none;"
            alt="Profile">
 
-      <div id="avatarPlaceholder" class="avatar-placeholder">
+      <div id="avatarPlaceholder"
+           class="avatar-placeholder">
+
         👤
+
       </div>
 
-      <div id="welcome" class="welcome">
+      <div id="welcome"
+           class="welcome">
+
         سلام، خوش آمدی 👋
+
       </div>
 
-      <div id="name" class="name">
+      <div id="name"
+           class="name">
+
         کاربر تلگرام
+
       </div>
 
-      <div id="username" class="username">
-        @TelegramUser
+      <div id="username"
+           class="username">
+
+        کاربر مهمان
+
       </div>
 
     </div>
 
+
     <main class="content">
 
-      <div class="section-title" id="homeTitle">
+      <div class="section-title"
+           id="homeTitle">
+
         خانه
+
       </div>
+
 
       <div class="info-card">
 
-        <div class="info-title" id="cardTitle">
+        <div class="info-title"
+             id="cardTitle">
+
           به مینی‌اپ ما خوش آمدی 🎉
+
         </div>
 
-        <div class="info-text" id="cardText">
+        <div class="info-text"
+             id="cardText">
+
           از اینجا می‌توانی به بخش‌های مختلف مینی‌اپ دسترسی داشته باشی.
+
         </div>
 
       </div>
+
 
       <div class="stats">
 
         <div class="stat">
-          <div class="stat-number">0</div>
-          <div class="stat-label" id="stat1">امتیاز</div>
+
+          <div class="stat-number">
+            0
+          </div>
+
+          <div class="stat-label">
+            امتیاز
+          </div>
+
         </div>
 
-        <div class="stat">
-          <div class="stat-number">0</div>
-          <div class="stat-label" id="stat2">دعوت‌ها</div>
-        </div>
 
         <div class="stat">
-          <div class="stat-number">0</div>
-          <div class="stat-label" id="stat3">وظایف</div>
+
+          <div class="stat-number">
+            0
+          </div>
+
+          <div class="stat-label">
+            دعوت‌ها
+          </div>
+
+        </div>
+
+
+        <div class="stat">
+
+          <div class="stat-number">
+            0
+          </div>
+
+          <div class="stat-label">
+            وظایف
+          </div>
+
         </div>
 
       </div>
@@ -357,17 +491,60 @@
 
 
   <!-- REFERRAL -->
+
   <section id="referralPage" class="page">
 
-    <div class="simple-page">
+    <div class="referral-box">
 
-      <div class="simple-icon">👥</div>
+      <div class="referral-icon">
+        👥
+      </div>
 
-      <h2>Referral</h2>
+      <h2 id="referralTitle">
+        دعوت دوستان
+      </h2>
 
-      <p>
-        دوستان خود را دعوت کن و در آینده از سیستم Referral استفاده کن.
+      <p class="referral-description"
+         id="referralDescription">
+
+        دوستانت را دعوت کن و از لینک اختصاصی خودت استفاده کن.
+
       </p>
+
+
+      <input id="referralLink"
+             class="referral-link"
+             type="text"
+             readonly
+             value="در حال ساخت لینک دعوت...">
+
+
+      <button class="copy-btn"
+              onclick="copyReferral()"
+              id="copyButton">
+
+        📋 کپی لینک دعوت
+
+      </button>
+
+
+      <button class="share-btn"
+              onclick="shareReferral()"
+              id="shareButton">
+
+        📤 اشتراک‌گذاری
+
+      </button>
+
+
+      <div class="referral-code">
+
+        شناسه دعوت:
+        <strong id="referralId">
+          -
+        </strong>
+
+      </div>
 
     </div>
 
@@ -375,13 +552,18 @@
 
 
   <!-- TASKS -->
+
   <section id="tasksPage" class="page">
 
     <div class="simple-page">
 
-      <div class="simple-icon">📋</div>
+      <div class="simple-icon">
+        📋
+      </div>
 
-      <h2>Tasks</h2>
+      <h2>
+        Tasks
+      </h2>
 
       <p>
         وظایف شما در این قسمت نمایش داده خواهند شد.
@@ -393,13 +575,18 @@
 
 
   <!-- PROFILE -->
+
   <section id="profilePage" class="page">
 
     <div class="simple-page">
 
-      <div class="simple-icon">👤</div>
+      <div class="simple-icon">
+        👤
+      </div>
 
-      <h2>Profile</h2>
+      <h2>
+        Profile
+      </h2>
 
       <p id="profileText">
         پروفایل شما
@@ -417,32 +604,55 @@
     <button class="nav-btn active"
             onclick="openPage('homePage', this)">
 
-      <span class="icon">🏠</span>
-      <span id="navHome">Home</span>
+      <span class="icon">
+        🏠
+      </span>
+
+      <span>
+        Home
+      </span>
 
     </button>
+
 
     <button class="nav-btn"
             onclick="openPage('referralPage', this)">
 
-      <span class="icon">👥</span>
-      <span id="navReferral">Referral</span>
+      <span class="icon">
+        👥
+      </span>
+
+      <span>
+        Referral
+      </span>
 
     </button>
+
 
     <button class="nav-btn"
             onclick="openPage('tasksPage', this)">
 
-      <span class="icon">📋</span>
-      <span id="navTasks">Tasks</span>
+      <span class="icon">
+        📋
+      </span>
+
+      <span>
+        Tasks
+      </span>
 
     </button>
+
 
     <button class="nav-btn"
             onclick="openPage('profilePage', this)">
 
-      <span class="icon">👤</span>
-      <span id="navProfile">Profile</span>
+      <span class="icon">
+        👤
+      </span>
+
+      <span>
+        Profile
+      </span>
 
     </button>
 
@@ -453,7 +663,7 @@
 
 <script>
 
-  /* Telegram */
+  /* Telegram Mini App */
 
   const tg = window.Telegram.WebApp;
 
@@ -461,10 +671,12 @@
   tg.expand();
 
 
-  /* User */
+  /* Telegram User */
 
-  const user = tg.initDataUnsafe &&
-               tg.initDataUnsafe.user;
+  const user =
+    tg.initDataUnsafe &&
+    tg.initDataUnsafe.user;
+
 
   const avatar =
     document.getElementById("avatar");
@@ -482,18 +694,28 @@
     document.getElementById("profileText");
 
 
+  let userId = "guest";
+
+
   if (user) {
+
+    userId = user.id;
 
     let fullName =
       ((user.first_name || "") +
       " " +
       (user.last_name || "")).trim();
 
+
     if (!fullName) {
       fullName = "کاربر تلگرام";
     }
 
-    name.textContent = fullName;
+
+    name.textContent =
+      fullName;
+
+
     profileText.textContent =
       "پروفایل " + fullName;
 
@@ -513,11 +735,102 @@
 
     if (user.photo_url) {
 
-      avatar.src = user.photo_url;
+      avatar.src =
+        user.photo_url;
 
-      avatar.style.display = "block";
+      avatar.style.display =
+        "block";
 
-      placeholder.style.display = "none";
+      placeholder.style.display =
+        "none";
+
+    }
+
+  }
+
+
+  /* Referral */
+
+  const BOT_USERNAME =
+    "AmirAFG123_bot";
+
+
+  const referralLink =
+    "https://t.me/" +
+    BOT_USERNAME +
+    "?startapp=ref_" +
+    userId;
+
+
+  document.getElementById(
+    "referralLink"
+  ).value = referralLink;
+
+
+  document.getElementById(
+    "referralId"
+  ).textContent = userId;
+
+
+  /* Copy Referral */
+
+  function copyReferral() {
+
+    const input =
+      document.getElementById(
+        "referralLink"
+      );
+
+
+    navigator.clipboard.writeText(
+      input.value
+    ).then(function() {
+
+      const button =
+        document.getElementById(
+          "copyButton"
+        );
+
+      const oldText =
+        button.textContent;
+
+      button.textContent =
+        "✅ لینک کپی شد";
+
+      setTimeout(function() {
+
+        button.textContent =
+          oldText;
+
+      }, 1800);
+
+    });
+
+  }
+
+
+  /* Share Referral */
+
+  function shareReferral() {
+
+    const text =
+      "سلام! از لینک زیر وارد مینی‌اپ شو 👇";
+
+
+    const url =
+      "https://t.me/share/url?url=" +
+      encodeURIComponent(referralLink) +
+      "&text=" +
+      encodeURIComponent(text);
+
+
+    if (tg.openTelegramLink) {
+
+      tg.openTelegramLink(url);
+
+    } else {
+
+      window.open(url, "_blank");
 
     }
 
@@ -526,13 +839,18 @@
 
   /* Navigation */
 
-  function openPage(pageId, button) {
+  function openPage(
+    pageId,
+    button
+  ) {
 
     document
       .querySelectorAll(".page")
       .forEach(function(page) {
 
-        page.classList.remove("active");
+        page.classList.remove(
+          "active"
+        );
 
       });
 
@@ -546,12 +864,17 @@
       .querySelectorAll(".nav-btn")
       .forEach(function(btn) {
 
-        btn.classList.remove("active");
+        btn.classList.remove(
+          "active"
+        );
 
       });
 
 
-    button.classList.add("active");
+    button.classList.add(
+      "active"
+    );
+
 
     window.scrollTo(0, 0);
 
@@ -563,26 +886,60 @@
   function changeLanguage() {
 
     const lang =
-      document.getElementById("language").value;
+      document.getElementById(
+        "language"
+      ).value;
 
 
     const welcome =
-      document.getElementById("welcome");
+      document.getElementById(
+        "welcome"
+      );
 
     const homeTitle =
-      document.getElementById("homeTitle");
+      document.getElementById(
+        "homeTitle"
+      );
 
     const cardTitle =
-      document.getElementById("cardTitle");
+      document.getElementById(
+        "cardTitle"
+      );
 
     const cardText =
-      document.getElementById("cardText");
+      document.getElementById(
+        "cardText"
+      );
+
+    const referralTitle =
+      document.getElementById(
+        "referralTitle"
+      );
+
+    const referralDescription =
+      document.getElementById(
+        "referralDescription"
+      );
+
+    const copyButton =
+      document.getElementById(
+        "copyButton"
+      );
+
+    const shareButton =
+      document.getElementById(
+        "shareButton"
+      );
 
 
     if (lang === "fa") {
 
-      document.documentElement.lang = "fa";
-      document.documentElement.dir = "rtl";
+      document.documentElement.lang =
+        "fa";
+
+      document.documentElement.dir =
+        "rtl";
+
 
       welcome.textContent =
         "سلام، خوش آمدی 👋";
@@ -596,13 +953,29 @@
       cardText.textContent =
         "از اینجا می‌توانی به بخش‌های مختلف مینی‌اپ دسترسی داشته باشی.";
 
+      referralTitle.textContent =
+        "دعوت دوستان";
+
+      referralDescription.textContent =
+        "دوستانت را دعوت کن و از لینک اختصاصی خودت استفاده کن.";
+
+      copyButton.textContent =
+        "📋 کپی لینک دعوت";
+
+      shareButton.textContent =
+        "📤 اشتراک‌گذاری";
+
     }
 
 
     else if (lang === "ps") {
 
-      document.documentElement.lang = "ps";
-      document.documentElement.dir = "rtl";
+      document.documentElement.lang =
+        "ps";
+
+      document.documentElement.dir =
+        "rtl";
+
 
       welcome.textContent =
         "سلام، ښه راغلاست 👋";
@@ -616,13 +989,29 @@
       cardText.textContent =
         "له دې ځایه تاسو کولی شئ د میني اپ مختلفو برخو ته لاړ شئ.";
 
+      referralTitle.textContent =
+        "ملګري راوبلئ";
+
+      referralDescription.textContent =
+        "خپل ملګري راوبلئ او خپل ځانګړی دعوت لینک وکاروئ.";
+
+      copyButton.textContent =
+        "📋 د دعوت لینک کاپي";
+
+      shareButton.textContent =
+        "📤 شریکول";
+
     }
 
 
     else {
 
-      document.documentElement.lang = "en";
-      document.documentElement.dir = "ltr";
+      document.documentElement.lang =
+        "en";
+
+      document.documentElement.dir =
+        "ltr";
+
 
       welcome.textContent =
         "Hello, Welcome 👋";
@@ -635,6 +1024,18 @@
 
       cardText.textContent =
         "From here you can access different sections of the Mini App.";
+
+      referralTitle.textContent =
+        "Invite Friends";
+
+      referralDescription.textContent =
+        "Invite your friends using your personal referral link.";
+
+      copyButton.textContent =
+        "📋 Copy Referral Link";
+
+      shareButton.textContent =
+        "📤 Share";
 
     }
 

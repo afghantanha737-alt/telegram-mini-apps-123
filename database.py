@@ -1,7 +1,6 @@
 import sqlite3
 from typing import Optional
 
-
 DATABASE_NAME = "bot_database.db"
 
 
@@ -30,6 +29,15 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             referrer_id INTEGER NOT NULL,
             invited_user_id INTEGER NOT NULL UNIQUE
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS completed_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            task_name TEXT NOT NULL,
+            UNIQUE(user_id, task_name)
         )
     """)
 
@@ -99,6 +107,48 @@ def add_referral(
                 points = points + 1
             WHERE user_id = ?
         """, (referrer_id,))
+
+        connection.commit()
+        return True
+
+    except sqlite3.IntegrityError:
+        connection.rollback()
+        return False
+
+    finally:
+        connection.close()
+
+
+def complete_task(
+    user_id: int,
+    task_name: str,
+    points: int
+) -> bool:
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute("""
+            INSERT INTO completed_tasks (
+                user_id,
+                task_name
+            )
+            VALUES (?, ?)
+        """, (
+            user_id,
+            task_name,
+        ))
+
+        cursor.execute("""
+            UPDATE users
+            SET points = points + ?,
+                tasks = tasks + 1
+            WHERE user_id = ?
+        """, (
+            points,
+            user_id,
+        ))
 
         connection.commit()
         return True

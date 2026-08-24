@@ -27,8 +27,9 @@ from database import (
 # تنظیمات
 # ==========================================
 
-BOT_TOKEN = "8587885341:AAELW-nePD8TlwCOGmbKESFzXAEbgu-DLKU"
+import os
 
+BOT_TOKEN = os.getenv("8587885341:AAELW-nePD8TlwCOGmbKESFzXAEbgu-DLKU")
 WEB_APP_URL = "https://afghantanha737-alt.github.io/telegram-mini-apps-123/"
 
 BOT_USERNAME = "AmirAFG123_bot"

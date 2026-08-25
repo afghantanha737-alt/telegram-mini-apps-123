@@ -19,7 +19,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
-BOT_TOKEN = os.getenv('BOT_TOKEN', '8587885341:AAELW-nePD8TlwCOGmbKESFzXAEbgu-DLKU')
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN is not set")
+
 TELEGRAM_API_URL = f'https://api.telegram.org/bot{BOT_TOKEN}'
 CHANNEL_USERNAME = 'AmirCryptoHub'
 

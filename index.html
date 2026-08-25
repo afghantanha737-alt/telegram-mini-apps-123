@@ -1,599 +1,931 @@
-"""
-Telegram Bot + Mini App API
-Amir Crypto Hub
-"""
-
-import os
-import logging
-import requests
-
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from dotenv import load_dotenv
-
-from database import Database
-
-
-# =========================
-# ENVIRONMENT
-# =========================
-
-load_dotenv()
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN is not set")
-
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
-
-CHANNEL_USERNAME = "AmirCryptoHub"
-
-
-# =========================
-# LOGGING
-# =========================
-
-logging.basicConfig(level=logging.INFO)
-
-logger = logging.getLogger(__name__)
-
-
-# =========================
-# FLASK
-# =========================
-
-app = Flask(__name__)
-
-CORS(app)
-
-
-# =========================
-# DATABASE
-# =========================
-
-db = Database()
-
-
-# =========================
-# TELEGRAM FUNCTIONS
-# =========================
-
-def check_user_membership(user_id: int) -> dict:
-
-    try:
-
-        url = f"{TELEGRAM_API_URL}/getChatMember"
-
-        params = {
-            "chat_id": f"@{CHANNEL_USERNAME}",
-            "user_id": user_id
-        }
-
-        response = requests.get(
-            url,
-            params=params,
-            timeout=10
-        )
-
-        data = response.json()
-
-        if not data.get("ok"):
-
-            error_msg = data.get(
-                "description",
-                "Unknown Telegram API error"
-            )
-
-            logger.error(
-                f"Telegram API error: {error_msg}"
-            )
-
-            return {
-                "is_member": False,
-                "status": "error",
-                "error": error_msg
-            }
-
-        user_status = data["result"]["status"]
-
-        is_member = user_status in [
-            "member",
-            "administrator",
-            "creator"
-        ]
-
-        return {
-            "is_member": is_member,
-            "status": user_status,
-            "error": None
-        }
-
-    except requests.exceptions.Timeout:
-
-        return {
-            "is_member": False,
-            "status": "timeout",
-            "error": "Connection timeout"
-        }
-
-    except Exception as e:
-
-        logger.error(
-            f"Membership error: {str(e)}"
-        )
-
-        return {
-            "is_member": False,
-            "status": "error",
-            "error": str(e)
-        }
-
-
-def send_notification(user_id: int, message: str) -> bool:
-
-    try:
-
-        url = f"{TELEGRAM_API_URL}/sendMessage"
-
-        payload = {
-            "chat_id": user_id,
-            "text": message,
-            "parse_mode": "HTML"
-        }
-
-        response = requests.post(
-            url,
-            json=payload,
-            timeout=10
-        )
-
-        return response.json().get("ok", False)
-
-    except Exception as e:
-
-        logger.error(
-            f"Notification error: {str(e)}"
-        )
-
-        return False
-
-
-# =========================
-# HEALTH
-# =========================
-
-@app.route("/api/health", methods=["GET"])
-def health_check():
-
-    return jsonify({
-        "status": "ok",
-        "message": "Bot is running"
-    })
-
-
-# =========================
-# USER INIT
-# =========================
-
-@app.route("/api/user/init", methods=["POST"])
-def user_init():
-
-    try:
-
-        data = request.get_json(silent=True) or {}
-
-        user_id = data.get("user_id")
-        username = data.get("username", "unknown")
-        first_name = data.get("first_name", "User")
-
-        if not user_id:
-
-            return jsonify({
-                "success": False,
-                "message": "Missing user_id"
-            }), 400
-
-        user = db.get_or_create_user(
-            int(user_id),
-            username,
-            first_name
-        )
-
-        stats = db.get_user_stats(
-            int(user_id)
-        )
-
-        return jsonify({
-            "success": True,
-            "user": user,
-            "stats": stats
-        })
-
-    except Exception as e:
-
-        logger.error(
-            f"User init error: {str(e)}"
-        )
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
-
-
-# =========================
-# GET USER STATS
-# =========================
-
-@app.route("/api/user/stats", methods=["GET"])
-def get_user_stats():
-
-    try:
-
-        user_id = request.args.get(
-            "user_id",
-            type=int
-        )
-
-        if not user_id:
-
-            return jsonify({
-                "success": False,
-                "message": "Missing user_id"
-            }), 400
-
-        stats = db.get_user_stats(user_id)
-
-        if not stats:
-
-            return jsonify({
-                "success": False,
-                "message": "User not found"
-            }), 404
-
-        return jsonify({
-            "success": True,
-            "stats": stats
-        })
-
-    except Exception as e:
-
-        logger.error(
-            f"Stats error: {str(e)}"
-        )
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
-
-
-# =========================
-# GET USER POINTS
-# =========================
-
-@app.route("/api/user/points", methods=["GET"])
-def get_user_points():
-
-    try:
-
-        user_id = request.args.get(
-            "user_id",
-            type=int
-        )
-
-        if not user_id:
-
-            return jsonify({
-                "success": False,
-                "message": "Missing user_id"
-            }), 400
-
-        points = db.get_points(user_id)
-
-        return jsonify({
-            "success": True,
-            "points": points,
-            "user_id": user_id
-        })
-
-    except Exception as e:
-
-        logger.error(
-            f"Points error: {str(e)}"
-        )
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
-
-
-# =========================
-# CHECK CHANNEL MEMBERSHIP
-# =========================
-
-@app.route("/api/check-membership", methods=["POST"])
-def check_membership():
-
-    try:
-
-        data = request.get_json(silent=True) or {}
-
-        user_id = data.get("user_id") or data.get("userID")
-        username = data.get("username", "unknown")
-        first_name = data.get("first_name", "User")
-
-        if not user_id:
-
-            return jsonify({
-                "success": False,
-                "message": "Missing user_id"
-            }), 400
-
-        user_id = int(user_id)
-
-        # Make sure user exists
-        db.get_or_create_user(
-            user_id,
-            username,
-            first_name
-        )
-
-        # Check whether task was already rewarded
-        already_completed = db.is_task_completed(
-            user_id,
-            "channel_join"
-        )
-
-        # Check real Telegram membership
-        membership = check_user_membership(
-            user_id
-        )
-
-        if not membership["is_member"]:
-
-            return jsonify({
-                "success": True,
-                "isMember": False,
-                "status": membership["status"],
-                "message": "ابتدا در کانال عضو شوید."
-            })
-
-        # Already rewarded
-        if already_completed:
-
-            current_points = db.get_points(
-                user_id
-            )
-
-            return jsonify({
-                "success": True,
-                "isMember": True,
-                "alreadyRewarded": True,
-                "pointsAwarded": 0,
-                "totalPoints": current_points,
-                "message": "این تسک قبلاً انجام شده است."
-            })
-
-        # Complete task
-        success, already_completed = db.complete_task(
-            user_id,
-            "channel_join",
-            10
-        )
-
-        if not success:
-
-            return jsonify({
-                "success": False,
-                "message": "خطا در ذخیره امتیاز"
-            }), 500
-
-        # Get REAL points from database
-        total_points = db.get_points(
-            user_id
-        )
-
-        # Notification
-        send_notification(
-            user_id,
-            (
-                "<b>🎉 تبریک!</b>\n\n"
-                "برای عضویت در کانال "
-                "<b>۱۰ امتیاز</b> دریافت کردید!\n\n"
-                f"⭐ کل امتیاز شما: <b>{total_points}</b>"
-            )
-        )
-
-        return jsonify({
-            "success": True,
-            "isMember": True,
-            "alreadyRewarded": False,
-            "pointsAwarded": 10,
-            "totalPoints": total_points,
-            "message": "امتیاز با موفقیت اضافه شد."
-        })
-
-    except Exception as e:
-
-        logger.error(
-            f"Membership route error: {str(e)}"
-        )
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
-
-
-# =========================
-# COMPLETE TASK
-# =========================
-
-@app.route("/api/tasks/complete", methods=["POST"])
-def complete_task():
-
-    try:
-
-        data = request.get_json(silent=True) or {}
-
-        user_id = data.get("user_id")
-        task_name = data.get("task_name")
-
-        if not user_id or not task_name:
-
-            return jsonify({
-                "success": False,
-                "message": "Missing required fields"
-            }), 400
-
-        task_points = {
-            "channel_join": 10,
-            "referral": 5,
-            "share": 3
-        }
-
-        points = task_points.get(
-            task_name,
-            0
-        )
-
-        if points == 0:
-
-            return jsonify({
-                "success": False,
-                "message": "Invalid task"
-            }), 400
-
-        success, already_completed = db.complete_task(
-            int(user_id),
-            task_name,
-            points
-        )
-
-        if not success:
-
-            return jsonify({
-                "success": False,
-                "message": "Error completing task"
-            }), 500
-
-        total_points = db.get_points(
-            int(user_id)
-        )
-
-        if already_completed:
-
-            return jsonify({
-                "success": True,
-                "alreadyCompleted": True,
-                "pointsAwarded": 0,
-                "totalPoints": total_points,
-                "message": "Task already completed"
-            })
-
-        return jsonify({
-            "success": True,
-            "alreadyCompleted": False,
-            "pointsAwarded": points,
-            "totalPoints": total_points,
-            "message": "Task completed successfully"
-        })
-
-    except Exception as e:
-
-        logger.error(
-            f"Complete task error: {str(e)}"
-        )
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
-
-
-# =========================
-# LEADERBOARD
-# =========================
-
-@app.route("/api/leaderboard", methods=["GET"])
-def get_leaderboard():
-
-    try:
-
-        limit = request.args.get(
-            "limit",
-            10,
-            type=int
-        )
-
-        limit = min(max(limit, 1), 100)
-
-        users = db.get_top_users(
-            limit
-        )
-
-        return jsonify({
-            "success": True,
-            "leaderboard": users
-        })
-
-    except Exception as e:
-
-        logger.error(
-            f"Leaderboard error: {str(e)}"
-        )
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
-
-
-# =========================
-# 404
-# =========================
-
-@app.errorhandler(404)
-def not_found(error):
-
-    return jsonify({
-        "success": False,
-        "message": "Route not found"
-    }), 404
-
-
-# =========================
-# 500
-# =========================
-
-@app.errorhandler(500)
-def internal_error(error):
-
-    logger.error(
-        f"Internal server error: {str(error)}"
-    )
-
-    return jsonify({
-        "success": False,
-        "message": "Internal server error"
-    }), 500
-
-
-# =========================
-# RUN
-# =========================
-
-if __name__ == "__main__":
-
-    port = int(
-        os.getenv("PORT", 5000)
-    )
-
-    app.run(
-        host="0.0.0.0",
-        port=port,
-        debug=False
-    )
+<!DOCTYPE html>  <html lang="fa" dir="rtl">  
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">  
+    <title>Amir Mini App</title>  
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>  <style>  
+    * {  
+        box-sizing: border-box;  
+        margin: 0;  
+        padding: 0;  
+    }  
+
+    :root {  
+        --bg: #f5f7fb;  
+        --card: #ffffff;  
+        --text: #172033;  
+        --muted: #7b8497;  
+        --primary: #6c5ce7;  
+        --primary-dark: #5545d4;  
+        --gold: #f5b942;  
+        --green: #20b486;  
+        --border: #e9ecf3;  
+    }  
+
+    body {  
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;  
+        background: radial-gradient(circle at 80% 0%, rgba(108, 92, 231, 0.13), transparent 35%), var(--bg);  
+        color: var(--text);  
+        min-height: 100vh;  
+        padding-bottom: 92px;  
+    }  
+
+    button {  
+        font-family: inherit;  
+    }  
+
+    .app {  
+        max-width: 650px;  
+        margin: auto;  
+    }  
+
+    /* TOP */  
+    .top {  
+        padding: 22px 18px 12px;  
+    }  
+
+    .top-row {  
+        display: flex;  
+        align-items: center;  
+        justify-content: space-between;  
+    }  
+
+    .user-area {  
+        display: flex;  
+        align-items: center;  
+        gap: 12px;  
+    }  
+
+    .avatar {  
+        width: 52px;  
+        height: 52px;  
+        border-radius: 17px;  
+        background: linear-gradient(135deg, #7c68ee, #4c3dc7);  
+        color: white;  
+        display: flex;  
+        align-items: center;  
+        justify-content: center;  
+        font-size: 22px;  
+        font-weight: 800;  
+        box-shadow: 0 8px 22px rgba(108, 92, 231, 0.25);  
+    }  
+
+    .hello {  
+        color: var(--muted);  
+        font-size: 13px;  
+        margin-bottom: 4px;  
+    }  
+
+    .username {  
+        font-size: 18px;  
+        font-weight: 800;  
+    }  
+
+    .notification {  
+        width: 43px;  
+        height: 43px;  
+        border: 1px solid var(--border);  
+        background: var(--card);  
+        border-radius: 14px;  
+        display: flex;  
+        align-items: center;  
+        justify-content: center;  
+        font-size: 19px;  
+    }  
+
+    /* BALANCE */  
+    .balance-card {  
+        margin: 12px 18px 18px;  
+        padding: 24px;  
+        border-radius: 26px;  
+        background: linear-gradient(135deg, #7563ed, #4f3dc7);  
+        color: white;  
+        position: relative;  
+        overflow: hidden;  
+        box-shadow: 0 15px 35px rgba(91, 73, 211, 0.25);  
+    }  
+
+    .balance-card::before {  
+        content: "";  
+        position: absolute;  
+        width: 180px;  
+        height: 180px;  
+        border-radius: 50%;  
+        background: rgba(255,255,255,0.08);  
+        left: -70px;  
+        top: -70px;  
+    }  
+
+    .balance-card::after {  
+        content: "";  
+        position: absolute;  
+        width: 140px;  
+        height: 140px;  
+        border-radius: 50%;  
+        background: rgba(255,255,255,0.07);  
+        right: -50px;  
+        bottom: -60px;  
+    }  
+
+    .balance-label {  
+        font-size: 13px;  
+        opacity: 0.82;  
+    }  
+
+    .balance {  
+        font-size: 39px;  
+        font-weight: 900;  
+        margin: 7px 0;  
+        position: relative;  
+        z-index: 2;  
+    }  
+
+    .balance-name {  
+        font-size: 13px;  
+        opacity: 0.82;  
+    }  
+
+    .balance-stats {  
+        display: grid;  
+        grid-template-columns: 1fr 1fr;  
+        gap: 10px;  
+        margin-top: 20px;  
+        position: relative;  
+        z-index: 2;  
+    }  
+
+    .balance-stat {  
+        background: rgba(255,255,255,0.12);  
+        border-radius: 15px;  
+        padding: 12px;  
+    }  
+
+    .balance-stat strong {  
+        display: block;  
+        font-size: 18px;  
+        margin-bottom: 3px;  
+    }  
+
+    .balance-stat span {  
+        font-size: 11px;  
+        opacity: 0.8;  
+    }  
+
+    /* PAGE */  
+    .page {  
+        display: none;  
+        padding: 0 18px;  
+        animation: fadeIn 0.2s ease;  
+    }  
+
+    .page.active {  
+        display: block;  
+    }  
+
+    @keyframes fadeIn {  
+        from {  
+            opacity: 0;  
+            transform: translateY(5px);  
+        }  
+        to {  
+            opacity: 1;  
+            transform: translateY(0);  
+        }  
+    }  
+
+    .section-title {  
+        display: flex;  
+        justify-content: space-between;  
+        align-items: center;  
+        margin: 10px 0 13px;  
+    }  
+
+    .section-title h2 {  
+        font-size: 19px;  
+    }  
+
+    .section-title span {  
+        color: var(--muted);  
+        font-size: 12px;  
+    }  
+
+    /* QUICK CARDS */  
+    .quick-grid {  
+        display: grid;  
+        grid-template-columns: 1fr 1fr;  
+        gap: 12px;  
+    }  
+
+    .quick-card {  
+        background: var(--card);  
+        border: 1px solid var(--border);  
+        border-radius: 20px;  
+        padding: 18px;  
+        cursor: pointer;  
+        transition: transform 0.15s ease, box-shadow 0.15s ease;  
+    }  
+
+    .quick-card:active {  
+        transform: scale(0.97);  
+    }  
+
+    .quick-icon {  
+        width: 45px;  
+        height: 45px;  
+        border-radius: 14px;  
+        display: flex;  
+        align-items: center;  
+        justify-content: center;  
+        font-size: 21px;  
+        margin-bottom: 12px;  
+    }  
+
+    .purple {  
+        background: #eeeaff;  
+    }  
+
+    .yellow {  
+        background: #fff4d9;  
+    }  
+
+    .green {  
+        background: #e5f8f1;  
+    }  
+
+    .blue {  
+        background: #e5f2ff;  
+    }  
+
+    .quick-card h3 {  
+        font-size: 14px;  
+        margin-bottom: 5px;  
+    }  
+
+    .quick-card p {  
+        color: var(--muted);  
+        font-size: 11px;  
+        line-height: 1.6;  
+    }  
+
+    /* TASKS */  
+    .task-card {  
+        background: var(--card);  
+        border: 1px solid var(--border);  
+        border-radius: 22px;  
+        padding: 17px;  
+        margin-bottom: 12px;  
+    }  
+
+    .task-top {  
+        display: flex;  
+        align-items: center;  
+        gap: 12px;  
+    }  
+
+    .task-icon {  
+        width: 50px;  
+        height: 50px;  
+        border-radius: 16px;  
+        background: #eeeaff;  
+        display: flex;  
+        align-items: center;  
+        justify-content: center;  
+        font-size: 24px;  
+    }  
+
+    .task-info {  
+        flex: 1;  
+    }  
+
+    .task-info h3 {  
+        font-size: 15px;  
+        margin-bottom: 5px;  
+    }  
+
+    .task-info p {  
+        color: var(--muted);  
+        font-size: 12px;  
+    }  
+
+    .reward {  
+        margin-top: 14px;  
+        display: flex;  
+        align-items: center;  
+        justify-content: space-between;  
+    }  
+
+    .reward span {  
+        color: #c58900;  
+        background: #fff5d9;  
+        padding: 7px 10px;  
+        border-radius: 10px;  
+        font-size: 12px;  
+        font-weight: 800;  
+    }  
+
+    .task-button {  
+        width: 100%;  
+        border: none;  
+        background: var(--primary);  
+        color: white;  
+        padding: 12px;  
+        border-radius: 13px;  
+        margin-top: 12px;  
+        font-size: 13px;  
+        font-weight: 800;  
+        cursor: pointer;  
+        transition: all 0.2s ease;  
+    }  
+
+    .task-button:hover {  
+        background: var(--primary-dark);  
+    }  
+
+    .task-button:disabled {  
+        opacity: 0.5;  
+        cursor: not-allowed;  
+    }  
+
+    .task-button.completed {  
+        background: var(--green);  
+    }  
+
+    /* REFERRAL */  
+    .ref-card {  
+        background: var(--card);  
+        border: 1px solid var(--border);  
+        border-radius: 22px;  
+        padding: 20px;  
+        margin-bottom: 14px;  
+    }  
+
+    .ref-icon {  
+        width: 58px;  
+        height: 58px;  
+        border-radius: 18px;  
+        background: #eeeaff;  
+        display: flex;  
+        align-items: center;  
+        justify-content: center;  
+        font-size: 27px;  
+        margin-bottom: 14px;  
+    }  
+
+    .ref-card h2 {  
+        font-size: 20px;  
+        margin-bottom: 8px;  
+    }  
+
+    .ref-card p {  
+        color: var(--muted);  
+        font-size: 13px;  
+        line-height: 1.8;  
+    }  
+
+    .ref-link {  
+        background: #f5f6fa;  
+        border: 1px solid var(--border);  
+        padding: 13px;  
+        border-radius: 13px;  
+        font-size: 11px;  
+        margin-top: 15px;  
+        word-break: break-all;  
+        direction: ltr;  
+        text-align: left;  
+        cursor: pointer;  
+        user-select: all;  
+    }  
+
+    .ref-button {  
+        width: 100%;  
+        border: none;  
+        background: var(--primary);  
+        color: white;  
+        padding: 13px;  
+        border-radius: 14px;  
+        margin-top: 10px;  
+        font-weight: 800;  
+        font-size: 13px;  
+        cursor: pointer;  
+        transition: all 0.2s ease;  
+    }  
+
+    .ref-button:hover {  
+        background: var(--primary-dark);  
+    }  
+
+    /* POINTS */  
+    .points-card {  
+        background: var(--card);  
+        border: 1px solid var(--border);  
+        border-radius: 22px;  
+        padding: 22px;  
+        text-align: center;  
+    }  
+
+    .points-star {  
+        width: 70px;  
+        height: 70px;  
+        margin: auto auto 13px;  
+        border-radius: 23px;  
+        background: #fff4d5;  
+        display: flex;  
+        align-items: center;  
+        justify-content: center;  
+        font-size: 34px;  
+    }  
+
+    .points-number {  
+        font-size: 35px;  
+        font-weight: 900;  
+    }  
+
+    .points-label {  
+        color: var(--muted);  
+        font-size: 13px;  
+        margin-top: 4px;  
+    }  
+
+    /* EMPTY */  
+    .empty {  
+        background: var(--card);  
+        border: 1px solid var(--border);  
+        border-radius: 22px;  
+        padding: 35px 20px;  
+        text-align: center;  
+        color: var(--muted);  
+    }  
+
+    .empty-icon {  
+        font-size: 42px;  
+        margin-bottom: 12px;  
+    }  
+
+    /* NAV */  
+    .bottom-nav {  
+        position: fixed;  
+        left: 50%;  
+        transform: translateX(-50%);  
+        bottom: 12px;  
+        width: calc(100% - 24px);  
+        max-width: 620px;  
+        height: 68px;  
+        background: rgba(255,255,255,0.95);  
+        backdrop-filter: blur(14px);  
+        border: 1px solid var(--border);  
+        border-radius: 23px;  
+        display: grid;  
+        grid-template-columns: repeat(4, 1fr);  
+        box-shadow: 0 10px 35px rgba(20, 30, 60, 0.12);  
+        z-index: 999;  
+    }  
+
+    .nav-button {  
+        border: none;  
+        background: transparent;  
+        color: #8991a2;  
+        font-size: 10px;  
+        display: flex;  
+        flex-direction: column;  
+        align-items: center;  
+        justify-content: center;  
+        gap: 4px;  
+        cursor: pointer;  
+        transition: all 0.2s ease;  
+    }  
+
+    .nav-icon {  
+        font-size: 20px;  
+    }  
+
+    .nav-button.active {  
+        color: var(--primary);  
+        font-weight: 800;  
+    }  
+
+    /* TOAST */  
+    .toast {  
+        position: fixed;  
+        bottom: 90px;  
+        left: 50%;  
+        transform: translateX(-50%);  
+        background: rgba(0, 0, 0, 0.8);  
+        color: white;  
+        padding: 12px 20px;  
+        border-radius: 12px;  
+        font-size: 13px;  
+        text-align: center;  
+        z-index: 1000;  
+        animation: slideUp 0.3s ease;  
+        max-width: 80%;  
+    }  
+
+    @keyframes slideUp {  
+        from {  
+            opacity: 0;  
+            transform: translateX(-50%) translateY(20px);  
+        }  
+        to {  
+            opacity: 1;  
+            transform: translateX(-50%) translateY(0);  
+        }  
+    }  
+
+    @media (max-width: 360px) {  
+        .balance {  
+            font-size: 33px;  
+        }  
+        .quick-grid {  
+            gap: 8px;  
+        }  
+        .quick-card {  
+            padding: 14px;  
+        }  
+    }  
+</style>
+
+</head>  <body>  <div class="app">  
+    <!-- HEADER -->  
+    <header class="top">  
+        <div class="top-row">  
+            <div class="user-area">  
+                <div class="avatar" id="avatar">A</div>  
+                <div>  
+                    <div class="hello">خوش آمدی 👋</div>  
+                    <div class="username" id="username">کاربر</div>  
+                </div>  
+            </div>  
+            <div class="notification">🔔</div>  
+        </div>  
+    </header>  <!-- BALANCE -->  
+<div class="balance-card">  
+    <div class="balance-label">موجودی امتیاز شما</div>  
+    <div class="balance">  
+        <span id="points">0</span> ⭐  
+    </div>  
+    <div class="balance-name">Points</div>  
+    <div class="balance-stats">  
+        <div class="balance-stat">  
+            <strong id="referrals">0</strong>  
+            <span>👥 دعوت موفق</span>  
+        </div>  
+        <div class="balance-stat">  
+            <strong id="tasks">0</strong>  
+            <span>🎯 تسک انجام‌شده</span>  
+        </div>  
+    </div>  
+</div>  
+
+<!-- HOME -->  
+<section id="home" class="page active">  
+    <div class="section-title">  
+        <h2>دسترسی سریع</h2>  
+        <span>امکانات</span>  
+    </div>  
+    <div class="quick-grid">  
+        <div class="quick-card" onclick="showPage('tasksPage')">  
+            <div class="quick-icon purple">🎯</div>  
+            <h3>تسک‌ها</h3>  
+            <p>انجام تسک و دریافت امتیاز</p>  
+        </div>  
+        <div class="quick-card" onclick="showPage('referralPage')">  
+            <div class="quick-icon yellow">👥</div>  
+            <h3>دعوت دوستان</h3>  
+            <p>دوستانت را دعوت کن</p>  
+        </div>  
+        <div class="quick-card" onclick="showPage('pointsPage')">  
+            <div class="quick-icon green">⭐</div>  
+            <h3>امتیازات</h3>  
+            <p>مشاهده موجودی امتیاز</p>  
+        </div>  
+        <div class="quick-card" onclick="showPage('tasksPage')">  
+            <div class="quick-icon blue">🚀</div>  
+            <h3>شروع کسب امتیاز</h3>  
+            <p>همین حالا شروع کن</p>  
+        </div>  
+    </div>  
+</section>  
+
+<!-- TASKS -->  
+<section id="tasksPage" class="page">  
+    <div class="section-title">  
+        <h2>🎯 تسک‌ها</h2>  
+        <span>پاداش بگیر</span>  
+    </div>  
+
+    <div class="task-card">  
+        <div class="task-top">  
+            <div class="task-icon">📢</div>  
+            <div class="task-info">  
+                <h3>عضویت در کانال</h3>  
+                <p>در کانال رسمی ما عضو شو.</p>  
+            </div>  
+        </div>  
+        <div class="reward">  
+            <span>+10 ⭐</span>  
+        </div>  
+        <button class="task-button" id="joinBtn" onclick="joinChannel()">  
+            📢 عضویت در کانال  
+        </button>  
+        <button class="task-button" id="checkBtn" onclick="checkMembership()">  
+            ✅ بررسی عضویت  
+        </button>  
+    </div>  
+
+    <div class="task-card">  
+        <div class="task-top">  
+            <div class="task-icon">👥</div>  
+            <div class="task-info">  
+                <h3>دعوت یک دوست</h3>  
+                <p>یک دوست را با لینک دعوت خودت بیاور.</p>  
+            </div>  
+        </div>  
+        <div class="reward">  
+            <span>+5 ⭐</span>  
+        </div>  
+        <button class="task-button" onclick="showPage('referralPage')">  
+            👥 دعوت دوستان  
+        </button>  
+    </div>  
+
+    <div class="empty">  
+        <div class="empty-icon">✨</div>  
+        <p>به‌زودی تسک‌های بیشتری اضافه می‌شود.</p>  
+    </div>  
+</section>  
+
+<!-- REFERRAL -->  
+<section id="referralPage" class="page">  
+    <div class="ref-card">  
+        <div class="ref-icon">👥</div>  
+        <h2>دعوت دوستان</h2>  
+        <p>  
+            دوستانت را دعوت کن و از فعالیت آن‌ها  
+            امتیاز دریافت کن.  
+        </p>  
+        <div class="ref-link" id="referralLink" onclick="selectText(this)">  
+            در حال آماده‌سازی...  
+        </div>  
+        <button class="ref-button" onclick="copyReferral()">  
+            📋 کپی لینک دعوت  
+        </button>  
+        <button class="ref-button" onclick="shareReferral()">  
+            🚀 اشتراک‌گذاری  
+        </button>  
+    </div>  
+
+    <div class="ref-card">  
+        <h2>🏆 دعوت‌های موفق</h2>  
+        <p id="referralList">هیچ دعوتی ثبت نشده است.</p>  
+    </div>  
+</section>  
+
+<!-- POINTS -->  
+<section id="pointsPage" class="page">  
+    <div class="section-title">  
+        <h2>⭐ امتیازات</h2>  
+        <span>موجودی شما</span>  
+    </div>  
+
+    <div class="points-card">  
+        <div class="points-star">⭐</div>  
+        <div class="points-number" id="totalPoints">0</div>  
+        <div class="points-label">کل امتیاز</div>  
+    </div>  
+
+    <div class="empty" style="margin-top: 20px;">  
+        <div class="empty-icon">📊</div>  
+        <p>تسک‌های بیشتری انجام دهید تا امتیاز بیشتری کسب کنید.</p>  
+    </div>  
+</section>
+
+</div>  <!-- NAVIGATION -->  <nav class="bottom-nav">  
+    <button class="nav-button active" onclick="navigateTo('home')">  
+        <div class="nav-icon">🏠</div>  
+        <div>خانه</div>  
+    </button>  
+    <button class="nav-button" onclick="navigateTo('tasksPage')">  
+        <div class="nav-icon">🎯</div>  
+        <div>تسک‌ها</div>  
+    </button>  
+    <button class="nav-button" onclick="navigateTo('referralPage')">  
+        <div class="nav-icon">👥</div>  
+        <div>دعوت</div>  
+    </button>  
+    <button class="nav-button" onclick="navigateTo('pointsPage')">  
+        <div class="nav-icon">⭐</div>  
+        <div>امتیاز</div>  
+    </button>  
+</nav>  <script>  
+    // ===========================  
+    // CONFIG  
+    // ===========================  
+      
+    const API_URL = window.location.hostname === 'localhost'   
+        ? 'http://localhost:5000'  
+        : 'https://amir-crypto-hub-bot.herokuapp.com';  
+  
+    // ===========================  
+    // TELEGRAM WEBAPP  
+    // ===========================  
+      
+    const tg = window.Telegram.WebApp;  
+    tg.ready();  
+  
+    let userID = tg.initDataUnsafe?.user?.id || 0;  
+    let firstName = tg.initDataUnsafe?.user?.first_name || "کاربر";  
+    let username = tg.initDataUnsafe?.user?.username || "user";  
+  
+    // ===========================  
+    // USER DATA  
+    // ===========================  
+  
+    let userData = {  
+        userID: userID,  
+        points: 0,  
+        referrals: 0,  
+        tasks: 0,  
+        completedTasks: [],  
+        referralCode: generateRefCode()  
+    };  
+  
+    // ===========================  
+    // INIT  
+    // ===========================  
+  
+    document.addEventListener('DOMContentLoaded', function() {  
+        initializeUI();  
+        loadUserData();  
+    });  
+  
+    function initializeUI() {  
+        const avatarEl = document.getElementById('avatar');  
+        avatarEl.textContent = firstName.charAt(0).toUpperCase();  
+  
+        document.getElementById('username').textContent = firstName;  
+  
+        const referralLink = `https://t.me/AmirAFG123_bot?start=${userData.referralCode}`;  
+        document.getElementById('referralLink').textContent = referralLink;  
+  
+        updateUI();  
+    }  
+  
+    function loadUserData() {  
+        updateUI();  
+    }  
+  
+    function updateUI() {  
+        document.getElementById('points').textContent = userData.points;  
+        document.getElementById('referrals').textContent = userData.referrals;  
+        document.getElementById('tasks').textContent = userData.completedTasks.length;  
+        document.getElementById('totalPoints').textContent = userData.points;  
+    }  
+  
+    // ===========================  
+    // NAVIGATION  
+    // ===========================  
+  
+    function showPage(pageId) {  
+        document.querySelectorAll('.page').forEach(page => {  
+            page.classList.remove('active');  
+        });  
+  
+        document.getElementById(pageId).classList.add('active');  
+    }  
+  
+    function navigateTo(pageId) {  
+        showPage(pageId);  
+  
+        document.querySelectorAll('.nav-button').forEach(btn => {  
+            btn.classList.remove('active');  
+        });  
+  
+        event.target.closest('.nav-button').classList.add('active');  
+    }  
+  
+    // ===========================  
+    // TASKS  
+    // ===========================  
+  
+    function joinChannel() {  
+        const channelUrl = 'https://t.me/AmirCryptoHub';  
+        tg.openLink(channelUrl);  
+    }  
+  
+    function checkMembership() {  
+        const btn = document.getElementById('checkBtn');  
+        btn.disabled = true;  
+        btn.textContent = '⏳ در حال بررسی...';  
+  
+        fetch(`${API_URL}/api/check-membership`, {  
+            method: 'POST',  
+            headers: {  
+                'Content-Type': 'application/json'  
+            },  
+            body: JSON.stringify({  
+                userID: userID,  
+                username: username  
+            })  
+        })  
+        .then(res => res.json())  
+        .then(data => {  
+            if (data.success) {  
+                if (data.isMember) {  
+                    if (data.alreadyRewarded) {  
+                        showToast('✅ قبلاً برای این تسک پاداش گرفته‌اید!');  
+                    } else {  
+                        userData.points += 10;  
+                        userData.tasks += 1;  
+                        userData.completedTasks.push('channel');  
+                        updateUI();  
+                        showToast('🎉 تبریک! ۱۰ امتیاز دریافت کردید!');  
+                        btn.textContent = '✅ انجام شد';  
+                        btn.classList.add('completed');  
+                    }  
+                } else {  
+                    showToast('❌ ابتدا در کانال عضو شوید!');  
+                }  
+            } else {  
+                showToast('❌ خطا: ' + data.message);  
+            }  
+            btn.disabled = false;  
+        })  
+        .catch(err => {  
+            showToast('❌ خطا در ارتباط با سرور');  
+            btn.disabled = false;  
+            console.error(err);  
+        });  
+    }  
+  
+    // ===========================  
+    // REFERRAL  
+    // ===========================  
+  
+    function generateRefCode() {  
+        return `ref_${userID}_${Math.random().toString(36).substr(2, 9)}`;  
+    }  
+  
+    function copyReferral() {  
+        const link = document.getElementById('referralLink').textContent;  
+  
+        if (navigator.clipboard) {  
+            navigator.clipboard.writeText(link).then(() => {  
+                showToast('✅ لینک کپی شد!');  
+            }).catch(() => {  
+                selectText(document.getElementById('referralLink'));  
+                showToast('📋 لینک انتخاب شد - برای کپی نگه دارید');  
+            });  
+        } else {  
+            selectText(document.getElementById('referralLink'));  
+            showToast('📋 لینک انتخاب شد - برای کپی نگه دارید');  
+        }  
+    }  
+  
+    function shareReferral() {  
+        const link = document.getElementById('referralLink').textContent;  
+        const text = `🚀 به من بپیوند و امتیاز بگیر!\n\n${link}`;  
+  
+        if (navigator.share) {  
+            navigator.share({  
+                title: 'Amir Crypto Hub',  
+                text: text,  
+                url: link  
+            }).catch(err => console.log('Share cancelled:', err));  
+        } else {  
+            copyReferral();  
+        }  
+    }  
+  
+    function selectText(element) {  
+        const text = element.textContent;  
+        const selection = window.getSelection();  
+        const range = document.createRange();  
+        range.selectNodeContents(element);  
+        selection.removeAllRanges();  
+        selection.addRange(range);  
+    }  
+  
+    // ===========================  
+    // TOAST  
+    // ===========================  
+  
+    function showToast(message) {  
+        const toast = document.createElement('div');  
+        toast.className = 'toast';  
+        toast.textContent = message;  
+  
+        document.body.appendChild(toast);  
+  
+        setTimeout(() => {  
+            toast.remove();  
+        }, 3000);  
+    }  
+  
+    // ===========================  
+    // THEME  
+    // ===========================  
+  
+    tg.setHeaderColor('#f5f7fb');  
+    tg.setBackgroundColor('#f5f7fb');  
+</script>  </body>  
+</html>

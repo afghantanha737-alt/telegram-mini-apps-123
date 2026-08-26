@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#5b4bd8">
+<title>پنل مدیریت | Amir Crypto Hub</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#7b8497;--primary:#6757df;--primary2:#5141c8;--green:#20b486;--red:#ef5350;--gold:#f5b942;--border:#e7eaf2}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;background:radial-gradient(circle at 80% 0%,rgba(103,87,223,.14),transparent 34%),var(--bg);color:var(--text);min-height:100vh;padding:18px}
+button,input{font-family:inherit}.wrap{max-width:1050px;margin:auto}.hidden{display:none!important}
+.login{min-height:calc(100vh - 36px);display:flex;align-items:center;justify-content:center}.login-card{width:100%;max-width:420px;background:var(--card);border:1px solid var(--border);border-radius:28px;padding:28px;box-shadow:0 20px 60px rgba(20,30,60,.1);text-align:center}.logo{width:70px;height:70px;margin:0 auto 16px;border-radius:22px;background:linear-gradient(135deg,#7a69ed,#5141c8);display:flex;align-items:center;justify-content:center;color:#fff;font-size:34px;box-shadow:0 12px 28px rgba(81,65,200,.25)}h1{font-size:23px;margin-bottom:8px}.muted{color:var(--muted);font-size:13px;line-height:1.8}.input{width:100%;border:1px solid var(--border);background:#f8f9fc;border-radius:14px;padding:14px;margin-top:18px;outline:none;font-size:14px;direction:ltr;text-align:left}.input:focus{border-color:var(--primary)}.btn{border:0;border-radius:14px;padding:13px 16px;font-size:13px;font-weight:800;cursor:pointer;background:var(--primary);color:#fff}.btn:hover{background:var(--primary2)}.login .btn{width:100%;margin-top:10px}.error{color:var(--red);font-size:12px;margin-top:10px;min-height:18px}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 18px}.brand{display:flex;align-items:center;gap:12px}.brand-icon{width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#7a69ed,#5141c8);display:flex;align-items:center;justify-content:center;color:#fff;font-size:23px}.brand h1{font-size:20px;margin:0}.brand p{font-size:11px;color:var(--muted);margin-top:2px}.header-actions{display:flex;gap:8px}.btn.light{background:#fff;color:var(--text);border:1px solid var(--border)}.btn.danger{background:#fff;color:var(--red);border:1px solid #ffd7d7}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.stat{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:18px}.stat-icon{font-size:24px;margin-bottom:9px}.stat strong{display:block;font-size:26px}.stat span{font-size:11px;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:22px;padding:18px;margin-bottom:16px}.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}.card-head h2{font-size:18px}.tools{display:flex;gap:8px}.search{flex:1;min-width:0;border:1px solid var(--border);background:#f8f9fc;border-radius:12px;padding:11px 12px;outline:none}.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:15px}.table{width:100%;border-collapse:collapse;min-width:720px}.table th,.table td{padding:11px 10px;border-bottom:1px solid var(--border);text-align:right;font-size:12px;white-space:nowrap}.table th{background:#f8f9fc;color:var(--muted);font-weight:800}.table tr:last-child td{border-bottom:0}.badge{display:inline-block;padding:5px 8px;border-radius:9px;background:#eeeaff;color:#5b4bd8;font-weight:800;font-size:10px}.small-btn{border:0;border-radius:9px;padding:7px 9px;background:#eeeaff;color:#5141c8;font-size:10px;font-weight:800;cursor:pointer}.small-btn:hover{background:#e3defd}.small-btn.green{background:#e5f8f1;color:#158a68}.small-btn.red{background:#fff0f0;color:#d23d3a}
+.empty{padding:28px;text-align:center;color:var(--muted);font-size:13px}.pager{display:flex;justify-content:center;gap:8px;margin-top:14px}.pager button{min-width:90px}
+.modal{position:fixed;inset:0;background:rgba(10,15,30,.45);display:flex;align-items:center;justify-content:center;padding:18px;z-index:20}.modal-box{background:#fff;width:100%;max-width:520px;max-height:88vh;overflow:auto;border-radius:24px;padding:20px}.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.close{border:0;background:#f1f2f7;width:36px;height:36px;border-radius:11px;font-size:18px;cursor:pointer}.detail-row{padding:10px 0;border-bottom:1px solid var(--border);font-size:12px}.detail-row b{display:inline-block;min-width:130px}.point-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.point-actions input{grid-column:1/-1;border:1px solid var(--border);padding:11px;border-radius:12px;outline:none;direction:ltr}.notice{padding:11px 13px;border-radius:12px;background:#fff8df;color:#8a6800;font-size:11px;margin-bottom:12px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#171a24;color:#fff;padding:11px 17px;border-radius:12px;font-size:12px;z-index:50;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+@media(max-width:760px){body{padding:12px}.grid{grid-template-columns:1fr 1fr}.header{align-items:flex-start}.header-actions{flex-direction:column}.tools{flex-wrap:wrap}.search{width:100%;flex-basis:100%}.card-head{align-items:flex-start;flex-direction:column}.brand h1{font-size:17px}.stat strong{font-size:22px}}
+</style>
+</head>
+<body>
+<div id="loginView" class="login">
+  <div class="login-card">
+    <div class="logo">🛡️</div>
+    <h1>پنل مدیریت</h1>
+    <p class="muted">Amir Crypto Hub<br>این بخش فقط برای مدیر ربات است.</p>
+    <input id="password" class="input" type="password" placeholder="رمز مدیریت">
+    <button class="btn" onclick="login()">🔐 ورود به پنل</button>
+    <div id="loginError" class="error"></div>
+  </div>
+</div>
+
+<div id="adminView" class="wrap hidden">
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon">🚀</div>
+      <div><h1>Amir Crypto Hub</h1><p>داشبورد مدیریت</p></div>
+    </div>
+    <div class="header-actions">
+      <button class="btn light" onclick="loadAll()">🔄 بروزرسانی</button>
+      <button class="btn danger" onclick="logout()">خروج</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="stat"><div class="stat-icon">👥</div><strong id="sUsers">0</strong><span>کل کاربران</span></div>
+    <div class="stat"><div class="stat-icon">⭐</div><strong id="sPoints">0</strong><span>مجموع امتیازات</span></div>
+    <div class="stat"><div class="stat-icon">🔗</div><strong id="sRefs">0</strong><span>دعوت‌های موفق</span></div>
+    <div class="stat"><div class="stat-icon">🎯</div><strong id="sTasks">0</strong><span>تسک‌های انجام‌شده</span></div>
+  </div>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>👥 کاربران</h2>
+      <div class="tools"><input id="search" class="search" placeholder="جستجو با نام، username یا Telegram ID"><button class="btn" onclick="searchUsers()">جستجو</button></div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>ID</th><th>نام</th><th>Username</th><th>امتیاز</th><th>دعوت موفق</th><th>تسک</th><th>تاریخ</th><th>عملیات</th></tr></thead>
+        <tbody id="usersBody"><tr><td colspan="8" class="empty">در حال بارگذاری...</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pager"><button class="btn light" onclick="prevPage()">قبلی</button><button class="btn light" onclick="nextPage()">بعدی</button></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>🔗 آخرین دعوت‌ها</h2></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>دعوت‌کننده</th><th>دعوت‌شده</th><th>تاریخ</th></tr></thead><tbody id="refsBody"><tr><td colspan="3" class="empty">در حال بارگذاری...</td></tr></tbody></table></div>
+  </section>
+</div>
+
+<div id="modal" class="modal hidden" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-head"><h2>👤 جزئیات کاربر</h2><button class="close" onclick="closeModal()">×</button></div>
+    <div id="detail"></div>
+  </div>
+</div>
+<script>
+const API = location.origin;
+let page=0;
+const limit=50;
+function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;')}
+function toast(msg){const old=document.querySelector('.toast');if(old)old.remove();const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+async function api(path,opts={}){const r=await fetch(API+path,{credentials:'same-origin',...opts});let d={};try{d=await r.json()}catch{}if(r.status===401){showLogin();throw new Error('unauthorized')}if(!r.ok||d.success===false)throw new Error(d.message||'خطا');return d}
+async function login(){const pass=document.getElementById('password').value;document.getElementById('loginError').textContent='';try{await api('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})});showAdmin();await loadAll()}catch(e){document.getElementById('loginError').textContent=e.message||'ورود ناموفق بود.'}}
+async function check(){try{const d=await api('/api/admin/me');if(d.success)showAdmin();else showLogin()}catch{showLogin()}}
+function showAdmin(){document.getElementById('loginView').classList.add('hidden');document.getElementById('adminView').classList.remove('hidden')}
+function showLogin(){document.getElementById('adminView').classList.add('hidden');document.getElementById('loginView').classList.remove('hidden')}
+async function logout(){try{await api('/api/admin/logout',{method:'POST'})}catch{}showLogin()}
+async function loadDashboard(){const d=await api('/api/admin/dashboard');const s=d.stats||{};document.getElementById('sUsers').textContent=s.users??0;document.getElementById('sPoints').textContent=s.points??0;document.getElementById('sRefs').textContent=s.referrals??0;document.getElementById('sTasks').textContent=s.tasks??0}
+async function loadUsers(){const q=document.getElementById('search').value.trim();const d=await api(`/api/admin/users?limit=${limit}&offset=${page*limit}&search=${encodeURIComponent(q)}`);const body=document.getElementById('usersBody');const users=d.users||[];if(!users.length){body.innerHTML='<tr><td colspan="8" class="empty">کاربری پیدا نشد.</td></tr>';return}body.innerHTML=users.map(u=>`<tr><td>${esc(u.user_id)}</td><td>${esc(u.first_name||'کاربر')}</td><td>${u.username?'@'+esc(u.username):'—'}</td><td><span class="badge">${esc(u.points||0)} ⭐</span></td><td>${esc(u.referrals_count||0)}</td><td>${esc(u.tasks_completed||0)}</td><td>${esc(u.created_at||'—')}</td><td><button class="small-btn" onclick="showUser(${Number(u.user_id)})">مشاهده</button></td></tr>`).join('')}
+async function loadRefs(){const d=await api('/api/admin/referrals');const body=document.getElementById('refsBody');const rows=(d.referrals||[]).slice(0,100);if(!rows.length){body.innerHTML='<tr><td colspan="3" class="empty">دعوتی ثبت نشده است.</td></tr>';return}body.innerHTML=rows.map(r=>{const ref=r.referrer_id??r.referrer_user_id??r.referrer??'—';const joined=r.referred_id??r.referred_user_id??r.user_id??'—';return `<tr><td>${esc(ref)}</td><td>${esc(joined)}</td><td>${esc(r.created_at||'—')}</td></tr>`}).join('')}
+async function loadAll(){try{await Promise.all([loadDashboard(),loadUsers(),loadRefs()])}catch(e){toast(e.message||'خطا در بارگذاری')}}
+function searchUsers(){page=0;loadUsers().catch(e=>toast(e.message))}
+function nextPage(){page++;loadUsers().catch(e=>{page--;toast(e.message)})}
+function prevPage(){if(page>0){page--;loadUsers().catch(e=>toast(e.message))}}
+async function showUser(id){try{const d=await api('/api/admin/user/'+id);const u=d.user;const refs=u.referrals||[];const tasks=u.completed_tasks||[];document.getElementById('detail').innerHTML=`<div class="detail-row"><b>Telegram ID:</b>${esc(u.user_id)}</div><div class="detail-row"><b>نام:</b>${esc(u.first_name||'کاربر')}</div><div class="detail-row"><b>Username:</b>${u.username?'@'+esc(u.username):'—'}</div><div class="detail-row"><b>امتیاز:</b><span id="modalPoints">${esc(u.points||0)}</span> ⭐</div><div class="detail-row"><b>دعوت موفق:</b>${esc(u.referrals_count||0)}</div><div class="detail-row"><b>کد دعوت:</b>${esc(u.referral_code||'—')}</div><div class="detail-row"><b>تسک‌های انجام‌شده:</b>${tasks.length?tasks.map(esc).join('، '):'—'}</div><div class="detail-row"><b>تاریخ عضویت:</b>${esc(u.created_at||'—')}</div><div class="point-actions"><input id="pointAmount" type="number" placeholder="مثلاً 10 یا -5"><button class="small-btn green" onclick="changePoints(${id},1)">➕ افزودن</button><button class="small-btn red" onclick="changePoints(${id},-1)">➖ کم‌کردن</button></div><div style="margin-top:16px"><b style="font-size:13px">🏆 دعوت‌های این کاربر</b>${refs.length?refs.map(r=>`<div class="detail-row">${esc(r.first_name||r.username||r.user_id||'کاربر')} — ${esc(r.created_at||'')}</div>`).join(''):'<div class="muted" style="margin-top:8px">دعوتی ندارد.</div>'}</div>`;document.getElementById('modal').classList.remove('hidden')}catch(e){toast(e.message)}}
+async function changePoints(id,sign){const input=document.getElementById('pointAmount');const n=parseInt(input.value,10);if(!Number.isFinite(n)||n<=0){toast('مقدار امتیاز را وارد کنید.');return}try{const d=await api(`/api/admin/user/${id}/points`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:sign*n})});document.getElementById('modalPoints').textContent=d.points;input.value='';toast('✅ امتیاز تغییر کرد');await loadDashboard();await loadUsers()}catch(e){toast(e.message)}}
+function closeModal(){document.getElementById('modal').classList.add('hidden')}
+document.getElementById('password').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
+</script>
+</body>
+</html>

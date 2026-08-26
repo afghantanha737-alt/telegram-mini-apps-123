@@ -1,2875 +1,408 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
-
 <head>
-    <meta charset="UTF-8">
-
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-
-    <meta name="theme-color" content="#f5f7fb">
-
-    <title>Amir Crypto Hub</title>
-
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-    <style>
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        :root {
-            --bg: #f5f7fb;
-            --card: #ffffff;
-            --text: #172033;
-            --muted: #7b8497;
-
-            --primary: #6c5ce7;
-            --primary-dark: #5545d4;
-
-            --gold: #f5b942;
-            --green: #20b486;
-            --red: #ef5350;
-
-            --border: #e9ecf3;
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
-
-        body {
-            font-family:
-                -apple-system,
-                BlinkMacSystemFont,
-                "Segoe UI",
-                Tahoma,
-                Arial,
-                sans-serif;
-
-            background:
-                radial-gradient(
-                    circle at 80% 0%,
-                    rgba(108, 92, 231, 0.13),
-                    transparent 35%
-                ),
-                var(--bg);
-
-            color: var(--text);
-
-            min-height: 100vh;
-
-            padding-bottom: 100px;
-
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        button {
-            font-family: inherit;
-        }
-
-        button:active {
-            transform: scale(0.97);
-        }
-
-        .app {
-            width: 100%;
-            max-width: 650px;
-            margin: auto;
-        }
-
-        /* =========================
-           HEADER
-        ========================= */
-
-        .top {
-            padding: 22px 18px 12px;
-        }
-
-        .top-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .user-area {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .avatar {
-            width: 52px;
-            height: 52px;
-
-            border-radius: 17px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #7c68ee,
-                    #4c3dc7
-                );
-
-            color: white;
-
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-            font-size: 22px;
-            font-weight: 800;
-
-            box-shadow:
-                0 8px 22px
-                rgba(108, 92, 231, 0.25);
-        }
-
-        .hello {
-            color: var(--muted);
-            font-size: 13px;
-            margin-bottom: 4px;
-        }
-
-        .username {
-            font-size: 18px;
-            font-weight: 800;
-
-            max-width: 210px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .notification {
-            width: 43px;
-            height: 43px;
-
-            border: 1px solid var(--border);
-
-            background: var(--card);
-
-            border-radius: 14px;
-
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-            font-size: 19px;
-        }
-
-        /* =========================
-           BALANCE
-        ========================= */
-
-        .balance-card {
-            margin: 12px 18px 18px;
-
-            padding: 24px;
-
-            border-radius: 26px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #7563ed,
-                    #4f3dc7
-                );
-
-            color: white;
-
-            position: relative;
-            overflow: hidden;
-
-            box-shadow:
-                0 15px 35px
-                rgba(91, 73, 211, 0.25);
-        }
-
-        .balance-card::before {
-            content: "";
-
-            position: absolute;
-
-            width: 180px;
-            height: 180px;
-
-            border-radius: 50%;
-
-            background:
-                rgba(255,255,255,0.08);
-
-            left: -70px;
-            top: -70px;
-        }
-
-        .balance-card::after {
-            content: "";
-
-            position: absolute;
-
-            width: 140px;
-            height: 140px;
-
-            border-radius: 50%;
-
-            background:
-                rgba(255,255,255,0.07);
-
-            right: -50px;
-            bottom: -60px;
-        }
-
-        .balance-label {
-            font-size: 13px;
-            opacity: 0.82;
-
-            position: relative;
-            z-index: 2;
-        }
-
-        .balance {
-            font-size: 39px;
-            font-weight: 900;
-
-            margin: 7px 0;
-
-            position: relative;
-            z-index: 2;
-        }
-
-        .balance-name {
-            font-size: 13px;
-            opacity: 0.82;
-
-            position: relative;
-            z-index: 2;
-        }
-
-        .balance-stats {
-            display: grid;
-
-            grid-template-columns: 1fr 1fr;
-
-            gap: 10px;
-
-            margin-top: 20px;
-
-            position: relative;
-            z-index: 2;
-        }
-
-        .balance-stat {
-            background:
-                rgba(255,255,255,0.12);
-
-            border-radius: 15px;
-
-            padding: 12px;
-        }
-
-        .balance-stat strong {
-            display: block;
-
-            font-size: 18px;
-
-            margin-bottom: 3px;
-        }
-
-        .balance-stat span {
-            font-size: 11px;
-            opacity: 0.8;
-        }
-
-        /* =========================
-           PAGES
-        ========================= */
-
-        .page {
-            display: none;
-
-            padding: 0 18px;
-
-            animation:
-                fadeIn 0.2s ease;
-        }
-
-        .page.active {
-            display: block;
-        }
-
-        @keyframes fadeIn {
-
-            from {
-                opacity: 0;
-                transform: translateY(5px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-
-        }
-
-        .section-title {
-            display: flex;
-
-            justify-content: space-between;
-            align-items: center;
-
-            margin: 10px 0 13px;
-        }
-
-        .section-title h2 {
-            font-size: 19px;
-        }
-
-        .section-title span {
-            color: var(--muted);
-            font-size: 12px;
-        }
-
-        /* =========================
-           QUICK CARDS
-        ========================= */
-
-        .quick-grid {
-            display: grid;
-
-            grid-template-columns:
-                1fr 1fr;
-
-            gap: 12px;
-        }
-
-        .quick-card {
-            background: var(--card);
-
-            border:
-                1px solid var(--border);
-
-            border-radius: 20px;
-
-            padding: 18px;
-
-            cursor: pointer;
-
-            transition:
-                transform 0.15s ease,
-                box-shadow 0.15s ease;
-        }
-
-        .quick-card:hover {
-            box-shadow:
-                0 8px 25px
-                rgba(20,30,60,0.08);
-        }
-
-        .quick-card:active {
-            transform: scale(0.97);
-        }
-
-        .quick-icon {
-            width: 45px;
-            height: 45px;
-
-            border-radius: 14px;
-
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-            font-size: 21px;
-
-            margin-bottom: 12px;
-        }
-
-        .purple {
-            background: #eeeaff;
-        }
-
-        .yellow {
-            background: #fff4d9;
-        }
-
-        .green {
-            background: #e5f8f1;
-        }
-
-        .blue {
-            background: #e5f2ff;
-        }
-
-        .quick-card h3 {
-            font-size: 14px;
-            margin-bottom: 5px;
-        }
-
-        .quick-card p {
-            color: var(--muted);
-
-            font-size: 11px;
-
-            line-height: 1.6;
-        }
-
-        /* =========================
-           TASKS
-        ========================= */
-
-        .task-card {
-            background: var(--card);
-
-            border:
-                1px solid var(--border);
-
-            border-radius: 22px;
-
-            padding: 17px;
-
-            margin-bottom: 12px;
-        }
-
-        .task-top {
-            display: flex;
-
-            align-items: center;
-
-            gap: 12px;
-        }
-
-        .task-icon {
-            width: 50px;
-            height: 50px;
-
-            flex-shrink: 0;
-
-            border-radius: 16px;
-
-            background: #eeeaff;
-
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-            font-size: 24px;
-        }
-
-        .task-info {
-            flex: 1;
-        }
-
-        .task-info h3 {
-            font-size: 15px;
-            margin-bottom: 5px;
-        }
-
-        .task-info p {
-            color: var(--muted);
-            font-size: 12px;
-        }
-
-        .reward {
-            margin-top: 14px;
-
-            display: flex;
-
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .reward span {
-            color: #c58900;
-
-            background: #fff5d9;
-
-            padding: 7px 10px;
-
-            border-radius: 10px;
-
-            font-size: 12px;
-
-            font-weight: 800;
-        }
-
-        .task-button {
-            width: 100%;
-
-            border: none;
-
-            background:
-                var(--primary);
-
-            color: white;
-
-            padding: 12px;
-
-            border-radius: 13px;
-
-            margin-top: 12px;
-
-            font-size: 13px;
-
-            font-weight: 800;
-
-            cursor: pointer;
-
-            transition:
-                background 0.2s ease,
-                transform 0.15s ease;
-        }
-
-        .task-button:hover {
-            background:
-                var(--primary-dark);
-        }
-
-        .task-button:disabled {
-            opacity: 0.55;
-            cursor: not-allowed;
-        }
-
-        .task-button.completed {
-            background:
-                var(--green);
-        }
-
-        /* =========================
-           REFERRAL
-        ========================= */
-
-        .ref-card {
-            background: var(--card);
-
-            border:
-                1px solid var(--border);
-
-            border-radius: 22px;
-
-            padding: 20px;
-
-            margin-bottom: 14px;
-        }
-
-        .ref-icon {
-            width: 58px;
-            height: 58px;
-
-            border-radius: 18px;
-
-            background: #eeeaff;
-
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-            font-size: 27px;
-
-            margin-bottom: 14px;
-        }
-
-        .ref-card h2 {
-            font-size: 20px;
-            margin-bottom: 8px;
-        }
-
-        .ref-card p {
-            color: var(--muted);
-
-            font-size: 13px;
-
-            line-height: 1.8;
-        }
-
-        .ref-link {
-            background: #f5f6fa;
-
-            border:
-                1px solid var(--border);
-
-            padding: 13px;
-
-            border-radius: 13px;
-
-            font-size: 11px;
-
-            margin-top: 15px;
-
-            word-break: break-all;
-
-            direction: ltr;
-            text-align: left;
-
-            cursor: pointer;
-
-            user-select: all;
-        }
-
-        .ref-button {
-            width: 100%;
-
-            border: none;
-
-            background:
-                var(--primary);
-
-            color: white;
-
-            padding: 13px;
-
-            border-radius: 14px;
-
-            margin-top: 10px;
-
-            font-weight: 800;
-
-            font-size: 13px;
-
-            cursor: pointer;
-
-            transition:
-                background 0.2s ease;
-        }
-
-        .ref-button:hover {
-            background:
-                var(--primary-dark);
-        }
-
-        /* =========================
-           REFERRAL LIST
-        ========================= */
-
-        .referral-item {
-            display: flex;
-
-            align-items: center;
-
-            gap: 10px;
-
-            padding: 12px 0;
-
-            border-bottom:
-                1px solid var(--border);
-        }
-
-        .referral-item:last-child {
-            border-bottom: none;
-        }
-
-        .referral-avatar {
-            width: 40px;
-            height: 40px;
-
-            border-radius: 13px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #7563ed,
-                    #4f3dc7
-                );
-
-            color: white;
-
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-            font-weight: 800;
-        }
-
-        .referral-name {
-            font-size: 13px;
-            font-weight: 800;
-        }
-
-        .referral-date {
-            font-size: 10px;
-            color: var(--muted);
-            margin-top: 3px;
-        }
-
-        /* =========================
-           POINTS
-        ========================= */
-
-        .points-card {
-            background: var(--card);
-
-            border:
-                1px solid var(--border);
-
-            border-radius: 22px;
-
-            padding: 22px;
-
-            text-align: center;
-        }
-
-        .points-star {
-            width: 70px;
-            height: 70px;
-
-            margin:
-                auto auto 13px;
-
-            border-radius: 23px;
-
-            background:
-                #fff4d5;
-
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-            font-size: 34px;
-        }
-
-        .points-number {
-            font-size: 35px;
-            font-weight: 900;
-        }
-
-        .points-label {
-            color: var(--muted);
-
-            font-size: 13px;
-
-            margin-top: 4px;
-        }
-
-        /* =========================
-           EMPTY
-        ========================= */
-
-        .empty {
-            background: var(--card);
-
-            border:
-                1px solid var(--border);
-
-            border-radius: 22px;
-
-            padding: 35px 20px;
-
-            text-align: center;
-
-            color: var(--muted);
-        }
-
-        .empty-icon {
-            font-size: 42px;
-
-            margin-bottom: 12px;
-        }
-
-        /* =========================
-           NAVIGATION
-        ========================= */
-
-        .bottom-nav {
-            position: fixed;
-
-            left: 50%;
-
-            transform:
-                translateX(-50%);
-
-            bottom: 12px;
-
-            width:
-                calc(100% - 24px);
-
-            max-width: 620px;
-
-            height: 68px;
-
-            background:
-                rgba(255,255,255,0.95);
-
-            backdrop-filter:
-                blur(14px);
-
-            -webkit-backdrop-filter:
-                blur(14px);
-
-            border:
-                1px solid var(--border);
-
-            border-radius: 23px;
-
-            display: grid;
-
-            grid-template-columns:
-                repeat(4, 1fr);
-
-            box-shadow:
-                0 10px 35px
-                rgba(20,30,60,0.12);
-
-            z-index: 999;
-        }
-
-        .nav-button {
-            border: none;
-
-            background:
-                transparent;
-
-            color:
-                #8991a2;
-
-            font-size: 10px;
-
-            display: flex;
-
-            flex-direction: column;
-
-            align-items: center;
-            justify-content: center;
-
-            gap: 4px;
-
-            cursor: pointer;
-
-            transition:
-                color 0.2s ease,
-                transform 0.15s ease;
-        }
-
-        .nav-icon {
-            font-size: 20px;
-        }
-
-        .nav-button.active {
-            color:
-                var(--primary);
-
-            font-weight: 800;
-        }
-
-        /* =========================
-           TOAST
-        ========================= */
-
-        .toast {
-            position: fixed;
-
-            bottom: 90px;
-
-            left: 50%;
-
-            transform:
-                translateX(-50%);
-
-            background:
-                rgba(0,0,0,0.86);
-
-            color: white;
-
-            padding:
-                12px 20px;
-
-            border-radius: 12px;
-
-            font-size: 13px;
-
-            text-align: center;
-
-            z-index: 2000;
-
-            animation:
-                slideUp 0.3s ease;
-
-            max-width: 85%;
-        }
-
-        @keyframes slideUp {
-
-            from {
-                opacity: 0;
-                transform:
-                    translateX(-50%)
-                    translateY(20px);
-            }
-
-            to {
-                opacity: 1;
-                transform:
-                    translateX(-50%)
-                    translateY(0);
-            }
-
-        }
-
-        /* =========================
-           LOADING
-        ========================= */
-
-        .loading {
-            position: fixed;
-
-            inset: 0;
-
-            background:
-                rgba(245,247,251,0.92);
-
-            display: flex;
-
-            flex-direction: column;
-
-            align-items: center;
-            justify-content: center;
-
-            z-index: 3000;
-
-            transition:
-                opacity 0.25s ease;
-        }
-
-        .loading.hide {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .loader {
-            width: 42px;
-            height: 42px;
-
-            border:
-                4px solid #ddd;
-
-            border-top-color:
-                var(--primary);
-
-            border-radius: 50%;
-
-            animation:
-                spin 0.8s linear infinite;
-
-            margin-bottom: 14px;
-        }
-
-        .loading-text {
-            font-size: 13px;
-            color: var(--muted);
-        }
-
-        @keyframes spin {
-
-            to {
-                transform:
-                    rotate(360deg);
-            }
-
-        }
-
-        /* =========================
-           MOBILE
-        ========================= */
-
-        @media (max-width: 360px) {
-
-            .balance {
-                font-size: 33px;
-            }
-
-            .quick-grid {
-                gap: 8px;
-            }
-
-            .quick-card {
-                padding: 14px;
-            }
-
-            .balance-card {
-                padding: 20px;
-            }
-
-        }
-
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#f5f7fb">
+<title>Amir Crypto Hub</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#7b8497;--primary:#6c5ce7;--primary-dark:#5545d4;--gold:#f5b942;--green:#20b486;--border:#e9ecf3}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;background:radial-gradient(circle at 80% 0%,rgba(108,92,231,.13),transparent 35%),var(--bg);color:var(--text);min-height:100vh;padding-bottom:100px;-webkit-tap-highlight-color:transparent}
+button{font-family:inherit}button:active{transform:scale(.97)}
+.app{width:100%;max-width:650px;margin:auto}
+.top{padding:22px 18px 12px}.top-row{display:flex;align-items:center;justify-content:space-between}.user-area{display:flex;align-items:center;gap:12px}
+.avatar{width:52px;height:52px;border-radius:17px;background:linear-gradient(135deg,#7c68ee,#4c3dc7);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;box-shadow:0 8px 22px rgba(108,92,231,.25)}
+.hello{color:var(--muted);font-size:13px;margin-bottom:4px}.username{font-size:18px;font-weight:800;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.notification{width:43px;height:43px;border:1px solid var(--border);background:var(--card);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:19px}
+.balance-card{margin:12px 18px 18px;padding:24px;border-radius:26px;background:linear-gradient(135deg,#7563ed,#4f3dc7);color:#fff;position:relative;overflow:hidden;box-shadow:0 15px 35px rgba(91,73,211,.25)}
+.balance-card:before,.balance-card:after{content:"";position:absolute;border-radius:50%;background:rgba(255,255,255,.08)}.balance-card:before{width:180px;height:180px;left:-70px;top:-70px}.balance-card:after{width:140px;height:140px;right:-50px;bottom:-60px}
+.balance-label,.balance,.balance-name,.balance-stats{position:relative;z-index:2}.balance-label{font-size:13px;opacity:.82}.balance{font-size:39px;font-weight:900;margin:7px 0}.balance-name{font-size:13px;opacity:.82}.balance-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}.balance-stat{background:rgba(255,255,255,.12);border-radius:15px;padding:12px}.balance-stat strong{display:block;font-size:18px;margin-bottom:3px}.balance-stat span{font-size:11px;opacity:.8}
+.page{display:none;padding:0 18px;animation:fadeIn .2s ease}.page.active{display:block}@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.section-title{display:flex;justify-content:space-between;align-items:center;margin:10px 0 13px}.section-title h2{font-size:19px}.section-title span{color:var(--muted);font-size:12px}
+.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.quick-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:18px;cursor:pointer}.quick-icon{width:45px;height:45px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:21px;margin-bottom:12px}.purple{background:#eeeaff}.yellow{background:#fff4d9}.green{background:#e5f8f1}.blue{background:#e5f2ff}.quick-card h3{font-size:14px;margin-bottom:5px}.quick-card p{color:var(--muted);font-size:11px;line-height:1.6}
+.task-card,.ref-card,.points-card,.empty{background:var(--card);border:1px solid var(--border);border-radius:22px}.task-card{padding:17px;margin-bottom:12px}.task-top{display:flex;align-items:center;gap:12px}.task-icon{width:50px;height:50px;flex-shrink:0;border-radius:16px;background:#eeeaff;display:flex;align-items:center;justify-content:center;font-size:24px}.task-info{flex:1}.task-info h3{font-size:15px;margin-bottom:5px}.task-info p{color:var(--muted);font-size:12px}.reward{margin-top:14px;display:flex;align-items:center;justify-content:space-between}.reward span{color:#c58900;background:#fff5d9;padding:7px 10px;border-radius:10px;font-size:12px;font-weight:800}
+.task-button,.ref-button{width:100%;border:none;background:var(--primary);color:#fff;padding:12px;border-radius:13px;margin-top:12px;font-size:13px;font-weight:800;cursor:pointer}.task-button:hover,.ref-button:hover{background:var(--primary-dark)}.task-button:disabled{opacity:.55;cursor:not-allowed}.task-button.completed{background:var(--green)}
+.ref-card{padding:20px;margin-bottom:14px}.ref-icon{width:58px;height:58px;border-radius:18px;background:#eeeaff;display:flex;align-items:center;justify-content:center;font-size:27px;margin-bottom:14px}.ref-card h2{font-size:20px;margin-bottom:8px}.ref-card p{color:var(--muted);font-size:13px;line-height:1.8}
+.ref-link{background:#f5f6fa;border:1px solid var(--border);padding:13px;border-radius:13px;font-size:11px;margin-top:15px;word-break:break-all;direction:ltr;text-align:left;cursor:pointer;user-select:all}
+.referral-item{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)}.referral-item:last-child{border-bottom:none}.referral-avatar{width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#7563ed,#4f3dc7);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}.referral-name{font-size:13px;font-weight:800}.referral-date{font-size:10px;color:var(--muted);margin-top:3px}
+.points-card{padding:22px;text-align:center}.points-star{width:70px;height:70px;margin:auto auto 13px;border-radius:23px;background:#fff4d5;display:flex;align-items:center;justify-content:center;font-size:34px}.points-number{font-size:35px;font-weight:900}.points-label{color:var(--muted);font-size:13px;margin-top:4px}.empty{padding:35px 20px;text-align:center;color:var(--muted)}.empty-icon{font-size:42px;margin-bottom:12px}
+.bottom-nav{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;width:calc(100% - 24px);max-width:620px;height:68px;background:rgba(255,255,255,.95);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:23px;display:grid;grid-template-columns:repeat(4,1fr);box-shadow:0 10px 35px rgba(20,30,60,.12);z-index:999}.nav-button{border:none;background:transparent;color:#8991a2;font-size:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer}.nav-icon{font-size:20px}.nav-button.active{color:var(--primary);font-weight:800}
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.86);color:#fff;padding:12px 20px;border-radius:12px;font-size:13px;text-align:center;z-index:2000;max-width:85%}
+.loading{position:fixed;inset:0;background:rgba(245,247,251,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:3000;transition:opacity .25s}.loading.hide{opacity:0;pointer-events:none}.loader{width:42px;height:42px;border:4px solid #ddd;border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite;margin-bottom:14px}.loading-text{font-size:13px;color:var(--muted)}@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:360px){.balance{font-size:33px}.quick-grid{gap:8px}.quick-card{padding:14px}.balance-card{padding:20px}}
+</style>
 </head>
-
-
 <body>
-
-<!-- LOADING -->
-
-<div class="loading" id="loading">
-
-    <div class="loader"></div>
-
-    <div class="loading-text">
-        در حال بارگذاری...
-    </div>
-
-</div>
-
+<div class="loading" id="loading"><div class="loader"></div><div class="loading-text">در حال بارگذاری...</div></div>
 
 <div class="app">
-
-    <!-- =========================
-         HEADER
-    ========================= -->
-
-    <header class="top">
-
-        <div class="top-row">
-
-            <div class="user-area">
-
-                <div class="avatar" id="avatar">
-                    A
-                </div>
-
-                <div>
-
-                    <div class="hello">
-                        خوش آمدی 👋
-                    </div>
-
-                    <div class="username" id="username">
-                        کاربر
-                    </div>
-
-                </div>
-
-            </div>
-
-            <div
-                class="notification"
-                onclick="showToast('🔔 اعلان جدیدی وجود ندارد')"
-            >
-                🔔
-            </div>
-
-        </div>
-
-    </header>
-
-
-    <!-- =========================
-         BALANCE
-    ========================= -->
-
-    <div class="balance-card">
-
-        <div class="balance-label">
-            موجودی امتیاز شما
-        </div>
-
-        <div class="balance">
-
-            <span id="points">
-                0
-            </span>
-
-            ⭐
-
-        </div>
-
-        <div class="balance-name">
-            Points
-        </div>
-
-        <div class="balance-stats">
-
-            <div class="balance-stat">
-
-                <strong id="referrals">
-                    0
-                </strong>
-
-                <span>
-                    👥 دعوت موفق
-                </span>
-
-            </div>
-
-
-            <div class="balance-stat">
-
-                <strong id="tasks">
-                    0
-                </strong>
-
-                <span>
-                    🎯 تسک انجام‌شده
-                </span>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- =========================
-         HOME
-    ========================= -->
-
-    <section
-        id="home"
-        class="page active"
-    >
-
-        <div class="section-title">
-
-            <h2>
-                دسترسی سریع
-            </h2>
-
-            <span>
-                امکانات
-            </span>
-
-        </div>
-
-
-        <div class="quick-grid">
-
-            <div
-                class="quick-card"
-                onclick="navigateTo('tasksPage')"
-            >
-
-                <div class="quick-icon purple">
-                    🎯
-                </div>
-
-                <h3>
-                    تسک‌ها
-                </h3>
-
-                <p>
-                    انجام تسک و دریافت امتیاز
-                </p>
-
-            </div>
-
-
-            <div
-                class="quick-card"
-                onclick="navigateTo('referralPage')"
-            >
-
-                <div class="quick-icon yellow">
-                    👥
-                </div>
-
-                <h3>
-                    دعوت دوستان
-                </h3>
-
-                <p>
-                    دوستانت را دعوت کن
-                </p>
-
-            </div>
-
-
-            <div
-                class="quick-card"
-                onclick="navigateTo('pointsPage')"
-            >
-
-                <div class="quick-icon green">
-                    ⭐
-                </div>
-
-                <h3>
-                    امتیازات
-                </h3>
-
-                <p>
-                    مشاهده موجودی امتیاز
-                </p>
-
-            </div>
-
-
-            <div
-                class="quick-card"
-                onclick="navigateTo('tasksPage')"
-            >
-
-                <div class="quick-icon blue">
-                    🚀
-                </div>
-
-                <h3>
-                    شروع کسب امتیاز
-                </h3>
-
-                <p>
-                    همین حالا شروع کن
-                </p>
-
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- =========================
-         TASKS
-    ========================= -->
-
-    <section
-        id="tasksPage"
-        class="page"
-    >
-
-        <div class="section-title">
-
-            <h2>
-                🎯 تسک‌ها
-            </h2>
-
-            <span>
-                پاداش بگیر
-            </span>
-
-        </div>
-
-
-        <div class="task-card">
-
-            <div class="task-top">
-
-                <div class="task-icon">
-                    📢
-                </div>
-
-                <div class="task-info">
-
-                    <h3>
-                        عضویت در کانال
-                    </h3>
-
-                    <p>
-                        در کانال رسمی ما عضو شو.
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div class="reward">
-
-                <span>
-                    +10 ⭐
-                </span>
-
-            </div>
-
-
-            <button
-                class="task-button"
-                id="joinBtn"
-                onclick="joinChannel()"
-            >
-                📢 عضویت در کانال
-            </button>
-
-
-            <button
-                class="task-button"
-                id="checkBtn"
-                onclick="checkMembership()"
-            >
-                ✅ بررسی عضویت
-            </button>
-
-        </div>
-
-
-        <div class="task-card">
-
-            <div class="task-top">
-
-                <div class="task-icon">
-                    👥
-                </div>
-
-                <div class="task-info">
-
-                    <h3>
-                        دعوت یک دوست
-                    </h3>
-
-                    <p>
-                        یک دوست را با لینک دعوت خودت بیاور.
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div class="reward">
-
-                <span>
-                    +5 ⭐
-                </span>
-
-            </div>
-
-
-            <button
-                class="task-button"
-                onclick="navigateTo('referralPage')"
-            >
-                👥 دعوت دوستان
-            </button>
-
-        </div>
-
-
-        <div class="empty">
-
-            <div class="empty-icon">
-                ✨
-            </div>
-
-            <p>
-                به‌زودی تسک‌های بیشتری اضافه می‌شود.
-            </p>
-
-        </div>
-
-    </section>
-
-
-    <!-- =========================
-         REFERRAL
-    ========================= -->
-
-    <section
-        id="referralPage"
-        class="page"
-    >
-
-        <div class="ref-card">
-
-            <div class="ref-icon">
-                👥
-            </div>
-
-            <h2>
-                دعوت دوستان
-            </h2>
-
-            <p>
-                دوستانت را دعوت کن و برای هر دعوت موفق
-                امتیاز دریافت کن.
-            </p>
-
-
-            <div
-                class="ref-link"
-                id="referralLink"
-                onclick="selectText(this)"
-            >
-                در حال آماده‌سازی...
-            </div>
-
-
-            <button
-                class="ref-button"
-                onclick="copyReferral()"
-            >
-                📋 کپی لینک دعوت
-            </button>
-
-
-            <button
-                class="ref-button"
-                onclick="shareReferral()"
-            >
-                🚀 اشتراک‌گذاری
-            </button>
-
-        </div>
-
-
-        <div class="ref-card">
-
-            <h2>
-                🏆 دعوت‌های موفق
-            </h2>
-
-            <div id="referralList">
-
-                <p>
-                    در حال بارگذاری...
-                </p>
-
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- =========================
-         POINTS
-    ========================= -->
-
-    <section
-        id="pointsPage"
-        class="page"
-    >
-
-        <div class="section-title">
-
-            <h2>
-                ⭐ امتیازات
-            </h2>
-
-            <span>
-                موجودی شما
-            </span>
-
-        </div>
-
-
-        <div class="points-card">
-
-            <div class="points-star">
-                ⭐
-            </div>
-
-            <div
-                class="points-number"
-                id="totalPoints"
-            >
-                0
-            </div>
-
-            <div class="points-label">
-                کل امتیاز
-            </div>
-
-        </div>
-
-
-        <div
-            class="empty"
-            style="margin-top:20px;"
-        >
-
-            <div class="empty-icon">
-                📊
-            </div>
-
-            <p>
-                تسک‌های بیشتری انجام دهید تا امتیاز بیشتری کسب کنید.
-            </p>
-
-        </div>
-
-    </section>
-
+<header class="top">
+<div class="top-row">
+<div class="user-area"><div class="avatar" id="avatar">A</div><div><div class="hello">خوش آمدی 👋</div><div class="username" id="username">کاربر</div></div></div>
+<div class="notification" onclick="showToast('🔔 اعلان جدیدی وجود ندارد')">🔔</div>
+</div>
+</header>
+
+<div class="balance-card">
+<div class="balance-label">موجودی امتیاز شما</div>
+<div class="balance"><span id="points">0</span> ⭐</div>
+<div class="balance-name">Points</div>
+<div class="balance-stats">
+<div class="balance-stat"><strong id="referrals">0</strong><span>👥 دعوت موفق</span></div>
+<div class="balance-stat"><strong id="tasks">0</strong><span>🎯 تسک انجام‌شده</span></div>
+</div>
 </div>
 
+<section id="home" class="page active">
+<div class="section-title"><h2>دسترسی سریع</h2><span>امکانات</span></div>
+<div class="quick-grid">
+<div class="quick-card" onclick="navigateTo('tasksPage')"><div class="quick-icon purple">🎯</div><h3>تسک‌ها</h3><p>انجام تسک و دریافت امتیاز</p></div>
+<div class="quick-card" onclick="navigateTo('referralPage')"><div class="quick-icon yellow">👥</div><h3>دعوت دوستان</h3><p>دوستانت را دعوت کن</p></div>
+<div class="quick-card" onclick="navigateTo('pointsPage')"><div class="quick-icon green">⭐</div><h3>امتیازات</h3><p>مشاهده موجودی امتیاز</p></div>
+<div class="quick-card" onclick="navigateTo('tasksPage')"><div class="quick-icon blue">🚀</div><h3>شروع کسب امتیاز</h3><p>همین حالا شروع کن</p></div>
+</div>
+</section>
 
-<!-- =========================
-     NAVIGATION
-========================= -->
+<section id="tasksPage" class="page">
+<div class="section-title"><h2>🎯 تسک‌ها</h2><span>پاداش بگیر</span></div>
+<div class="task-card">
+<div class="task-top"><div class="task-icon">📢</div><div class="task-info"><h3>عضویت در کانال</h3><p>در کانال رسمی ما عضو شو.</p></div></div>
+<div class="reward"><span>+10 ⭐</span></div>
+<button class="task-button" id="joinBtn" onclick="joinChannel()">📢 عضویت در کانال</button>
+<button class="task-button" id="checkBtn" onclick="checkMembership()">✅ بررسی عضویت</button>
+</div>
+<div class="task-card">
+<div class="task-top"><div class="task-icon">👥</div><div class="task-info"><h3>دعوت یک دوست</h3><p>یک دوست را با لینک دعوت خودت بیاور.</p></div></div>
+<div class="reward"><span>+5 ⭐</span></div>
+<button class="task-button" onclick="navigateTo('referralPage')">👥 دعوت دوستان</button>
+</div>
+<div class="empty"><div class="empty-icon">✨</div><p>به‌زودی تسک‌های بیشتری اضافه می‌شود.</p></div>
+</section>
+
+<section id="referralPage" class="page">
+<div class="ref-card">
+<div class="ref-icon">👥</div><h2>دعوت دوستان</h2>
+<p>دوستانت را دعوت کن و برای هر دعوت موفق ۵ امتیاز دریافت کن.</p>
+<div class="ref-link" id="referralLink" onclick="selectText(this)">در حال آماده‌سازی...</div>
+<button class="ref-button" onclick="copyReferral()">📋 کپی لینک دعوت</button>
+<button class="ref-button" onclick="shareReferral()">🚀 اشتراک‌گذاری</button>
+</div>
+<div class="ref-card"><h2>🏆 دعوت‌های موفق</h2><div id="referralList"><p>در حال بارگذاری...</p></div></div>
+</section>
+
+<section id="pointsPage" class="page">
+<div class="section-title"><h2>⭐ امتیازات</h2><span>موجودی شما</span></div>
+<div class="points-card"><div class="points-star">⭐</div><div class="points-number" id="totalPoints">0</div><div class="points-label">کل امتیاز</div></div>
+<div class="empty" style="margin-top:20px"><div class="empty-icon">📊</div><p>تسک‌های بیشتری انجام دهید تا امتیاز بیشتری کسب کنید.</p></div>
+</section>
+</div>
 
 <nav class="bottom-nav">
-
-    <button
-        class="nav-button active"
-        data-page="home"
-        onclick="navigateTo('home', this)"
-    >
-
-        <div class="nav-icon">
-            🏠
-        </div>
-
-        <div>
-            خانه
-        </div>
-
-    </button>
-
-
-    <button
-        class="nav-button"
-        data-page="tasksPage"
-        onclick="navigateTo('tasksPage', this)"
-    >
-
-        <div class="nav-icon">
-            🎯
-        </div>
-
-        <div>
-            تسک‌ها
-        </div>
-
-    </button>
-
-
-    <button
-        class="nav-button"
-        data-page="referralPage"
-        onclick="navigateTo('referralPage', this)"
-    >
-
-        <div class="nav-icon">
-            👥
-        </div>
-
-        <div>
-            دعوت
-        </div>
-
-    </button>
-
-
-    <button
-        class="nav-button"
-        data-page="pointsPage"
-        onclick="navigateTo('pointsPage', this)"
-    >
-
-        <div class="nav-icon">
-            ⭐
-        </div>
-
-        <div>
-            امتیاز
-        </div>
-
-    </button>
-
+<button class="nav-button active" data-page="home" onclick="navigateTo('home',this)"><div class="nav-icon">🏠</div><div>خانه</div></button>
+<button class="nav-button" data-page="tasksPage" onclick="navigateTo('tasksPage',this)"><div class="nav-icon">🎯</div><div>تسک‌ها</div></button>
+<button class="nav-button" data-page="referralPage" onclick="navigateTo('referralPage',this)"><div class="nav-icon">👥</div><div>دعوت</div></button>
+<button class="nav-button" data-page="pointsPage" onclick="navigateTo('pointsPage',this)"><div class="nav-icon">⭐</div><div>امتیاز</div></button>
 </nav>
 
-
 <script>
-
-/* =====================================================
-   CONFIGURATION
-===================================================== */
-
 /*
-   مهم:
-
-   اینجا آدرس واقعی Render خودت را قرار بده.
-
-   مثال:
-
-   https://amir-crypto-hub-bot.onrender.com
-
-   بدون / در آخر.
+  این دو مقدار عمداً از placeholder استفاده نمی‌کنند.
+  API همان Render URL فعلی شماست.
 */
+const API_URL = "https://telegram-mini-apps-123.onrender.com";
+const BOT_USERNAME = "AmirAFG123_bot";
+const CHANNEL_USERNAME = "AmirCryptoHub";
 
-const API_URL =
-    "https://YOUR-RENDER-APP.onrender.com";
+const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+if(tg){tg.ready();tg.expand();}
 
-
-/*
-   نام ربات
-*/
-const BOT_USERNAME =
-    "AmirAFG123_bot";
-
-
-/*
-   کانال
-*/
-const CHANNEL_USERNAME =
-    "AmirCryptoHub";
-
-
-/* =====================================================
-   TELEGRAM
-===================================================== */
-
-const tg =
-    window.Telegram.WebApp;
-
-
-tg.ready();
-
-
-tg.expand();
-
-
-/* =====================================================
-   TELEGRAM USER
-===================================================== */
-
-const telegramUser =
-    tg.initDataUnsafe?.user || null;
-
-
-const userID =
-    telegramUser?.id || 0;
-
-
-const firstName =
-    telegramUser?.first_name || "کاربر";
-
-
-const username =
-    telegramUser?.username || "";
-
-
-/* =====================================================
-   USER DATA
-===================================================== */
+const telegramUser = tg?.initDataUnsafe?.user || null;
+const userID = telegramUser?.id || 0;
+const firstName = telegramUser?.first_name || "کاربر";
+const username = telegramUser?.username || "";
 
 let userData = {
-
-    userID: userID,
-
-    points: 0,
-
-    referrals: 0,
-
-    tasks: 0,
-
-    completedTasks: [],
-
-    referralCode: ""
-
+  userID:userID,
+  points:0,
+  referrals:0,
+  tasks:0,
+  completedTasks:[],
+  referralCode:""
 };
 
+document.addEventListener("DOMContentLoaded", async ()=>{
+  initializeUI();
+  await loadUserData();
+  hideLoading();
+});
 
-/* =====================================================
-   REFERRAL CODE
-===================================================== */
-
-/*
-   مشکل نسخه قبلی:
-
-   کد Referral با Math.random ساخته می‌شد
-   و هر بار Mini App باز می‌شد تغییر می‌کرد.
-
-   حالا کد بر اساس Telegram ID ساخته می‌شود
-   و ثابت می‌ماند.
-*/
-
-function generateRefCode() {
-
-    if (!userID) {
-        return "user";
-    }
-
-    return "ref_" + userID;
-
+function initializeUI(){
+  document.getElementById("avatar").textContent = firstName.charAt(0).toUpperCase();
+  document.getElementById("username").textContent = firstName;
+  updateUI();
 }
 
+function generateRefCode(){
+  return userID ? `ref_${userID}` : "user";
+}
 
-/* =====================================================
-   INITIALIZATION
-===================================================== */
+function updateReferralLink(){
+  const code = userData.referralCode || generateRefCode();
+  document.getElementById("referralLink").textContent =
+    `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(code)}`;
+}
 
-document.addEventListener(
-    "DOMContentLoaded",
-    async function () {
-
-        initializeUI();
-
-        await loadUserData();
-
-        hideLoading();
-
-    }
-);
-
-
-/* =====================================================
-   INITIALIZE UI
-===================================================== */
-
-function initializeUI() {
-
-    const avatar =
-        document.getElementById("avatar");
-
-
-    const usernameElement =
-        document.getElementById("username");
-
-
-    avatar.textContent =
-        firstName
-            .charAt(0)
-            .toUpperCase();
-
-
-    usernameElement.textContent =
-        firstName;
-
-
-    userData.referralCode =
-        generateRefCode();
-
-
+async function loadUserData(){
+  if(!userID){
+    showToast("⚠️ لطفاً Mini App را از داخل تلگرام باز کنید.");
     updateReferralLink();
+    return;
+  }
 
+  try{
+    const response = await fetch(`${API_URL}/api/user`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        userID:userID,
+        username:username,
+        firstName:firstName,
+        initData:tg?.initData || ""
+      })
+    });
+
+    const data = await response.json();
+
+    if(!response.ok || !data.success) throw new Error(data.message || `HTTP ${response.status}`);
+
+    applyServerData(data.user);
+    await loadReferrals();
+  }catch(error){
+    console.error(error);
+    showToast("⚠️ اتصال به سرور برقرار نشد.");
+    updateReferralLink();
+  }
+}
+
+function applyServerData(data){
+  userData.points = Number(data.points || 0);
+  userData.referrals = Number(data.referrals_count ?? data.referrals ?? 0);
+  userData.tasks = Number(data.tasks_completed ?? data.tasks ?? 0);
+
+  userData.completedTasks = Array.isArray(data.completed_tasks)
+    ? data.completed_tasks
+    : [];
+
+  userData.referralCode = data.referral_code || generateRefCode();
+
+  updateReferralLink();
+  updateUI();
+}
+
+function updateUI(){
+  document.getElementById("points").textContent = userData.points;
+  document.getElementById("referrals").textContent = userData.referrals;
+  document.getElementById("tasks").textContent = userData.tasks;
+  document.getElementById("totalPoints").textContent = userData.points;
+  updateTaskButton();
+}
+
+function updateTaskButton(){
+  const btn = document.getElementById("checkBtn");
+  if(userData.completedTasks.includes("channel_join") || userData.completedTasks.includes("channel")){
+    btn.textContent = "✅ انجام شد";
+    btn.classList.add("completed");
+    btn.disabled = true;
+  }
+}
+
+function navigateTo(pageId,buttonElement=null){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  const page=document.getElementById(pageId);
+  if(page) page.classList.add("active");
+
+  document.querySelectorAll(".nav-button").forEach(b=>b.classList.remove("active"));
+  if(!buttonElement) buttonElement=document.querySelector(`.nav-button[data-page="${pageId}"]`);
+  if(buttonElement) buttonElement.classList.add("active");
+
+  window.scrollTo({top:0,behavior:"smooth"});
+
+  if(pageId==="referralPage") loadReferrals();
+}
+
+function showPage(pageId){navigateTo(pageId)}
+
+function joinChannel(){
+  const url=`https://t.me/${CHANNEL_USERNAME}`;
+  try{
+    if(tg) tg.openTelegramLink(url);
+    else window.open(url,"_blank");
+  }catch{
+    window.open(url,"_blank");
+  }
+}
+
+async function checkMembership(){
+  const btn=document.getElementById("checkBtn");
+  if(!userID){showToast("❌ کاربر تلگرام شناسایی نشد.");return}
+
+  btn.disabled=true;
+  btn.textContent="⏳ در حال بررسی...";
+
+  try{
+    const response=await fetch(`${API_URL}/api/check-membership`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        userID:userID,
+        username:username,
+        firstName:firstName,
+        initData:tg?.initData || ""
+      })
+    });
+
+    const data=await response.json();
+
+    if(!response.ok || !data.success) throw new Error(data.message || "خطا");
+
+    if(!data.isMember){
+      showToast("❌ ابتدا در کانال عضو شوید!");
+      btn.disabled=false;
+      btn.textContent="🔄 بررسی دوباره";
+      return;
+    }
+
+    userData.points=Number(data.totalPoints ?? data.points ?? userData.points);
+    if(!userData.completedTasks.includes("channel_join")) userData.completedTasks.push("channel_join");
+
+    if(!data.alreadyRewarded){
+      userData.tasks=Math.max(userData.tasks+1,userData.completedTasks.length);
+      showToast("🎉 تبریک! ۱۰ امتیاز دریافت کردید!");
+    }else{
+      showToast("✅ قبلاً پاداش این تسک را گرفته‌اید.");
+    }
 
     updateUI();
-
+  }catch(error){
+    console.error(error);
+    showToast("❌ خطا در ارتباط با سرور");
+    btn.disabled=false;
+    btn.textContent="🔄 تلاش دوباره";
+  }
 }
 
+async function loadReferrals(){
+  const list=document.getElementById("referralList");
+  if(!userID){list.innerHTML="<p>کاربر شناسایی نشد.</p>";return}
 
-/* =====================================================
-   REFERRAL LINK
-===================================================== */
+  try{
+    const response=await fetch(`${API_URL}/api/referrals?userID=${encodeURIComponent(userID)}`);
+    const data=await response.json();
 
-function updateReferralLink() {
+    if(!response.ok || !data.success) throw new Error(data.message || "خطا");
 
-    const link =
-        `https://t.me/${BOT_USERNAME}?start=${userData.referralCode}`;
-
-
-    const element =
-        document.getElementById("referralLink");
-
-
-    element.textContent =
-        link;
-
-}
-
-
-/* =====================================================
-   LOAD USER DATA
-===================================================== */
-
-async function loadUserData() {
-
-    /*
-       اگر Telegram User وجود نداشته باشد
-    */
-
-    if (!userID) {
-
-        showToast(
-            "⚠️ لطفاً Mini App را از داخل تلگرام باز کنید."
-        );
-
-        return;
-
-    }
-
-
-    /*
-       اگر API هنوز تنظیم نشده باشد،
-       برنامه همچنان UI را نمایش می‌دهد.
-    */
-
-    if (
-        !API_URL ||
-        API_URL.includes("YOUR-RENDER-APP")
-    ) {
-
-        console.warn(
-            "API_URL is not configured."
-        );
-
-        return;
-
-    }
-
-
-    try {
-
-        /*
-           این Endpoint باید در bot.py وجود داشته باشد.
-
-           POST /api/user
-
-           Body:
-           {
-              userID,
-              username,
-              firstName
-           }
-        */
-
-        const response =
-            await fetch(
-                `${API_URL}/api/user`,
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body:
-                        JSON.stringify({
-
-                            userID:
-                                userID,
-
-                            username:
-                                username,
-
-                            firstName:
-                                firstName
-
-                        })
-                }
-            );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                "Server returned " +
-                response.status
-            );
-
-        }
-
-
-        const data =
-            await response.json();
-
-
-        if (data.success && data.user) {
-
-            applyServerData(
-                data.user
-            );
-
-        }
-
-
-        /*
-           Referral ها
-        */
-
-        await loadReferrals();
-
-    }
-
-    catch (error) {
-
-        console.error(
-            "Load user error:",
-            error
-        );
-
-        showToast(
-            "⚠️ اتصال به سرور برقرار نشد."
-        );
-
-    }
-
-}
-
-
-/* =====================================================
-   APPLY SERVER DATA
-===================================================== */
-
-function applyServerData(data) {
-
-    userData.points =
-        Number(
-            data.points || 0
-        );
-
-
-    userData.referrals =
-        Number(
-            data.referrals_count ??
-            data.referrals ??
-            0
-        );
-
-
-    userData.tasks =
-        Number(
-            data.tasks_completed ??
-            data.tasks ??
-            0
-        );
-
-
-    if (
-        Array.isArray(
-            data.completed_tasks
-        )
-    ) {
-
-        userData.completedTasks =
-            data.completed_tasks;
-
-    }
-
-
-    if (
-        data.referral_code
-    ) {
-
-        userData.referralCode =
-            data.referral_code;
-
-    }
-
-
-    updateReferralLink();
-
+    renderReferrals(data.referrals || []);
+    userData.referrals=Number(data.count ?? (data.referrals||[]).length);
     updateUI();
-
+  }catch(error){
+    console.error(error);
+    list.innerHTML="<p>هنوز دعوت موفقی ثبت نشده است.</p>";
+  }
 }
 
+function renderReferrals(referrals){
+  const list=document.getElementById("referralList");
 
-/* =====================================================
-   UPDATE UI
-===================================================== */
+  if(!referrals.length){
+    list.innerHTML="<p>هنوز دعوت موفقی ثبت نشده است.</p>";
+    return;
+  }
 
-function updateUI() {
-
-    document.getElementById(
-        "points"
-    ).textContent =
-        userData.points;
-
-
-    document.getElementById(
-        "referrals"
-    ).textContent =
-        userData.referrals;
-
-
-    document.getElementById(
-        "tasks"
-    ).textContent =
-        userData.tasks;
-
-
-    document.getElementById(
-        "totalPoints"
-    ).textContent =
-        userData.points;
-
-
-    updateTaskButton();
-
+  list.innerHTML=referrals.map(ref=>{
+    const rawName=ref.first_name || ref.username || "کاربر";
+    const name=escapeHtml(rawName);
+    const initial=escapeHtml(String(rawName).charAt(0).toUpperCase());
+    const date=escapeHtml(ref.created_at || "");
+    return `<div class="referral-item">
+      <div class="referral-avatar">${initial}</div>
+      <div>
+        <div class="referral-name">${name}</div>
+        <div class="referral-date">دعوت موفق ${date}</div>
+      </div>
+    </div>`;
+  }).join("");
 }
 
-
-/* =====================================================
-   TASK BUTTON STATE
-===================================================== */
-
-function updateTaskButton() {
-
-    const btn =
-        document.getElementById(
-            "checkBtn"
-        );
-
-
-    if (
-        userData.completedTasks.includes(
-            "channel"
-        )
-    ) {
-
-        btn.textContent =
-            "✅ انجام شد";
-
-        btn.classList.add(
-            "completed"
-        );
-
-    }
-
+async function copyReferral(){
+  const link=document.getElementById("referralLink").textContent.trim();
+  try{
+    await navigator.clipboard.writeText(link);
+    showToast("✅ لینک دعوت کپی شد!");
+  }catch{
+    selectText(document.getElementById("referralLink"));
+    showToast("📋 لینک انتخاب شد؛ آن را کپی کنید.");
+  }
 }
 
+function shareReferral(){
+  const link=document.getElementById("referralLink").textContent.trim();
+  const shareUrl=`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("🚀 به من بپیوند و امتیاز بگیر!")}`;
 
-/* =====================================================
-   NAVIGATION
-===================================================== */
-
-function navigateTo(
-    pageId,
-    buttonElement = null
-) {
-
-    /*
-       Hide all pages
-    */
-
-    document
-        .querySelectorAll(".page")
-        .forEach(
-            page => {
-
-                page.classList.remove(
-                    "active"
-                );
-
-            }
-        );
-
-
-    /*
-       Show selected page
-    */
-
-    const page =
-        document.getElementById(
-            pageId
-        );
-
-
-    if (page) {
-
-        page.classList.add(
-            "active"
-        );
-
-    }
-
-
-    /*
-       Active navigation button
-    */
-
-    document
-        .querySelectorAll(".nav-button")
-        .forEach(
-            btn => {
-
-                btn.classList.remove(
-                    "active"
-                );
-
-            }
-        );
-
-
-    /*
-       اگر از کارت‌های Home آمدیم،
-       دکمه مناسب را پیدا می‌کنیم.
-    */
-
-    if (!buttonElement) {
-
-        buttonElement =
-            document.querySelector(
-                `.nav-button[data-page="${pageId}"]`
-            );
-
-    }
-
-
-    if (buttonElement) {
-
-        buttonElement.classList.add(
-            "active"
-        );
-
-    }
-
-
-    /*
-       برگشت به بالای صفحه
-    */
-
-    window.scrollTo(
-        {
-            top: 0,
-            behavior: "smooth"
-        }
-    );
-
+  try{
+    if(tg) tg.openTelegramLink(shareUrl);
+    else window.open(shareUrl,"_blank");
+  }catch{
+    copyReferral();
+  }
 }
 
-
-/*
-   برای سازگاری با کدهای قدیمی
-*/
-
-function showPage(pageId) {
-
-    navigateTo(pageId);
-
+function selectText(element){
+  const selection=window.getSelection();
+  const range=document.createRange();
+  range.selectNodeContents(element);
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
+let toastTimer=null;
+function showToast(message){
+  const old=document.querySelector(".toast");
+  if(old) old.remove();
 
-/* =====================================================
-   JOIN CHANNEL
-===================================================== */
+  const toast=document.createElement("div");
+  toast.className="toast";
+  toast.textContent=message;
+  document.body.appendChild(toast);
 
-function joinChannel() {
-
-    const channelUrl =
-        `https://t.me/${CHANNEL_USERNAME}`;
-
-
-    try {
-
-        tg.openTelegramLink(
-            channelUrl
-        );
-
-    }
-
-    catch {
-
-        tg.openLink(
-            channelUrl
-        );
-
-    }
-
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>toast.remove(),3000);
 }
 
-
-/* =====================================================
-   CHECK MEMBERSHIP
-===================================================== */
-
-async function checkMembership() {
-
-    const btn =
-        document.getElementById(
-            "checkBtn"
-        );
-
-
-    if (!userID) {
-
-        showToast(
-            "❌ کاربر تلگرام شناسایی نشد."
-        );
-
-        return;
-
-    }
-
-
-    btn.disabled =
-        true;
-
-
-    btn.textContent =
-        "⏳ در حال بررسی...";
-
-
-    try {
-
-        const response =
-            await fetch(
-                `${API_URL}/api/check-membership`,
-                {
-
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body:
-                        JSON.stringify({
-
-                            userID:
-                                userID,
-
-                            username:
-                                username,
-
-                            initData:
-                                tg.initData
-
-                        })
-
-                }
-            );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                "HTTP " +
-                response.status
-            );
-
-        }
-
-
-        const data =
-            await response.json();
-
-
-        if (!data.success) {
-
-            showToast(
-                "❌ " +
-                (
-                    data.message ||
-                    "خطا در بررسی عضویت"
-                )
-            );
-
-            btn.disabled =
-                false;
-
-            btn.textContent =
-                "✅ بررسی عضویت";
-
-            return;
-
-        }
-
-
-        if (!data.isMember) {
-
-            showToast(
-                "❌ ابتدا در کانال عضو شوید!"
-            );
-
-            btn.disabled =
-                false;
-
-            btn.textContent =
-                "🔄 بررسی دوباره";
-
-            return;
-
-        }
-
-
-        /*
-           کاربر عضو است
-        */
-
-        if (data.alreadyRewarded) {
-
-            showToast(
-                "✅ قبلاً پاداش این تسک را گرفته‌اید."
-            );
-
-
-            userData.completedTasks =
-                Array.from(
-                    new Set(
-                        [
-                            ...userData.completedTasks,
-                            "channel"
-                        ]
-                    )
-                );
-
-
-            updateTaskButton();
-
-            btn.disabled =
-                false;
-
-            return;
-
-        }
-
-
-        /*
-           سرور باید امتیاز را به دیتابیس اضافه کرده باشد.
-
-           بنابراین دیگر اینجا:
-
-           userData.points += 10
-
-           انجام نمی‌دهیم.
-
-           اطلاعات واقعی را از سرور می‌گیریم.
-        */
-
-        showToast(
-            "🎉 تبریک! ۱۰ امتیاز دریافت کردید!"
-        );
-
-
-        userData.completedTasks =
-            Array.from(
-                new Set(
-                    [
-                        ...userData.completedTasks,
-                        "channel"
-                    ]
-                )
-            );
-
-
-        if (
-            data.points !== undefined
-        ) {
-
-            userData.points =
-                Number(data.points);
-
-        }
-
-        else {
-
-            userData.points += 10;
-
-        }
-
-
-        userData.tasks =
-            Math.max(
-                userData.tasks,
-                userData.completedTasks.length
-            );
-
-
-        updateUI();
-
-
-        btn.textContent =
-            "✅ انجام شد";
-
-
-        btn.classList.add(
-            "completed"
-        );
-
-
-        btn.disabled =
-            false;
-
-    }
-
-    catch (error) {
-
-        console.error(
-            "Membership error:",
-            error
-        );
-
-
-        showToast(
-            "❌ خطا در ارتباط با سرور"
-        );
-
-
-        btn.disabled =
-            false;
-
-
-        btn.textContent =
-            "🔄 تلاش دوباره";
-
-    }
-
+function hideLoading(){
+  const loading=document.getElementById("loading");
+  if(!loading)return;
+  loading.classList.add("hide");
+  setTimeout(()=>loading.remove(),300);
 }
 
-
-/* =====================================================
-   LOAD REFERRALS
-===================================================== */
-
-async function loadReferrals() {
-
-    const list =
-        document.getElementById(
-            "referralList"
-        );
-
-
-    if (!userID) {
-
-        list.innerHTML =
-            "<p>کاربر شناسایی نشد.</p>";
-
-        return;
-
-    }
-
-
-    if (
-        !API_URL ||
-        API_URL.includes(
-            "YOUR-RENDER-APP"
-        )
-    ) {
-
-        list.innerHTML =
-            "<p>هنوز اطلاعات دعوت‌ها از سرور دریافت نشده است.</p>";
-
-        return;
-
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `${API_URL}/api/referrals?userID=${encodeURIComponent(userID)}`
-            );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                "HTTP " +
-                response.status
-            );
-
-        }
-
-
-        const data =
-            await response.json();
-
-
-        if (
-            data.success &&
-            Array.isArray(
-                data.referrals
-            )
-        ) {
-
-            renderReferrals(
-                data.referrals
-            );
-
-            userData.referrals =
-                data.referrals.length;
-
-            updateUI();
-
-        }
-
-        else {
-
-            renderReferrals([]);
-
-        }
-
-    }
-
-    catch (error) {
-
-        console.error(
-            "Referral error:",
-            error
-        );
-
-
-        renderReferrals([]);
-
-    }
-
+function escapeHtml(value){
+  return String(value)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
 }
 
-
-/* =====================================================
-   RENDER REFERRALS
-===================================================== */
-
-function renderReferrals(
-    referrals
-) {
-
-    const list =
-        document.getElementById(
-            "referralList"
-        );
-
-
-    if (
-        !referrals ||
-        referrals.length === 0
-    ) {
-
-        list.innerHTML = `
-            <p>
-                هنوز دعوت موفقی ثبت نشده است.
-            </p>
-        `;
-
-        return;
-
-    }
-
-
-    list.innerHTML =
-        referrals
-            .map(
-                referral => {
-
-                    const name =
-                        escapeHtml(
-                            referral.first_name ||
-                            referral.username ||
-                            "کاربر"
-                        );
-
-
-                    const initial =
-                        (
-                            referral.first_name ||
-                            referral.username ||
-                            "U"
-                        )
-                        .charAt(0)
-                        .toUpperCase();
-
-
-                    const date =
-                        referral.created_at ||
-                        "";
-
-
-                    return `
-
-                        <div class="referral-item">
-
-                            <div class="referral-avatar">
-                                ${initial}
-                            </div>
-
-                            <div>
-
-                                <div class="referral-name">
-                                    ${name}
-                                </div>
-
-                                <div class="referral-date">
-                                    دعوت موفق
-                                    ${date}
-                                </div>
-
-                            </div>
-
-                        </div>
-
-                    `;
-
-                }
-            )
-            .join("");
-
-}
-
-
-/* =====================================================
-   COPY REFERRAL
-===================================================== */
-
-async function copyReferral() {
-
-    const link =
-        document
-            .getElementById(
-                "referralLink"
-            )
-            .textContent
-            .trim();
-
-
-    try {
-
-        await navigator.clipboard.writeText(
-            link
-        );
-
-
-        showToast(
-            "✅ لینک دعوت کپی شد!"
-        );
-
-    }
-
-    catch {
-
-        selectText(
-            document.getElementById(
-                "referralLink"
-            )
-        );
-
-
-        showToast(
-            "📋 لینک انتخاب شد؛ آن را کپی کنید."
-        );
-
-    }
-
-}
-
-
-/* =====================================================
-   SHARE REFERRAL
-===================================================== */
-
-function shareReferral() {
-
-    const link =
-        document
-            .getElementById(
-                "referralLink"
-            )
-            .textContent
-            .trim();
-
-
-    const text =
-        "🚀 به من بپیوند و امتیاز بگیر!\n\n" +
-        link;
-
-
-    /*
-       Telegram WebApp
-    */
-
-    const shareUrl =
-        `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("🚀 به من بپیوند و امتیاز بگیر!")}`;
-
-
-    try {
-
-        tg.openTelegramLink(
-            shareUrl
-        );
-
-    }
-
-    catch {
-
-        if (
-            navigator.share
-        ) {
-
-            navigator.share(
-                {
-                    title:
-                        "Amir Crypto Hub",
-
-                    text:
-                        text,
-
-                    url:
-                        link
-                }
-            )
-            .catch(
-                () => {}
-            );
-
-        }
-
-        else {
-
-            copyReferral();
-
-        }
-
-    }
-
-}
-
-
-/* =====================================================
-   SELECT TEXT
-===================================================== */
-
-function selectText(
-    element
-) {
-
-    const selection =
-        window.getSelection();
-
-
-    const range =
-        document.createRange();
-
-
-    range.selectNodeContents(
-        element
-    );
-
-
-    selection.removeAllRanges();
-
-
-    selection.addRange(
-        range
-    );
-
-}
-
-
-/* =====================================================
-   TOAST
-===================================================== */
-
-let toastTimer = null;
-
-
-function showToast(
-    message
-) {
-
-    const oldToast =
-        document.querySelector(
-            ".toast"
-        );
-
-
-    if (oldToast) {
-        oldToast.remove();
-    }
-
-
-    const toast =
-        document.createElement(
-            "div"
-        );
-
-
-    toast.className =
-        "toast";
-
-
-    toast.textContent =
-        message;
-
-
-    document.body.appendChild(
-        toast
-    );
-
-
-    clearTimeout(
-        toastTimer
-    );
-
-
-    toastTimer =
-        setTimeout(
-            () => {
-
-                toast.remove();
-
-            },
-            3000
-        );
-
-}
-
-
-/* =====================================================
-   LOADING
-===================================================== */
-
-function hideLoading() {
-
-    const loading =
-        document.getElementById(
-            "loading"
-        );
-
-
-    if (!loading) {
-        return;
-    }
-
-
-    loading.classList.add(
-        "hide"
-    );
-
-
-    setTimeout(
-        () => {
-
-            loading.remove();
-
-        },
-        300
-    );
-
-}
-
-
-/* =====================================================
-   HTML ESCAPE
-===================================================== */
-
-function escapeHtml(
-    value
-) {
-
-    return String(value)
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-        .replace(
-            /</g,
-            "&lt;"
-        )
-        .replace(
-            />/g,
-            "&gt;"
-        )
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-        .replace(
-            /'/g,
-            "&#039;"
-        );
-
-}
-
-
-/* =====================================================
-   TELEGRAM THEME
-===================================================== */
-
-try {
-
-    tg.setHeaderColor(
-        "#f5f7fb"
-    );
-
-    tg.setBackgroundColor(
-        "#f5f7fb"
-    );
-
-}
-
-catch (error) {
-
-    console.log(
-        "Telegram theme error:",
-        error
-    );
-
-}
-
+try{
+  if(tg){
+    tg.setHeaderColor("#f5f7fb");
+    tg.setBackgroundColor("#f5f7fb");
+  }
+}catch(e){console.log(e)}
 </script>
-
 </body>
 </html>

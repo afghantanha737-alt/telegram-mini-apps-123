@@ -1,16 +1,6 @@
 """
-Telegram Bot + Mini App API
 Amir Crypto Hub
-
-Features:
-- Flask API
-- Telegram Webhook
-- Real Referral System
-- SQLite Database
-- Channel Membership Check
-- Task Completion
-- User Stats
-- Leaderboard
+Telegram Bot + Mini App API
 """
 
 import os
@@ -35,11 +25,17 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is not set")
 
-TELEGRAM_API_URL = (
-    f"https://api.telegram.org/bot{BOT_TOKEN}"
-)
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 CHANNEL_USERNAME = "AmirCryptoHub"
+
+BOT_USERNAME = "AmirAFG123_bot"
+
+# اگر Mini App روی GitHub Pages است، اینجا آدرس واقعی آن را بگذار
+MINI_APP_URL = os.getenv(
+    "MINI_APP_URL",
+    "https://YOUR-GITHUB-USERNAME.github.io/YOUR-REPOSITORY/"
+)
 
 
 # =========================================================
@@ -47,8 +43,7 @@ CHANNEL_USERNAME = "AmirCryptoHub"
 # =========================================================
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO
 )
 
 logger = logging.getLogger(__name__)
@@ -71,48 +66,75 @@ db = Database()
 
 
 # =========================================================
-# TELEGRAM FUNCTIONS
+# TELEGRAM HELPERS
 # =========================================================
 
-def check_user_membership(user_id: int) -> dict:
+def telegram_request(method, payload=None):
 
     try:
 
-        url = f"{TELEGRAM_API_URL}/getChatMember"
+        url = f"{TELEGRAM_API_URL}/{method}"
 
-        params = {
-            "chat_id": f"@{CHANNEL_USERNAME}",
-            "user_id": user_id
-        }
-
-        response = requests.get(
+        response = requests.post(
             url,
-            params=params,
-            timeout=10
+            json=payload or {},
+            timeout=15
         )
 
-        data = response.json()
+        return response.json()
 
-        if not data.get("ok"):
+    except Exception as e:
 
-            error_msg = data.get(
-                "description",
-                "Unknown Telegram API error"
-            )
+        logger.error(
+            f"Telegram request error: {e}"
+        )
 
-            logger.error(
-                f"Telegram API error: {error_msg}"
-            )
+        return {
+            "ok": False,
+            "description": str(e)
+        }
+
+
+def send_message(user_id, text):
+
+    result = telegram_request(
+        "sendMessage",
+        {
+            "chat_id": user_id,
+            "text": text,
+            "parse_mode": "HTML"
+        }
+    )
+
+    return result.get("ok", False)
+
+
+def check_user_membership(user_id):
+
+    try:
+
+        result = telegram_request(
+            "getChatMember",
+            {
+                "chat_id": f"@{CHANNEL_USERNAME}",
+                "user_id": user_id
+            }
+        )
+
+        if not result.get("ok"):
 
             return {
                 "is_member": False,
                 "status": "error",
-                "error": error_msg
+                "error": result.get(
+                    "description",
+                    "Telegram API error"
+                )
             }
 
-        user_status = data["result"]["status"]
+        status = result["result"]["status"]
 
-        is_member = user_status in [
+        is_member = status in [
             "member",
             "administrator",
             "creator"
@@ -120,22 +142,14 @@ def check_user_membership(user_id: int) -> dict:
 
         return {
             "is_member": is_member,
-            "status": user_status,
+            "status": status,
             "error": None
-        }
-
-    except requests.exceptions.Timeout:
-
-        return {
-            "is_member": False,
-            "status": "timeout",
-            "error": "Connection timeout"
         }
 
     except Exception as e:
 
         logger.error(
-            f"Membership error: {str(e)}"
+            f"Membership error: {e}"
         )
 
         return {
@@ -145,244 +159,134 @@ def check_user_membership(user_id: int) -> dict:
         }
 
 
-def send_notification(
-    user_id: int,
-    message: str
-) -> bool:
+# =========================================================
+# REFERRAL PROCESSING
+# =========================================================
 
-    try:
+def process_referral(new_user_id, referral_code):
 
-        url = f"{TELEGRAM_API_URL}/sendMessage"
-
-        payload = {
-            "chat_id": user_id,
-            "text": message,
-            "parse_mode": "HTML"
-        }
-
-        response = requests.post(
-            url,
-            json=payload,
-            timeout=10
-        )
-
-        result = response.json()
-
-        if not result.get("ok"):
-
-            logger.error(
-                f"Telegram sendMessage error: {result}"
-            )
-
-        return result.get("ok", False)
-
-    except Exception as e:
-
-        logger.error(
-            f"Notification error: {str(e)}"
-        )
-
+    if not referral_code:
         return False
 
-
-# =========================================================
-# REFERRAL SYSTEM
-# =========================================================
-
-def handle_start_command(
-    user_id: int,
-    username: str,
-    first_name: str,
-    start_parameter: str = None
-):
-
     try:
 
-        # -------------------------------------------------
-        # Create / Get User
-        # -------------------------------------------------
+        new_user = db.get_user(new_user_id)
 
-        user = db.get_or_create_user(
-            user_id,
-            username,
-            first_name
-        )
+        if not new_user:
+            return False
 
-        if not user:
-
-            return {
-                "success": False,
-                "referral": False,
-                "message": "Could not create user"
-            }
-
-        # -------------------------------------------------
-        # Normal /start
-        # -------------------------------------------------
-
-        if not start_parameter:
-
-            return {
-                "success": True,
-                "referral": False,
-                "message": "Normal start"
-            }
-
-        # -------------------------------------------------
-        # Validate referral parameter
-        # -------------------------------------------------
-
-        if not start_parameter.startswith("ref_"):
-
-            return {
-                "success": True,
-                "referral": False,
-                "message": "Invalid referral code"
-            }
-
-        referral_code = start_parameter.strip()
-
-        # -------------------------------------------------
-        # Find Referrer
-        # -------------------------------------------------
+        # اگر قبلاً معرف دارد، دوباره ثبت نکن
+        if new_user.get("referred_by"):
+            return False
 
         referrer = db.get_user_by_referral_code(
             referral_code
         )
 
         if not referrer:
-
-            logger.info(
-                f"Referral code not found: {referral_code}"
-            )
-
-            return {
-                "success": True,
-                "referral": False,
-                "message": "Referral code not found"
-            }
+            return False
 
         referrer_id = int(
             referrer["user_id"]
         )
 
-        # -------------------------------------------------
-        # Prevent Self Referral
-        # -------------------------------------------------
+        # دعوت کردن خودش ممنوع
+        if referrer_id == int(new_user_id):
+            return False
 
-        if referrer_id == user_id:
-
-            logger.warning(
-                f"Self referral blocked: {user_id}"
-            )
-
-            return {
-                "success": True,
-                "referral": False,
-                "status": "self_referral",
-                "message": "Self referral blocked"
-            }
-
-        # -------------------------------------------------
-        # Register Referral
-        # -------------------------------------------------
-
-        success, status = db.add_referral(
-            referrer_id,
-            user_id
-        )
-
-        if not success:
-
-            logger.info(
-                f"Referral not registered: "
-                f"{user_id} -> {referrer_id}, "
-                f"status={status}"
-            )
-
-            return {
-                "success": True,
-                "referral": False,
-                "status": status,
-                "message": "Referral already processed"
-            }
-
-        # -------------------------------------------------
-        # Get Referrer Points
-        # -------------------------------------------------
-
-        total_points = db.get_points(
+        # بررسی دعوت تکراری
+        existing = db.get_referrals(
             referrer_id
         )
 
-        # -------------------------------------------------
-        # Notify Referrer
-        # -------------------------------------------------
+        for item in existing:
 
-        send_notification(
+            if int(item["user_id"]) == int(new_user_id):
+                return False
+
+        # ثبت referral
+        success = db.add_referral(
+            referrer_id,
+            int(new_user_id)
+        )
+
+        if not success:
+            return False
+
+        # ثبت معرف در users
+        try:
+
+            conn = db.get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                UPDATE users
+                SET referred_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+                """,
+                (
+                    referrer_id,
+                    int(new_user_id)
+                )
+            )
+
+            conn.commit()
+            conn.close()
+
+        except Exception as e:
+
+            logger.error(
+                f"Could not save referred_by: {e}"
+            )
+
+        # اطلاع به معرف
+        new_points = db.get_points(
+            referrer_id
+        )
+
+        send_message(
             referrer_id,
             (
-                "<b>🎉 دعوت جدید!</b>\n\n"
-                f"👤 {first_name} با لینک دعوت شما وارد شد.\n\n"
-                "⭐ <b>۵ امتیاز</b> دریافت کردید!\n\n"
-                f"💰 امتیاز فعلی شما: "
-                f"<b>{total_points}</b>"
+                "<b>🎉 دعوت موفق!</b>\n\n"
+                "یک نفر با لینک دعوت شما وارد شد.\n\n"
+                "<b>+5 ⭐ امتیاز</b>\n"
+                f"⭐ امتیاز فعلی شما: <b>{new_points}</b>"
             )
         )
 
-        # -------------------------------------------------
-        # Notify New User
-        # -------------------------------------------------
-
-        send_notification(
-            user_id,
-            (
-                "<b>🎉 خوش آمدید!</b>\n\n"
-                "لینک دعوت با موفقیت ثبت شد. ✅\n\n"
-                "اکنون می‌توانید وارد Mini App شوید "
-                "و تسک‌ها را انجام دهید."
-            )
-        )
-
-        logger.info(
-            f"Referral success: "
-            f"referrer={referrer_id}, "
-            f"user={user_id}"
-        )
-
-        return {
-            "success": True,
-            "referral": True,
-            "referrer_id": referrer_id,
-            "points_awarded": 5,
-            "total_referrer_points": total_points,
-            "message": "Referral successfully registered"
-        }
+        return True
 
     except Exception as e:
 
         logger.error(
-            f"Start command error: {str(e)}"
+            f"Referral processing error: {e}"
         )
 
-        return {
-            "success": False,
-            "referral": False,
-            "message": str(e)
-        }
+        return False
 
 
 # =========================================================
 # HEALTH
 # =========================================================
 
-@app.route(
-    "/api/health",
-    methods=["GET"]
-)
-def health_check():
+@app.route("/", methods=["GET"])
+def home():
 
     return jsonify({
+        "success": True,
+        "status": "ok",
+        "message": "Amir Crypto Hub API is running",
+        "referral": "enabled"
+    })
+
+
+@app.route("/api/health", methods=["GET"])
+def health():
+
+    return jsonify({
+        "success": True,
         "status": "ok",
         "message": "Bot is running",
         "referral": "enabled"
@@ -390,13 +294,109 @@ def health_check():
 
 
 # =========================================================
+# TELEGRAM WEBHOOK
+# =========================================================
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+
+    try:
+
+        update = request.get_json(
+            silent=True
+        ) or {}
+
+        message = update.get(
+            "message"
+        )
+
+        if not message:
+            return jsonify({
+                "ok": True
+            })
+
+        user = message.get(
+            "from"
+        ) or {}
+
+        user_id = user.get("id")
+
+        username = user.get(
+            "username",
+            "unknown"
+        )
+
+        first_name = user.get(
+            "first_name",
+            "User"
+        )
+
+        if not user_id:
+            return jsonify({
+                "ok": True
+            })
+
+        db.get_or_create_user(
+            int(user_id),
+            username,
+            first_name
+        )
+
+        text = message.get(
+            "text",
+            ""
+        )
+
+        if text.startswith("/start"):
+
+            parts = text.split(
+                maxsplit=1
+            )
+
+            referral_code = None
+
+            if len(parts) == 2:
+                referral_code = parts[1].strip()
+
+            if referral_code:
+
+                process_referral(
+                    int(user_id),
+                    referral_code
+                )
+
+            welcome_text = (
+                f"<b>سلام {first_name} 👋</b>\n\n"
+                "به <b>Amir Crypto Hub</b> خوش آمدید! 🚀\n\n"
+                "در Mini App می‌توانید تسک انجام دهید، "
+                "امتیاز بگیرید و دوستان خود را دعوت کنید."
+            )
+
+            send_message(
+                int(user_id),
+                welcome_text
+            )
+
+        return jsonify({
+            "ok": True
+        })
+
+    except Exception as e:
+
+        logger.error(
+            f"Webhook error: {e}"
+        )
+
+        return jsonify({
+            "ok": True
+        })
+
+
+# =========================================================
 # USER INIT
 # =========================================================
 
-@app.route(
-    "/api/user/init",
-    methods=["POST"]
-)
+@app.route("/api/user/init", methods=["POST"])
 def user_init():
 
     try:
@@ -405,7 +405,9 @@ def user_init():
             silent=True
         ) or {}
 
-        user_id = data.get("user_id")
+        user_id = data.get(
+            "user_id"
+        )
 
         username = data.get(
             "username",
@@ -415,6 +417,10 @@ def user_init():
         first_name = data.get(
             "first_name",
             "User"
+        )
+
+        referral_code = data.get(
+            "referral_code"
         )
 
         if not user_id:
@@ -432,6 +438,18 @@ def user_init():
             first_name
         )
 
+        # اگر Referral از Mini App آمده
+        if referral_code:
+
+            process_referral(
+                user_id,
+                referral_code
+            )
+
+            user = db.get_user(
+                user_id
+            )
+
         stats = db.get_user_stats(
             user_id
         )
@@ -445,7 +463,7 @@ def user_init():
     except Exception as e:
 
         logger.error(
-            f"User init error: {str(e)}"
+            f"User init error: {e}"
         )
 
         return jsonify({
@@ -458,11 +476,8 @@ def user_init():
 # USER STATS
 # =========================================================
 
-@app.route(
-    "/api/user/stats",
-    methods=["GET"]
-)
-def get_user_stats():
+@app.route("/api/user/stats", methods=["GET"])
+def user_stats():
 
     try:
 
@@ -496,10 +511,6 @@ def get_user_stats():
 
     except Exception as e:
 
-        logger.error(
-            f"Stats error: {str(e)}"
-        )
-
         return jsonify({
             "success": False,
             "message": str(e)
@@ -507,14 +518,11 @@ def get_user_stats():
 
 
 # =========================================================
-# USER POINTS
+# POINTS
 # =========================================================
 
-@app.route(
-    "/api/user/points",
-    methods=["GET"]
-)
-def get_user_points():
+@app.route("/api/user/points", methods=["GET"])
+def user_points():
 
     try:
 
@@ -536,14 +544,69 @@ def get_user_points():
 
         return jsonify({
             "success": True,
-            "points": points,
-            "user_id": user_id
+            "points": points
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+
+# =========================================================
+# REFERRALS
+# =========================================================
+
+@app.route("/api/referrals", methods=["GET"])
+def referrals():
+
+    try:
+
+        user_id = request.args.get(
+            "user_id",
+            type=int
+        )
+
+        if not user_id:
+
+            # سازگاری با نسخه قبلی
+            user_id = request.args.get(
+                "userID",
+                type=int
+            )
+
+        if not user_id:
+
+            return jsonify({
+                "success": False,
+                "message": "Missing user_id"
+            }), 400
+
+        referral_list = db.get_referrals(
+            user_id
+        )
+
+        count = len(
+            referral_list
+        )
+
+        points = db.get_points(
+            user_id
+        )
+
+        return jsonify({
+            "success": True,
+            "referrals": referral_list,
+            "referrals_count": count,
+            "points": points
         })
 
     except Exception as e:
 
         logger.error(
-            f"Points error: {str(e)}"
+            f"Referral route error: {e}"
         )
 
         return jsonify({
@@ -553,7 +616,7 @@ def get_user_points():
 
 
 # =========================================================
-# CHECK CHANNEL MEMBERSHIP
+# CHECK MEMBERSHIP
 # =========================================================
 
 @app.route(
@@ -592,19 +655,11 @@ def check_membership():
 
         user_id = int(user_id)
 
-        # ---------------------------------------------
-        # Make sure user exists
-        # ---------------------------------------------
-
         db.get_or_create_user(
             user_id,
             username,
             first_name
         )
-
-        # ---------------------------------------------
-        # Check Telegram Membership
-        # ---------------------------------------------
 
         membership = check_user_membership(
             user_id
@@ -619,35 +674,28 @@ def check_membership():
                 "message": "ابتدا در کانال عضو شوید."
             })
 
-        # ---------------------------------------------
-        # Check Existing Reward
-        # ---------------------------------------------
-
-        already_completed = db.is_task_completed(
+        already = db.is_task_completed(
             user_id,
             "channel_join"
         )
 
-        if already_completed:
-
-            current_points = db.get_points(
-                user_id
-            )
+        if already:
 
             return jsonify({
                 "success": True,
                 "isMember": True,
                 "alreadyRewarded": True,
                 "pointsAwarded": 0,
-                "totalPoints": current_points,
+                "points": db.get_points(
+                    user_id
+                ),
+                "totalPoints": db.get_points(
+                    user_id
+                ),
                 "message": "این تسک قبلاً انجام شده است."
             })
 
-        # ---------------------------------------------
-        # Complete Channel Task
-        # ---------------------------------------------
-
-        success, already_completed = db.complete_task(
+        success, already = db.complete_task(
             user_id,
             "channel_join",
             10
@@ -657,25 +705,20 @@ def check_membership():
 
             return jsonify({
                 "success": False,
-                "message": "خطا در ذخیره امتیاز"
+                "message": "خطا در ثبت امتیاز"
             }), 500
 
         total_points = db.get_points(
             user_id
         )
 
-        # ---------------------------------------------
-        # Notification
-        # ---------------------------------------------
-
-        send_notification(
+        send_message(
             user_id,
             (
                 "<b>🎉 تبریک!</b>\n\n"
                 "برای عضویت در کانال "
-                "<b>۱۰ امتیاز</b> دریافت کردید!\n\n"
-                f"⭐ کل امتیاز شما: "
-                f"<b>{total_points}</b>"
+                "<b>۱۰ امتیاز</b> دریافت کردید.\n\n"
+                f"⭐ امتیاز شما: <b>{total_points}</b>"
             )
         )
 
@@ -684,6 +727,7 @@ def check_membership():
             "isMember": True,
             "alreadyRewarded": False,
             "pointsAwarded": 10,
+            "points": total_points,
             "totalPoints": total_points,
             "message": "امتیاز با موفقیت اضافه شد."
         })
@@ -691,105 +735,7 @@ def check_membership():
     except Exception as e:
 
         logger.error(
-            f"Membership route error: {str(e)}"
-        )
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
-
-
-# =========================================================
-# COMPLETE TASK
-# =========================================================
-
-@app.route(
-    "/api/tasks/complete",
-    methods=["POST"]
-)
-def complete_task():
-
-    try:
-
-        data = request.get_json(
-            silent=True
-        ) or {}
-
-        user_id = data.get(
-            "user_id"
-        )
-
-        task_name = data.get(
-            "task_name"
-        )
-
-        if not user_id or not task_name:
-
-            return jsonify({
-                "success": False,
-                "message": "Missing required fields"
-            }), 400
-
-        user_id = int(user_id)
-
-        task_points = {
-            "channel_join": 10,
-            "referral": 5,
-            "share": 3
-        }
-
-        points = task_points.get(
-            task_name,
-            0
-        )
-
-        if points == 0:
-
-            return jsonify({
-                "success": False,
-                "message": "Invalid task"
-            }), 400
-
-        success, already_completed = db.complete_task(
-            user_id,
-            task_name,
-            points
-        )
-
-        if not success:
-
-            return jsonify({
-                "success": False,
-                "message": "Error completing task"
-            }), 500
-
-        total_points = db.get_points(
-            user_id
-        )
-
-        if already_completed:
-
-            return jsonify({
-                "success": True,
-                "alreadyCompleted": True,
-                "pointsAwarded": 0,
-                "totalPoints": total_points,
-                "message": "Task already completed"
-            })
-
-        return jsonify({
-            "success": True,
-            "alreadyCompleted": False,
-            "pointsAwarded": points,
-            "totalPoints": total_points,
-            "message": "Task completed successfully"
-        })
-
-    except Exception as e:
-
-        logger.error(
-            f"Complete task error: {str(e)}"
+            f"Membership error: {e}"
         )
 
         return jsonify({
@@ -802,11 +748,8 @@ def complete_task():
 # LEADERBOARD
 # =========================================================
 
-@app.route(
-    "/api/leaderboard",
-    methods=["GET"]
-)
-def get_leaderboard():
+@app.route("/api/leaderboard", methods=["GET"])
+def leaderboard():
 
     try:
 
@@ -821,267 +764,14 @@ def get_leaderboard():
             100
         )
 
-        users = db.get_top_users(
-            limit
-        )
-
         return jsonify({
             "success": True,
-            "leaderboard": users
-        })
-
-    except Exception as e:
-
-        logger.error(
-            f"Leaderboard error: {str(e)}"
-        )
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
-
-
-# =========================================================
-# TELEGRAM WEBHOOK
-# =========================================================
-
-@app.route(
-    "/telegram/webhook",
-    methods=["POST"]
-)
-def telegram_webhook():
-
-    try:
-
-        update = request.get_json(
-            silent=True
-        ) or {}
-
-        logger.info(
-            f"Telegram update received: {update}"
-        )
-
-        message = update.get(
-            "message"
-        )
-
-        if not message:
-
-            return jsonify({
-                "ok": True
-            })
-
-        telegram_user = (
-            message.get("from")
-            or {}
-        )
-
-        user_id = telegram_user.get(
-            "id"
-        )
-
-        if not user_id:
-
-            return jsonify({
-                "ok": True
-            })
-
-        username = telegram_user.get(
-            "username",
-            "unknown"
-        )
-
-        first_name = telegram_user.get(
-            "first_name",
-            "User"
-        )
-
-        text = message.get(
-            "text",
-            ""
-        )
-
-        # -------------------------------------------------
-        # /start
-        # -------------------------------------------------
-
-        if text.startswith("/start"):
-
-            parts = text.split(
-                maxsplit=1
+            "leaderboard": db.get_top_users(
+                limit
             )
-
-            start_parameter = None
-
-            if len(parts) == 2:
-
-                start_parameter = (
-                    parts[1].strip()
-                )
-
-            result = handle_start_command(
-                user_id=int(user_id),
-                username=username,
-                first_name=first_name,
-                start_parameter=start_parameter
-            )
-
-            logger.info(
-                f"/start result: {result}"
-            )
-
-            # ---------------------------------------------
-            # Welcome Message
-            # ---------------------------------------------
-
-            if result.get("referral"):
-
-                send_notification(
-                    int(user_id),
-                    (
-                        "<b>🎉 دعوت با موفقیت ثبت شد!</b>\n\n"
-                        "خوش آمدید به "
-                        "<b>Amir Crypto Hub</b> 🚀\n\n"
-                        "اکنون Mini App را باز کنید "
-                        "و فعالیت خود را شروع کنید."
-                    )
-                )
-
-            else:
-
-                send_notification(
-                    int(user_id),
-                    (
-                        "<b>👋 خوش آمدید!</b>\n\n"
-                        "به <b>Amir Crypto Hub</b> خوش آمدید. 🚀\n\n"
-                        "Mini App را باز کنید و "
-                        "تسک‌ها را انجام دهید."
-                    )
-                )
-
-        return jsonify({
-            "ok": True
         })
 
     except Exception as e:
-
-        logger.error(
-            f"Webhook error: {str(e)}"
-        )
-
-        return jsonify({
-            "ok": False,
-            "error": str(e)
-        }), 500
-
-
-# =========================================================
-# SET TELEGRAM WEBHOOK
-# =========================================================
-
-@app.route(
-    "/api/set-webhook",
-    methods=["GET"]
-)
-def set_webhook():
-
-    try:
-
-        webhook_url = request.args.get(
-            "url"
-        )
-
-        if not webhook_url:
-
-            return jsonify({
-                "success": False,
-                "message": "Missing webhook URL"
-            }), 400
-
-        if not webhook_url.startswith(
-            "https://"
-        ):
-
-            return jsonify({
-                "success": False,
-                "message": "Webhook must use HTTPS"
-            }), 400
-
-        telegram_url = (
-            f"{TELEGRAM_API_URL}/setWebhook"
-        )
-
-        response = requests.post(
-            telegram_url,
-            json={
-                "url": webhook_url
-            },
-            timeout=10
-        )
-
-        result = response.json()
-
-        logger.info(
-            f"Webhook setup result: {result}"
-        )
-
-        return jsonify({
-            "success": result.get(
-                "ok",
-                False
-            ),
-            "telegram": result
-        })
-
-    except Exception as e:
-
-        logger.error(
-            f"Webhook setup error: {str(e)}"
-        )
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
-
-
-# =========================================================
-# WEBHOOK INFO
-# =========================================================
-
-@app.route(
-    "/api/webhook-info",
-    methods=["GET"]
-)
-def webhook_info():
-
-    try:
-
-        url = (
-            f"{TELEGRAM_API_URL}/getWebhookInfo"
-        )
-
-        response = requests.get(
-            url,
-            timeout=10
-        )
-
-        result = response.json()
-
-        return jsonify({
-            "success": result.get(
-                "ok",
-                False
-            ),
-            "telegram": result
-        })
-
-    except Exception as e:
-
-        logger.error(
-            f"Webhook info error: {str(e)}"
-        )
 
         return jsonify({
             "success": False,
@@ -1103,23 +793,6 @@ def not_found(error):
 
 
 # =========================================================
-# 500
-# =========================================================
-
-@app.errorhandler(500)
-def internal_error(error):
-
-    logger.error(
-        f"Internal server error: {str(error)}"
-    )
-
-    return jsonify({
-        "success": False,
-        "message": "Internal server error"
-    }), 500
-
-
-# =========================================================
 # RUN
 # =========================================================
 
@@ -1130,10 +803,6 @@ if __name__ == "__main__":
             "PORT",
             5000
         )
-    )
-
-    logger.info(
-        f"Starting server on port {port}"
     )
 
     app.run(

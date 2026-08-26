@@ -1,192 +1,323 @@
 """
-Database Manager for Telegram Mini App Bot
-Manages users, tasks, points, and referrals
+Database Manager
+Amir Crypto Hub - Telegram Mini App
+
+Features:
+- Users
+- Points
+- Tasks
+- Referrals
+- Referral bonuses
+- Points history
+- Leaderboard
 """
 
 import sqlite3
+import secrets
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 
 class Database:
 
-    def __init__(self, db_name="amir_bot.db"):
+    def __init__(self, db_name: str = "amir_bot.db"):
         self.db_name = db_name
         self.init_db()
 
+    # =========================================================
+    # CONNECTION
+    # =========================================================
+
     def get_connection(self):
-        conn = sqlite3.connect(self.db_name)
+        conn = sqlite3.connect(
+            self.db_name,
+            timeout=30
+        )
+
         conn.row_factory = sqlite3.Row
+
         return conn
 
-    # =========================
-    # DATABASE INIT
-    # =========================
+    # =========================================================
+    # DATABASE INITIALIZATION
+    # =========================================================
 
     def init_db(self):
 
         conn = self.get_connection()
         cursor = conn.cursor()
 
+        # Enable foreign keys
+        cursor.execute("PRAGMA foreign_keys = ON")
+
+        # -----------------------------------------------------
+        # USERS
+        # -----------------------------------------------------
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
+
                 user_id INTEGER PRIMARY KEY,
-                username TEXT UNIQUE,
+
+                username TEXT,
+
                 first_name TEXT,
+
                 points INTEGER DEFAULT 0,
+
                 referral_code TEXT UNIQUE,
+
                 referred_by INTEGER,
+
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY (referred_by)
+                    REFERENCES users(user_id)
             )
         """)
 
+        # -----------------------------------------------------
+        # COMPLETED TASKS
+        # -----------------------------------------------------
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS completed_tasks (
+
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                task_name TEXT,
-                points_earned INTEGER,
+
+                user_id INTEGER NOT NULL,
+
+                task_name TEXT NOT NULL,
+
+                points_earned INTEGER NOT NULL DEFAULT 0,
+
                 completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(user_id) REFERENCES users(user_id),
+
+                FOREIGN KEY (user_id)
+                    REFERENCES users(user_id)
+                    ON DELETE CASCADE,
+
                 UNIQUE(user_id, task_name)
             )
         """)
 
+        # -----------------------------------------------------
+        # REFERRALS
+        # -----------------------------------------------------
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS referrals (
+
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                referrer_id INTEGER,
-                referred_user_id INTEGER,
+
+                referrer_id INTEGER NOT NULL,
+
+                referred_user_id INTEGER NOT NULL,
+
                 status TEXT DEFAULT 'active',
+
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(referrer_id) REFERENCES users(user_id),
-                FOREIGN KEY(referred_user_id) REFERENCES users(user_id),
+
+                FOREIGN KEY (referrer_id)
+                    REFERENCES users(user_id)
+                    ON DELETE CASCADE,
+
+                FOREIGN KEY (referred_user_id)
+                    REFERENCES users(user_id)
+                    ON DELETE CASCADE,
+
                 UNIQUE(referred_user_id)
             )
         """)
 
+        # -----------------------------------------------------
+        # POINTS LOG
+        # -----------------------------------------------------
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS points_log (
+
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                points INTEGER,
-                reason TEXT,
+
+                user_id INTEGER NOT NULL,
+
+                points INTEGER NOT NULL,
+
+                reason TEXT NOT NULL,
+
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(user_id) REFERENCES users(user_id)
+
+                FOREIGN KEY (user_id)
+                    REFERENCES users(user_id)
+                    ON DELETE CASCADE
             )
         """)
 
         conn.commit()
         conn.close()
 
-    # =========================
-    # USER METHODS
-    # =========================
+    # =========================================================
+    # REFERRAL CODE
+    # =========================================================
+
+    def generate_referral_code(self, user_id: int) -> str:
+        """
+        Creates a permanent referral code.
+
+        Example:
+        ref_123456789
+        """
+
+        return f"ref_{user_id}"
+
+    # =========================================================
+    # CREATE / GET USER
+    # =========================================================
 
     def get_or_create_user(
         self,
         user_id: int,
-        username: str,
-        first_name: str
+        username: str = "",
+        first_name: str = "User"
     ) -> Dict:
 
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT * FROM users WHERE user_id = ?",
-            (user_id,)
-        )
+        try:
 
-        user = cursor.fetchone()
-
-        if user:
-
-            cursor.execute("""
-                UPDATE users
-                SET username = ?,
-                    first_name = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = ?
-            """, (
-                username,
-                first_name,
-                user_id
-            ))
-
-            conn.commit()
+            # -------------------------------------------------
+            # Check existing user
+            # -------------------------------------------------
 
             cursor.execute(
-                "SELECT * FROM users WHERE user_id = ?",
+                """
+                SELECT *
+                FROM users
+                WHERE user_id = ?
+                """,
                 (user_id,)
             )
 
             user = cursor.fetchone()
 
-            conn.close()
+            if user:
+
+                # Update Telegram profile information
+                cursor.execute(
+                    """
+                    UPDATE users
+                    SET
+                        username = ?,
+                        first_name = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
+                    """,
+                    (
+                        username or user["username"],
+                        first_name or user["first_name"],
+                        user_id
+                    )
+                )
+
+                conn.commit()
+
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM users
+                    WHERE user_id = ?
+                    """,
+                    (user_id,)
+                )
+
+                user = cursor.fetchone()
+
+                return dict(user)
+
+            # -------------------------------------------------
+            # Create new user
+            # -------------------------------------------------
+
+            referral_code = self.generate_referral_code(
+                user_id
+            )
+
+            cursor.execute(
+                """
+                INSERT INTO users
+                (
+                    user_id,
+                    username,
+                    first_name,
+                    points,
+                    referral_code
+                )
+                VALUES (?, ?, ?, 0, ?)
+                """,
+                (
+                    user_id,
+                    username or "",
+                    first_name or "User",
+                    referral_code
+                )
+            )
+
+            conn.commit()
+
+            cursor.execute(
+                """
+                SELECT *
+                FROM users
+                WHERE user_id = ?
+                """,
+                (user_id,)
+            )
+
+            user = cursor.fetchone()
 
             return dict(user)
 
-        # Stable referral code
-        referral_code = f"ref_{user_id}"
+        finally:
 
-        # Very unlikely collision protection
-        cursor.execute(
-            "SELECT user_id FROM users WHERE referral_code = ?",
-            (referral_code,)
-        )
+            conn.close()
 
-        if cursor.fetchone():
+    # =========================================================
+    # GET USER
+    # =========================================================
 
-            referral_code = (
-                f"ref_{user_id}_{int(datetime.now().timestamp())}"
-            )
-
-        cursor.execute("""
-            INSERT INTO users (
-                user_id,
-                username,
-                first_name,
-                referral_code,
-                points
-            )
-            VALUES (?, ?, ?, ?, 0)
-        """, (
-            user_id,
-            username,
-            first_name,
-            referral_code
-        ))
-
-        conn.commit()
-
-        cursor.execute(
-            "SELECT * FROM users WHERE user_id = ?",
-            (user_id,)
-        )
-
-        user = cursor.fetchone()
-
-        conn.close()
-
-        return dict(user) if user else None
-
-    def get_user(self, user_id: int) -> Optional[Dict]:
+    def get_user(
+        self,
+        user_id: int
+    ) -> Optional[Dict]:
 
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT * FROM users WHERE user_id = ?",
-            (user_id,)
-        )
+        try:
 
-        user = cursor.fetchone()
+            cursor.execute(
+                """
+                SELECT *
+                FROM users
+                WHERE user_id = ?
+                """,
+                (user_id,)
+            )
 
-        conn.close()
+            user = cursor.fetchone()
 
-        return dict(user) if user else None
+            return dict(user) if user else None
+
+        finally:
+
+            conn.close()
+
+    # =========================================================
+    # GET USER BY USERNAME
+    # =========================================================
 
     def get_user_by_username(
         self,
@@ -196,20 +327,144 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT * FROM users WHERE username = ?",
-            (username,)
-        )
+        try:
 
-        user = cursor.fetchone()
+            cursor.execute(
+                """
+                SELECT *
+                FROM users
+                WHERE username = ?
+                """,
+                (username,)
+            )
 
-        conn.close()
+            user = cursor.fetchone()
 
-        return dict(user) if user else None
+            return dict(user) if user else None
 
-    # =========================
+        finally:
+
+            conn.close()
+
+    # =========================================================
+    # GET USER BY REFERRAL CODE
+    # =========================================================
+
+    def get_user_by_referral_code(
+        self,
+        referral_code: str
+    ) -> Optional[Dict]:
+
+        if not referral_code:
+            return None
+
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        try:
+
+            cursor.execute(
+                """
+                SELECT *
+                FROM users
+                WHERE referral_code = ?
+                """,
+                (referral_code,)
+            )
+
+            user = cursor.fetchone()
+
+            return dict(user) if user else None
+
+        finally:
+
+            conn.close()
+
+    # =========================================================
+    # SET REFERRER
+    # =========================================================
+
+    def set_referrer(
+        self,
+        user_id: int,
+        referrer_id: int
+    ) -> bool:
+        """
+        Sets who invited the user.
+
+        Important:
+        - User cannot refer themselves.
+        - Referrer can only be set once.
+        """
+
+        if user_id == referrer_id:
+            return False
+
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        try:
+
+            # Check user
+            cursor.execute(
+                """
+                SELECT referred_by
+                FROM users
+                WHERE user_id = ?
+                """,
+                (user_id,)
+            )
+
+            user = cursor.fetchone()
+
+            if not user:
+                return False
+
+            # Already has referrer
+            if user["referred_by"] is not None:
+                return False
+
+            # Check referrer
+            cursor.execute(
+                """
+                SELECT user_id
+                FROM users
+                WHERE user_id = ?
+                """,
+                (referrer_id,)
+            )
+
+            referrer = cursor.fetchone()
+
+            if not referrer:
+                return False
+
+            # Set referrer
+            cursor.execute(
+                """
+                UPDATE users
+                SET
+                    referred_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+                """,
+                (
+                    referrer_id,
+                    user_id
+                )
+            )
+
+            conn.commit()
+
+            return True
+
+        finally:
+
+            conn.close()
+
+    # =========================================================
     # POINTS
-    # =========================
+    # =========================================================
 
     def add_points(
         self,
@@ -224,80 +479,110 @@ class Database:
         try:
 
             cursor.execute(
-                "SELECT points FROM users WHERE user_id = ?",
+                """
+                SELECT points
+                FROM users
+                WHERE user_id = ?
+                """,
                 (user_id,)
             )
 
-            result = cursor.fetchone()
+            user = cursor.fetchone()
 
-            if not result:
-                conn.close()
+            if not user:
                 return False, 0
 
-            cursor.execute("""
+            new_points = (
+                int(user["points"]) +
+                int(points)
+            )
+
+            cursor.execute(
+                """
                 UPDATE users
-                SET points = points + ?,
+                SET
+                    points = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = ?
-            """, (
-                points,
-                user_id
-            ))
+                """,
+                (
+                    new_points,
+                    user_id
+                )
+            )
 
-            cursor.execute("""
-                INSERT INTO points_log (
+            cursor.execute(
+                """
+                INSERT INTO points_log
+                (
                     user_id,
                     points,
                     reason
                 )
                 VALUES (?, ?, ?)
-            """, (
-                user_id,
-                points,
-                reason
-            ))
-
-            conn.commit()
-
-            cursor.execute(
-                "SELECT points FROM users WHERE user_id = ?",
-                (user_id,)
+                """,
+                (
+                    user_id,
+                    points,
+                    reason
+                )
             )
 
-            new_points = cursor.fetchone()[0]
-
-            conn.close()
+            conn.commit()
 
             return True, new_points
 
         except Exception as e:
 
             conn.rollback()
-            conn.close()
 
-            print(f"Error adding points: {e}")
+            print(
+                f"Error adding points: {e}"
+            )
 
             return False, 0
 
-    def get_points(self, user_id: int) -> int:
+        finally:
+
+            conn.close()
+
+    # =========================================================
+    # GET POINTS
+    # =========================================================
+
+    def get_points(
+        self,
+        user_id: int
+    ) -> int:
 
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT points FROM users WHERE user_id = ?",
-            (user_id,)
-        )
+        try:
 
-        result = cursor.fetchone()
+            cursor.execute(
+                """
+                SELECT points
+                FROM users
+                WHERE user_id = ?
+                """,
+                (user_id,)
+            )
 
-        conn.close()
+            result = cursor.fetchone()
 
-        return result[0] if result else 0
+            if not result:
+                return 0
 
-    # =========================
-    # TASKS
-    # =========================
+            return int(result["points"])
+
+        finally:
+
+            conn.close()
+
+    # =========================================================
+    # COMPLETE TASK
+    # =========================================================
 
     def complete_task(
         self,
@@ -311,71 +596,127 @@ class Database:
 
         try:
 
-            cursor.execute("""
+            # -------------------------------------------------
+            # Check task
+            # -------------------------------------------------
+
+            cursor.execute(
+                """
                 SELECT id
                 FROM completed_tasks
                 WHERE user_id = ?
                 AND task_name = ?
-            """, (
-                user_id,
-                task_name
-            ))
+                """,
+                (
+                    user_id,
+                    task_name
+                )
+            )
 
-            if cursor.fetchone():
+            existing = cursor.fetchone()
 
-                conn.close()
+            if existing:
 
                 return True, True
 
-            cursor.execute("""
-                INSERT INTO completed_tasks (
+            # -------------------------------------------------
+            # Make sure user exists
+            # -------------------------------------------------
+
+            cursor.execute(
+                """
+                SELECT user_id
+                FROM users
+                WHERE user_id = ?
+                """,
+                (user_id,)
+            )
+
+            if not cursor.fetchone():
+
+                return False, False
+
+            # -------------------------------------------------
+            # Add completed task
+            # -------------------------------------------------
+
+            cursor.execute(
+                """
+                INSERT INTO completed_tasks
+                (
                     user_id,
                     task_name,
                     points_earned
                 )
                 VALUES (?, ?, ?)
-            """, (
-                user_id,
-                task_name,
-                points
-            ))
+                """,
+                (
+                    user_id,
+                    task_name,
+                    points
+                )
+            )
 
-            cursor.execute("""
+            # -------------------------------------------------
+            # Add points
+            # -------------------------------------------------
+
+            cursor.execute(
+                """
                 UPDATE users
-                SET points = points + ?,
+                SET
+                    points = points + ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = ?
-            """, (
-                points,
-                user_id
-            ))
+                """,
+                (
+                    points,
+                    user_id
+                )
+            )
 
-            cursor.execute("""
-                INSERT INTO points_log (
+            # -------------------------------------------------
+            # Log
+            # -------------------------------------------------
+
+            cursor.execute(
+                """
+                INSERT INTO points_log
+                (
                     user_id,
                     points,
                     reason
                 )
                 VALUES (?, ?, ?)
-            """, (
-                user_id,
-                points,
-                f"Task: {task_name}"
-            ))
+                """,
+                (
+                    user_id,
+                    points,
+                    f"Task: {task_name}"
+                )
+            )
 
             conn.commit()
-            conn.close()
 
             return True, False
 
         except Exception as e:
 
             conn.rollback()
-            conn.close()
 
-            print(f"Error completing task: {e}")
+            print(
+                f"Error completing task: {e}"
+            )
 
             return False, False
+
+        finally:
+
+            conn.close()
+
+    # =========================================================
+    # IS TASK COMPLETED
+    # =========================================================
 
     def is_task_completed(
         self,
@@ -386,21 +727,30 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT id
-            FROM completed_tasks
-            WHERE user_id = ?
-            AND task_name = ?
-        """, (
-            user_id,
-            task_name
-        ))
+        try:
 
-        result = cursor.fetchone() is not None
+            cursor.execute(
+                """
+                SELECT id
+                FROM completed_tasks
+                WHERE user_id = ?
+                AND task_name = ?
+                """,
+                (
+                    user_id,
+                    task_name
+                )
+            )
 
-        conn.close()
+            return cursor.fetchone() is not None
 
-        return result
+        finally:
+
+            conn.close()
+
+    # =========================================================
+    # GET COMPLETED TASKS
+    # =========================================================
 
     def get_completed_tasks(
         self,
@@ -410,183 +760,224 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT task_name
-            FROM completed_tasks
-            WHERE user_id = ?
-        """, (user_id,))
+        try:
 
-        tasks = [
-            row[0]
-            for row in cursor.fetchall()
-        ]
+            cursor.execute(
+                """
+                SELECT task_name
+                FROM completed_tasks
+                WHERE user_id = ?
+                ORDER BY completed_at ASC
+                """,
+                (user_id,)
+            )
 
-        conn.close()
+            return [
+                row["task_name"]
+                for row in cursor.fetchall()
+            ]
 
-        return tasks
+        finally:
 
-    # =========================
-    # REFERRAL
-    # =========================
+            conn.close()
 
-    def get_user_by_referral_code(
-        self,
-        referral_code: str
-    ) -> Optional[Dict]:
-
-        conn = self.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            SELECT *
-            FROM users
-            WHERE referral_code = ?
-        """, (
-            referral_code,
-        ))
-
-        user = cursor.fetchone()
-
-        conn.close()
-
-        return dict(user) if user else None
+    # =========================================================
+    # ADD REFERRAL
+    # =========================================================
 
     def add_referral(
         self,
         referrer_id: int,
-        referred_user_id: int
-    ) -> Tuple[bool, str]:
+        referred_user_id: int,
+        bonus: int = 5
+    ) -> Tuple[bool, bool]:
+        """
+        Add a referral.
 
-        # Self referral
+        Returns:
+
+        (True, False)
+            New referral added.
+
+        (True, True)
+            Referral already existed.
+
+        (False, False)
+            Error.
+
+        The referred user gets NO points.
+        The referrer gets the referral bonus.
+        """
+
         if referrer_id == referred_user_id:
-
-            return False, "self_referral"
+            return False, False
 
         conn = self.get_connection()
         cursor = conn.cursor()
 
         try:
 
+            # -------------------------------------------------
             # Make sure both users exist
+            # -------------------------------------------------
+
             cursor.execute(
-                "SELECT user_id FROM users WHERE user_id = ?",
+                """
+                SELECT user_id
+                FROM users
+                WHERE user_id = ?
+                """,
                 (referrer_id,)
             )
 
             if not cursor.fetchone():
-
-                conn.close()
-                return False, "referrer_not_found"
+                return False, False
 
             cursor.execute(
-                "SELECT user_id FROM users WHERE user_id = ?",
+                """
+                SELECT user_id, referred_by
+                FROM users
+                WHERE user_id = ?
+                """,
                 (referred_user_id,)
             )
 
-            if not cursor.fetchone():
+            referred_user = cursor.fetchone()
 
-                conn.close()
-                return False, "referred_user_not_found"
+            if not referred_user:
+                return False, False
 
-            # Has this user already been referred?
-            cursor.execute("""
+            # -------------------------------------------------
+            # Check if this user already has a referrer
+            # -------------------------------------------------
+
+            if referred_user["referred_by"] is not None:
+
+                return True, True
+
+            # -------------------------------------------------
+            # Check referral table
+            # -------------------------------------------------
+
+            cursor.execute(
+                """
                 SELECT id
                 FROM referrals
                 WHERE referred_user_id = ?
-            """, (
-                referred_user_id,
-            ))
+                """,
+                (referred_user_id,)
+            )
 
-            if cursor.fetchone():
+            existing = cursor.fetchone()
 
-                conn.close()
+            if existing:
 
-                return False, "already_referred"
+                return True, True
 
-            # Does referred user already have referred_by?
-            cursor.execute("""
-                SELECT referred_by
-                FROM users
+            # -------------------------------------------------
+            # Set referred_by
+            # -------------------------------------------------
+
+            cursor.execute(
+                """
+                UPDATE users
+                SET
+                    referred_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = ?
-            """, (
-                referred_user_id,
-            ))
+                """,
+                (
+                    referrer_id,
+                    referred_user_id
+                )
+            )
 
-            row = cursor.fetchone()
-
-            if row and row["referred_by"]:
-
-                conn.close()
-
-                return False, "already_referred"
-
+            # -------------------------------------------------
             # Create referral
-            cursor.execute("""
-                INSERT INTO referrals (
+            # -------------------------------------------------
+
+            cursor.execute(
+                """
+                INSERT INTO referrals
+                (
                     referrer_id,
                     referred_user_id,
                     status
                 )
                 VALUES (?, ?, 'active')
-            """, (
-                referrer_id,
-                referred_user_id
-            ))
+                """,
+                (
+                    referrer_id,
+                    referred_user_id
+                )
+            )
 
-            # Set referred_by
-            cursor.execute("""
+            # -------------------------------------------------
+            # Referral bonus
+            # -------------------------------------------------
+
+            cursor.execute(
+                """
                 UPDATE users
-                SET referred_by = ?,
+                SET
+                    points = points + ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = ?
-            """, (
-                referrer_id,
-                referred_user_id
-            ))
+                """,
+                (
+                    bonus,
+                    referrer_id
+                )
+            )
 
-            # Give 5 points
-            cursor.execute("""
-                UPDATE users
-                SET points = points + 5,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = ?
-            """, (
-                referrer_id,
-            ))
+            # -------------------------------------------------
+            # Points log
+            # -------------------------------------------------
 
-            # Log bonus
-            cursor.execute("""
-                INSERT INTO points_log (
+            cursor.execute(
+                """
+                INSERT INTO points_log
+                (
                     user_id,
                     points,
                     reason
                 )
-                VALUES (?, 5, ?)
-            """, (
-                referrer_id,
-                f"Referral bonus from user {referred_user_id}"
-            ))
+                VALUES (?, ?, ?)
+                """,
+                (
+                    referrer_id,
+                    bonus,
+                    f"Referral bonus from user {referred_user_id}"
+                )
+            )
 
             conn.commit()
-            conn.close()
 
-            return True, "success"
+            return True, False
 
         except sqlite3.IntegrityError:
 
             conn.rollback()
-            conn.close()
 
-            return False, "already_referred"
+            return True, True
 
         except Exception as e:
 
             conn.rollback()
+
+            print(
+                f"Error adding referral: {e}"
+            )
+
+            return False, False
+
+        finally:
+
             conn.close()
 
-            print(f"Error adding referral: {e}")
-
-            return False, "error"
+    # =========================================================
+    # GET REFERRALS
+    # =========================================================
 
     def get_referrals(
         self,
@@ -596,30 +987,43 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT
-                u.user_id,
-                u.username,
-                u.first_name,
-                r.created_at
-            FROM referrals r
-            JOIN users u
-                ON r.referred_user_id = u.user_id
-            WHERE r.referrer_id = ?
-            AND r.status = 'active'
-            ORDER BY r.created_at DESC
-        """, (
-            referrer_id,
-        ))
+        try:
 
-        referrals = [
-            dict(row)
-            for row in cursor.fetchall()
-        ]
+            cursor.execute(
+                """
+                SELECT
+                    u.user_id,
+                    u.username,
+                    u.first_name,
+                    u.created_at,
+                    r.created_at AS referral_created_at,
+                    r.status
 
-        conn.close()
+                FROM referrals r
 
-        return referrals
+                JOIN users u
+                    ON r.referred_user_id = u.user_id
+
+                WHERE r.referrer_id = ?
+                AND r.status = 'active'
+
+                ORDER BY r.created_at DESC
+                """,
+                (referrer_id,)
+            )
+
+            return [
+                dict(row)
+                for row in cursor.fetchall()
+            ]
+
+        finally:
+
+            conn.close()
+
+    # =========================================================
+    # COUNT REFERRALS
+    # =========================================================
 
     def count_referrals(
         self,
@@ -629,24 +1033,29 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT COUNT(*)
-            FROM referrals
-            WHERE referrer_id = ?
-            AND status = 'active'
-        """, (
-            referrer_id,
-        ))
+        try:
 
-        count = cursor.fetchone()[0]
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM referrals
+                WHERE referrer_id = ?
+                AND status = 'active'
+                """,
+                (referrer_id,)
+            )
 
-        conn.close()
+            return int(
+                cursor.fetchone()[0]
+            )
 
-        return count
+        finally:
 
-    # =========================
-    # STATS
-    # =========================
+            conn.close()
+
+    # =========================================================
+    # GET USER STATS
+    # =========================================================
 
     def get_user_stats(
         self,
@@ -658,82 +1067,273 @@ class Database:
         if not user:
             return None
 
-        completed_tasks = self.get_completed_tasks(user_id)
-        referrals = self.get_referrals(user_id)
+        completed_tasks = (
+            self.get_completed_tasks(user_id)
+        )
+
+        referrals = (
+            self.get_referrals(user_id)
+        )
 
         return {
-            "user_id": user["user_id"],
-            "username": user["username"],
-            "first_name": user["first_name"],
-            "points": user["points"],
-            "referral_code": user["referral_code"],
-            "referred_by": user["referred_by"],
-            "tasks_completed": len(completed_tasks),
-            "completed_tasks": completed_tasks,
-            "referrals_count": len(referrals),
-            "referrals": referrals,
-            "created_at": user["created_at"]
+
+            "user_id":
+                user["user_id"],
+
+            "username":
+                user["username"] or "",
+
+            "first_name":
+                user["first_name"] or "User",
+
+            "points":
+                int(user["points"] or 0),
+
+            "referral_code":
+                user["referral_code"],
+
+            "referred_by":
+                user["referred_by"],
+
+            "tasks_completed":
+                len(completed_tasks),
+
+            "completed_tasks":
+                completed_tasks,
+
+            "referrals_count":
+                len(referrals),
+
+            "referrals":
+                referrals,
+
+            "created_at":
+                user["created_at"]
         }
+
+    # =========================================================
+    # GET TOP USERS
+    # =========================================================
 
     def get_top_users(
         self,
         limit: int = 10
     ) -> List[Dict]:
 
+        limit = max(
+            1,
+            min(int(limit), 100)
+        )
+
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT
-                user_id,
-                username,
-                first_name,
-                points,
+        try:
 
+            cursor.execute(
+                """
+                SELECT
+
+                    user_id,
+
+                    username,
+
+                    first_name,
+
+                    points,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM completed_tasks
+                        WHERE completed_tasks.user_id =
+                              users.user_id
+                    ) AS tasks,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM referrals
+                        WHERE referrals.referrer_id =
+                              users.user_id
+                        AND referrals.status = 'active'
+                    ) AS referrals
+
+                FROM users
+
+                ORDER BY points DESC, user_id ASC
+
+                LIMIT ?
+                """,
+                (limit,)
+            )
+
+            return [
+                dict(row)
+                for row in cursor.fetchall()
+            ]
+
+        finally:
+
+            conn.close()
+
+    # =========================================================
+    # POINTS HISTORY
+    # =========================================================
+
+    def get_points_history(
+        self,
+        user_id: int,
+        limit: int = 50
+    ) -> List[Dict]:
+
+        limit = max(
+            1,
+            min(int(limit), 100)
+        )
+
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        try:
+
+            cursor.execute(
+                """
+                SELECT
+                    points,
+                    reason,
+                    created_at
+
+                FROM points_log
+
+                WHERE user_id = ?
+
+                ORDER BY id DESC
+
+                LIMIT ?
+                """,
                 (
-                    SELECT COUNT(*)
-                    FROM completed_tasks
-                    WHERE user_id = users.user_id
-                ) AS tasks,
+                    user_id,
+                    limit
+                )
+            )
 
-                (
-                    SELECT COUNT(*)
-                    FROM referrals
-                    WHERE referrer_id = users.user_id
-                    AND status = 'active'
-                ) AS referrals
+            return [
+                dict(row)
+                for row in cursor.fetchall()
+            ]
 
-            FROM users
+        finally:
 
-            ORDER BY points DESC
+            conn.close()
 
-            LIMIT ?
-        """, (
-            limit,
-        ))
-
-        users = [
-            dict(row)
-            for row in cursor.fetchall()
-        ]
-
-        conn.close()
-
-        return users
-
-    # =========================
-    # CLEANUP
-    # =========================
+    # =========================================================
+    # CLEAR DATABASE
+    # =========================================================
 
     def clear_all(self):
 
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM points_log")
-        cursor.execute("DELETE FROM referrals")
-        cursor.execute("DELETE FROM completed_tasks")
-        cursor.execute("DELETE FROM users")
+        try:
 
-        conn.commit()
-        conn.close()
+            cursor.execute(
+                "DELETE FROM points_log"
+            )
+
+            cursor.execute(
+                "DELETE FROM referrals"
+            )
+
+            cursor.execute(
+                "DELETE FROM completed_tasks"
+            )
+
+            cursor.execute(
+                "DELETE FROM users"
+            )
+
+            conn.commit()
+
+        finally:
+
+            conn.close()
+
+
+# =============================================================
+# TEST
+# =============================================================
+
+if __name__ == "__main__":
+
+    db = Database()
+
+    print(
+        "Database initialized successfully."
+    )
+
+    # Test user
+    user = db.get_or_create_user(
+        111111111,
+        "test_user",
+        "Test User"
+    )
+
+    print(
+        "User:",
+        user
+    )
+
+    # Test points
+    success, total = db.add_points(
+        111111111,
+        10,
+        "Test points"
+    )
+
+    print(
+        "Points:",
+        success,
+        total
+    )
+
+    # Test task
+    success, already = db.complete_task(
+        111111111,
+        "channel_join",
+        10
+    )
+
+    print(
+        "Task:",
+        success,
+        already
+    )
+
+    # Test referral
+    referred = db.get_or_create_user(
+        222222222,
+        "test_user_2",
+        "Test User 2"
+    )
+
+    referral_success, already = db.add_referral(
+        111111111,
+        222222222,
+        5
+    )
+
+    print(
+        "Referral:",
+        referral_success,
+        already
+    )
+
+    # Stats
+    stats = db.get_user_stats(
+        111111111
+    )
+
+    print(
+        "Stats:",
+        stats
+    )

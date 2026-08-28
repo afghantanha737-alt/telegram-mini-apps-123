@@ -1,89 +1,318 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#6255e8">
 <title>Amir Crypto Hub</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Tahoma,sans-serif;background:#f4f6fb;color:#182033;padding-bottom:100px}
-.app{max-width:650px;margin:auto}.top{padding:18px}.toprow{display:flex;justify-content:space-between;align-items:center}.user{display:flex;gap:10px;align-items:center}.avatar{width:50px;height:50px;border-radius:16px;background:#6255e8;color:white;display:grid;place-items:center;font-size:22px;font-weight:bold}.hello{font-size:12px;color:#8991a3}.name{font-size:18px;font-weight:bold}.bell{border:1px solid #e8ebf3;background:white;border-radius:14px;width:44px;height:44px}
-.balance{margin:0 17px 18px;padding:22px;border-radius:27px;color:white;background:linear-gradient(135deg,#7769ee,#4e3cc4);box-shadow:0 17px 38px #5243c044}.label{font-size:12px;opacity:.8}.points{font-size:40px;font-weight:900;margin:5px 0}.sub{font-size:11px;opacity:.75}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.bbtn{border:1px solid #ffffff33;background:#ffffff18;color:white;padding:11px;border-radius:13px;margin-top:18px}.stat{background:#ffffff18;border-radius:13px;padding:10px;margin-top:9px}.stat b{display:block;font-size:18px}.page{display:none;padding:0 17px}.page.active{display:block}.title{display:flex;justify-content:space-between;margin:10px 0 13px}.title h2{font-size:18px}.title span{font-size:11px;color:#8991a3}.cards{display:grid;grid-template-columns:1fr 1fr;gap:11px}.card,.task,.ref,.wallet,.leader,.history{background:white;border:1px solid #e8ebf3;border-radius:20px;padding:16px;box-shadow:0 12px 35px #232a4b12}.card{cursor:pointer}.ico{font-size:25px;margin-bottom:10px}.card h3{font-size:13px;margin-bottom:4px}.card p,.task p,.ref p{font-size:11px;color:#8991a3;line-height:1.8}.task,.ref,.wallet,.leader{margin-bottom:12px}.tasktop{display:flex;gap:11px;align-items:center}.taskico{font-size:25px;background:#eeeaff;padding:12px;border-radius:15px}.reward{display:inline-block;margin-top:13px;background:#fff5dc;color:#a87300;padding:7px 10px;border-radius:10px;font-size:11px;font-weight:bold}.btn{width:100%;border:0;background:#6557e8;color:white;padding:12px;border-radius:13px;margin-top:10px;font-weight:bold}.btn:disabled{opacity:.55}.done{background:#20b486}.link{direction:ltr;text-align:left;word-break:break-all;background:#f6f7fb;border:1px solid #e8ebf3;padding:13px;border-radius:13px;margin-top:13px;font-size:10px}.empty{text-align:center;padding:25px;color:#8991a3;font-size:11px}.nav{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);width:calc(100% - 22px);max-width:630px;height:70px;background:#fffffff5;border:1px solid #e8ebf3;border-radius:23px;display:grid;grid-template-columns:repeat(5,1fr);z-index:99}.nav button{border:0;background:transparent;color:#8991a3;font-size:10px}.nav button.active{color:#6557e8;font-weight:bold}.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#171a25;color:white;padding:11px 17px;border-radius:13px;font-size:11px;z-index:999}.loading{position:fixed;inset:0;background:#f4f6fb;z-index:1000;display:grid;place-items:center;text-align:center}.spinner{width:42px;height:42px;border:4px solid #ddd;border-top-color:#6557e8;border-radius:50%;animation:s .8s linear infinite;margin:auto}@keyframes s{to{transform:rotate(360deg)}}.hide{display:none}
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f4f6fb;--card:#fff;--text:#182033;--muted:#8991a3;--primary:#6557e8;--primary2:#5143d0;--green:#20b486;--red:#ef5350;--border:#e8ebf3;--shadow:0 12px 35px rgba(35,42,75,.08)}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,Arial,sans-serif;background:radial-gradient(circle at 85% -5%,rgba(101,87,232,.18),transparent 32%),var(--bg);color:var(--text);min-height:100vh;padding-bottom:105px;-webkit-tap-highlight-color:transparent}
+button{font-family:inherit;cursor:pointer}button:active{transform:scale(.97)}.app{width:100%;max-width:650px;margin:auto}.hidden{display:none!important}
+.top{padding:18px 17px 8px}.top-row{display:flex;align-items:center;justify-content:space-between;gap:12px}.user-area{display:flex;align-items:center;gap:11px;min-width:0}.avatar{width:52px;height:52px;border-radius:17px;background:linear-gradient(135deg,#8072f1,#5141cf);color:#fff;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:900;box-shadow:0 9px 24px rgba(91,76,215,.24)}.hello{color:var(--muted);font-size:12px;margin-bottom:3px}.username{font-size:18px;font-weight:900;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.notification{width:44px;height:44px;border:1px solid var(--border);background:#fff;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:var(--shadow)}
+.balance-card{margin:13px 17px 18px;padding:22px;border-radius:27px;background:linear-gradient(135deg,#7769ee,#6253df 48%,#4e3cc4);color:#fff;position:relative;overflow:hidden;box-shadow:0 17px 38px rgba(82,67,201,.25)}.balance-content{position:relative;z-index:2}.balance-label{font-size:12px;opacity:.78}.balance{font-size:40px;font-weight:950;margin:5px 0}.balance-name{font-size:12px;opacity:.76}.balance-actions,.balance-stats{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:19px}.balance-stats{margin-top:9px}.balance-action{border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.13);color:#fff;border-radius:14px;padding:11px 8px;font-size:11px;font-weight:800}.balance-stat{background:rgba(255,255,255,.11);border-radius:14px;padding:10px}.balance-stat strong{display:block;font-size:18px;margin-bottom:2px}.balance-stat span{font-size:10px;opacity:.78}
+.page{display:none;padding:0 17px;animation:fadeIn .2s ease}.page.active{display:block}@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}.section-title{display:flex;align-items:center;justify-content:space-between;margin:10px 0 13px}.section-title h2{font-size:18px}.section-title span{color:var(--muted);font-size:11px}
+.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}.quick-card,.info-card,.task-card,.ref-card,.wallet-card,.leader-card,.history-card,.empty{background:#fff;border:1px solid var(--border);border-radius:21px;box-shadow:var(--shadow)}.quick-card{padding:16px;cursor:pointer}.quick-icon{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:21px;margin-bottom:11px}.purple{background:#eeeaff}.yellow{background:#fff3d7}.green{background:#e5f8f1}.blue{background:#e5f1ff}.orange{background:#fff0df}.quick-card h3{font-size:13px;margin-bottom:4px}.quick-card p,.info-card p,.task-info p,.ref-card p{color:var(--muted);font-size:10px;line-height:1.7}.info-card{margin-top:13px;padding:16px}.info-card h3{font-size:14px;margin-bottom:7px}
+.task-card{padding:16px;margin-bottom:11px}.task-top{display:flex;align-items:center;gap:11px}.task-icon{width:49px;height:49px;flex-shrink:0;border-radius:15px;background:#eeeaff;display:flex;align-items:center;justify-content:center;font-size:23px}.task-info{flex:1;min-width:0}.task-info h3{font-size:14px;margin-bottom:4px}.reward-row{display:flex;align-items:center;justify-content:space-between;margin-top:13px}.reward{color:#b37b00;background:#fff5dc;padding:7px 10px;border-radius:10px;font-size:11px;font-weight:900}.task-button{width:100%;border:0;background:var(--primary);color:#fff;padding:12px;border-radius:13px;margin-top:11px;font-size:12px;font-weight:900}.task-button:disabled{opacity:.55;cursor:not-allowed}.task-button.completed{background:var(--green)}
+.ref-card{padding:19px;margin-bottom:13px}.ref-icon,.wallet-star{width:57px;height:57px;border-radius:18px;background:#eeeaff;display:flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:13px}.ref-card h2{font-size:19px;margin-bottom:7px}.ref-link{background:#f6f7fb;border:1px solid var(--border);padding:13px;border-radius:13px;font-size:10px;margin-top:14px;word-break:break-all;direction:ltr;text-align:left;cursor:pointer;user-select:all}.ref-button,.wallet-button{width:100%;border:0;background:var(--primary);color:#fff;padding:12px;border-radius:13px;margin-top:9px;font-size:12px;font-weight:900}.ref-button.secondary{background:#f0efff;color:var(--primary2)}.referral-item,.leader-row,.history-item{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)}.referral-item:last-child,.leader-row:last-child,.history-item:last-child{border-bottom:0}.referral-avatar,.leader-avatar{width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#7565ed,#5141cc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900}.referral-name,.leader-name{font-size:12px;font-weight:800}.referral-date,.leader-id,.history-date{font-size:9px;color:var(--muted);margin-top:3px}
+.wallet-card{text-align:center;padding:20px}.wallet-star{margin:auto auto 12px;background:#fff4d5;font-size:32px}.wallet-number{font-size:35px;font-weight:950}.wallet-label{color:var(--muted);font-size:11px;margin-top:3px}.wallet-buttons{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:17px}.wallet-button{background:#eeeaff;color:var(--primary2);margin:0}.wallet-button.green{background:#e5f8f1;color:#158766}.wallet-button.gold{background:#fff3d6;color:#a87300}.wallet-note{margin-top:13px;padding:11px;border-radius:12px;background:#fff8e2;color:#896900;font-size:10px;line-height:1.8}.history-card{margin-top:13px;padding:17px}.history-title{font-size:14px;font-weight:900;margin-bottom:9px}.history-points{margin-right:auto;font-size:12px;font-weight:900;color:var(--green)}
+.leader-card{padding:17px}.rank{width:32px;font-size:17px;text-align:center;font-weight:900}.leader-avatar{width:42px;height:42px;background:#eeeaff;color:var(--primary2)}.leader-info{flex:1;min-width:0}.leader-name{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.leader-points{font-size:12px;font-weight:900;color:#a87300}.empty{padding:30px 18px;text-align:center;color:var(--muted);margin-top:10px}.empty-icon{font-size:39px;margin-bottom:9px}.empty p{font-size:11px}
+.bottom-nav{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;width:calc(100% - 22px);max-width:630px;height:70px;background:rgba(255,255,255,.96);backdrop-filter:blur(18px);border:1px solid var(--border);border-radius:23px;display:grid;grid-template-columns:repeat(5,1fr);box-shadow:0 12px 38px rgba(25,31,60,.15);z-index:999}.nav-button{border:0;background:transparent;color:#9097a8;font-size:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}.nav-icon{font-size:19px}.nav-button.active{color:var(--primary);font-weight:900}
+.toast{position:fixed;bottom:91px;left:50%;transform:translateX(-50%);background:rgba(20,23,33,.94);color:#fff;padding:11px 17px;border-radius:13px;font-size:11px;text-align:center;z-index:3000;max-width:88%;box-shadow:0 10px 30px rgba(0,0,0,.2)}.loading{position:fixed;inset:0;background:rgba(244,246,251,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:5000;transition:opacity .25s}.loading.hide{opacity:0;pointer-events:none}.loader{width:43px;height:43px;border:4px solid #ddd;border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite;margin-bottom:13px}.loading-text{color:var(--muted);font-size:12px}@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:360px){.balance{font-size:33px}.quick-grid{gap:8px}.quick-card{padding:13px}.bottom-nav{width:calc(100% - 14px)}.nav-icon{font-size:17px}}
 </style>
 </head>
 <body>
-<div id="loading" class="loading"><div><div class="spinner"></div><p style="margin-top:12px;color:#8991a3;font-size:12px">در حال اتصال به Amir Crypto Hub...</p></div></div>
+
+<div id="loading" class="loading"><div class="loader"></div><div class="loading-text">در حال بارگذاری Amir Crypto Hub...</div></div>
 
 <div class="app">
-<header class="top"><div class="toprow"><div class="user"><div id="avatar" class="avatar">A</div><div><div class="hello">خوش آمدی 👋</div><div id="username" class="name">کاربر</div></div></div><button class="bell" onclick="toast('🔔 فعلاً اعلان جدیدی ندارید')">🔔</button></div></header>
+<header class="top"><div class="top-row"><div class="user-area"><div class="avatar" id="avatar">A</div><div><div class="hello">خوش آمدی 👋</div><div class="username" id="username">کاربر</div></div></div><button class="notification" onclick="showToast('🔔 فعلاً اعلان جدیدی ندارید')">🔔</button></div></header>
 
-<div class="balance"><div class="label">موجودی امتیاز شما</div><div class="points"><span id="points">0</span> ⭐</div><div class="sub">Amir Crypto Hub Points</div><div class="grid"><button class="bbtn" onclick="go('walletPage')">💰 کیف امتیاز</button><button class="bbtn" onclick="go('referralPage')">👥 دعوت دوستان</button></div><div class="grid"><div class="stat"><b id="referrals">0</b><span>👥 دعوت موفق</span></div><div class="stat"><b id="tasks">0</b><span>🎯 تسک انجام‌شده</span></div></div></div>
+<div class="balance-card"><div class="balance-content">
+<div class="balance-label">موجودی امتیاز شما</div><div class="balance"><span id="points">0</span> ⭐</div><div class="balance-name">Amir Crypto Hub Points</div>
+<div class="balance-actions"><button class="balance-action" onclick="navigateTo('walletPage')">💰 کیف امتیاز</button><button class="balance-action" onclick="navigateTo('referralPage')">👥 دعوت دوستان</button></div>
+<div class="balance-stats"><div class="balance-stat"><strong id="referrals">0</strong><span>👥 دعوت موفق</span></div><div class="balance-stat"><strong id="tasks">0</strong><span>🎯 تسک انجام‌شده</span></div></div>
+</div></div>
 
-<section id="home" class="page active"><div class="title"><h2>دسترسی سریع</h2><span>امکانات</span></div><div class="cards">
-<div class="card" onclick="go('tasksPage')"><div class="ico">🎯</div><h3>تسک‌ها</h3><p>تسک انجام بده و امتیاز بگیر.</p></div>
-<div class="card" onclick="go('referralPage')"><div class="ico">👥</div><h3>دعوت دوستان</h3><p>دوستانت را دعوت کن و پاداش بگیر.</p></div>
-<div class="card" onclick="go('walletPage')"><div class="ico">💰</div><h3>کیف امتیاز</h3><p>موجودی امتیازات.</p></div>
-<div class="card" onclick="go('leaderboardPage')"><div class="ico">🏆</div><h3>لیدربورد</h3><p>برترین کاربران.</p></div></div>
-<div class="card" style="margin-top:12px"><h3>🚀 Amir Crypto Hub</h3><p>با انجام تسک‌ها و دعوت دوستان امتیاز جمع کن.</p></div></section>
+<section id="home" class="page active"><div class="section-title"><h2>دسترسی سریع</h2><span>امکانات</span></div>
+<div class="quick-grid">
+<div class="quick-card" onclick="navigateTo('tasksPage')"><div class="quick-icon purple">🎯</div><h3>تسک‌ها</h3><p>تسک انجام بده و امتیاز دریافت کن.</p></div>
+<div class="quick-card" onclick="navigateTo('referralPage')"><div class="quick-icon yellow">👥</div><h3>دعوت دوستان</h3><p>دوستانت را دعوت کن و پاداش بگیر.</p></div>
+<div class="quick-card" onclick="navigateTo('walletPage')"><div class="quick-icon green">💰</div><h3>کیف امتیاز</h3><p>موجودی و تاریخچه امتیازات.</p></div>
+<div class="quick-card" onclick="navigateTo('leaderboardPage')"><div class="quick-icon blue">🏆</div><h3>لیدربورد</h3><p>برترین کاربران را ببین.</p></div>
+<div class="quick-card" onclick="navigateTo('tasksPage')"><div class="quick-icon orange">🚀</div><h3>کسب امتیاز</h3><p>همین حالا شروع به کسب امتیاز کن.</p></div>
+<div class="quick-card" onclick="navigateTo('referralPage')"><div class="quick-icon purple">🔗</div><h3>لینک دعوت</h3><p>لینک اختصاصی خودت را دریافت کن.</p></div>
+</div>
+<div class="info-card"><h3>🚀 Amir Crypto Hub</h3><p>با انجام تسک‌ها و دعوت دوستان امتیاز جمع کن. امتیازاتت را در بخش کیف امتیاز مشاهده کن.</p></div></section>
 
-<section id="tasksPage" class="page"><div class="title"><h2>🎯 تسک‌ها</h2><span>امتیاز بگیر</span></div>
-<div class="task"><div class="tasktop"><div class="taskico">📢</div><div><h3>عضویت در کانال</h3><p>در کانال رسمی Amir Crypto Hub عضو شوید.</p></div></div><span class="reward">+10 ⭐</span><button id="joinBtn" class="btn" onclick="joinChannel()">📢 عضویت در کانال</button><button id="checkBtn" class="btn" onclick="checkMembership()">✅ بررسی عضویت</button></div>
-<div class="task"><div class="tasktop"><div class="taskico">👥</div><div><h3>دعوت یک دوست</h3><p>دوستت را با لینک اختصاصی دعوت کن.</p></div></div><span class="reward">+5 ⭐</span><button class="btn" onclick="go('referralPage')">👥 دعوت دوستان</button></div></section>
+<section id="tasksPage" class="page"><div class="section-title"><h2>🎯 تسک‌ها</h2><span>امتیاز بگیر</span></div>
+<div class="task-card"><div class="task-top"><div class="task-icon">📢</div><div class="task-info"><h3>عضویت در کانال</h3><p>در کانال رسمی Amir Crypto Hub عضو شوید.</p></div></div><div class="reward-row"><span class="reward">+10 ⭐</span></div>
+<button id="joinBtn" class="task-button" onclick="joinChannel()">📢 عضویت در کانال</button><button id="checkBtn" class="task-button" onclick="checkMembership()">✅ بررسی عضویت</button></div>
+<div class="task-card"><div class="task-top"><div class="task-icon">👥</div><div class="task-info"><h3>دعوت یک دوست</h3><p>یک دوست را با لینک اختصاصی خودت دعوت کن.</p></div></div><div class="reward-row"><span class="reward">+5 ⭐</span></div><button class="task-button" onclick="navigateTo('referralPage')">👥 دعوت دوستان</button></div>
+<div class="empty"><div class="empty-icon">✨</div><p>تسک‌های بیشتری به‌زودی اضافه می‌شوند.</p></div></section>
 
-<section id="referralPage" class="page"><div class="ref"><div class="ico">👥</div><h2>دعوت دوستان</h2><p>برای هر دعوت موفق ۵ امتیاز دریافت کن.</p><div id="referralLink" class="link">در حال آماده‌سازی...</div><button class="btn" onclick="copyReferral()">📋 کپی لینک دعوت</button><button class="btn" onclick="shareReferral()">🚀 اشتراک‌گذاری</button></div><div class="ref"><h2>🏆 دعوت‌های موفق</h2><div id="referralList" class="empty">در حال بارگذاری...</div></div></section>
+<section id="referralPage" class="page"><div class="ref-card"><div class="ref-icon">👥</div><h2>دعوت دوستان</h2><p>دوستانت را دعوت کن و برای هر دعوت موفق <b>۵ امتیاز</b> دریافت کن.</p>
+<div id="referralLink" class="ref-link" onclick="selectText(this)">در حال آماده‌سازی...</div><button class="ref-button" onclick="copyReferral()">📋 کپی لینک دعوت</button><button class="ref-button secondary" onclick="shareReferral()">🚀 اشتراک‌گذاری لینک</button></div>
+<div class="ref-card"><h2>🏆 دعوت‌های موفق</h2><div id="referralList"><p>در حال بارگذاری...</p></div></div></section>
 
-<section id="walletPage" class="page"><div class="title"><h2>💰 کیف امتیاز</h2><span>موجودی</span></div><div class="wallet" style="text-align:center"><div class="ico">⭐</div><div id="totalPoints" style="font-size:35px;font-weight:900">0</div><p>کل امتیازات</p><button class="btn" onclick="toast('🔄 سیستم تبدیل امتیاز به‌زودی فعال می‌شود.')">🔄 تبدیل امتیاز</button><button class="btn" onclick="toast('💸 سیستم برداشت هنوز فعال نشده است.')">💸 برداشت</button></div><div class="history"><h3>📜 تاریخچه</h3><div class="empty">تاریخچه امتیازات به‌زودی فعال می‌شود.</div></div></section>
+<section id="walletPage" class="page"><div class="section-title"><h2>💰 کیف امتیاز</h2><span>موجودی شما</span></div>
+<div class="wallet-card"><div class="wallet-star">⭐</div><div id="totalPoints" class="wallet-number">0</div><div class="wallet-label">کل امتیازات</div>
+<div class="wallet-buttons"><button class="wallet-button green" onclick="requestConvert()">🔄 تبدیل امتیاز</button><button class="wallet-button gold" onclick="requestWithdraw()">💸 برداشت</button></div>
+<div class="wallet-note">ℹ️ قابلیت تبدیل و برداشت پس از فعال‌شدن سیستم پرداخت و API مربوطه در سرور قابل استفاده خواهد بود.</div></div>
+<div class="history-card"><div class="history-title">📜 تاریخچه امتیازات</div><div id="historyList"></div></div></section>
 
-<section id="leaderboardPage" class="page"><div class="title"><h2>🏆 لیدربورد</h2><span>برترین کاربران</span></div><div class="leader" id="leaderboardList"><div class="empty">در حال بارگذاری...</div></div></section>
+<section id="leaderboardPage" class="page"><div class="section-title"><h2>🏆 لیدربورد</h2><span>برترین کاربران</span></div><div class="leader-card"><div id="leaderboardList"><div class="empty"><div class="empty-icon">🏆</div><p>در حال بارگذاری...</p></div></div></div></section>
 </div>
 
-<nav class="nav">
-<button class="active" data-page="home" onclick="go('home',this)">🏠<br>خانه</button>
-<button data-page="tasksPage" onclick="go('tasksPage',this)">🎯<br>تسک‌ها</button>
-<button data-page="referralPage" onclick="go('referralPage',this)">👥<br>دعوت</button>
-<button data-page="leaderboardPage" onclick="go('leaderboardPage',this)">🏆<br>لیدربورد</button>
-<button data-page="walletPage" onclick="go('walletPage',this)">💰<br>کیف</button>
+<nav class="bottom-nav">
+<button class="nav-button active" data-page="home" onclick="navigateTo('home',this)"><div class="nav-icon">🏠</div><div>خانه</div></button>
+<button class="nav-button" data-page="tasksPage" onclick="navigateTo('tasksPage',this)"><div class="nav-icon">🎯</div><div>تسک‌ها</div></button>
+<button class="nav-button" data-page="referralPage" onclick="navigateTo('referralPage',this)"><div class="nav-icon">👥</div><div>دعوت</div></button>
+<button class="nav-button" data-page="leaderboardPage" onclick="navigateTo('leaderboardPage',this)"><div class="nav-icon">🏆</div><div>لیدربورد</div></button>
+<button class="nav-button" data-page="walletPage" onclick="navigateTo('walletPage',this)"><div class="nav-icon">💰</div><div>کیف</div></button>
 </nav>
 
 <script>
+/* ================= CONFIG =================
+   مهم‌ترین اصلاح:
+   بک‌اند فعلی مسیر /api/user/init را برای ساخت/دریافت کاربر استفاده می‌کند.
+*/
 const API_URL="https://telegram-mini-apps-123.onrender.com";
 const BOT_USERNAME="AmirAFG123_bot";
 const CHANNEL_USERNAME="AmirCryptoHub";
+
 const tg=window.Telegram?.WebApp||null;
-if(tg){tg.ready();tg.expand();try{tg.setHeaderColor("#6255e8");tg.setBackgroundColor("#f4f6fb")}catch(e){}}
-const u=tg?.initDataUnsafe?.user||null;
-const userID=u?.id||0, firstName=u?.first_name||"کاربر", username=u?.username||"";
-let user={points:0,referrals:0,tasks:0,completedTasks:[],referralCode:""};
-
-function toast(m){let x=document.querySelector(".toast");if(x)x.remove();x=document.createElement("div");x.className="toast";x.textContent=m;document.body.appendChild(x);setTimeout(()=>x.remove(),3000)}
-function go(id,b){document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));document.getElementById(id)?.classList.add("active");document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));if(!b)b=document.querySelector('[data-page="'+id+'"]');if(b)b.classList.add("active");scrollTo(0,0);if(id==="referralPage")loadReferrals();if(id==="leaderboardPage")loadLeaderboard()}
-function update(){points.textContent=user.points;referrals.textContent=user.referrals;tasks.textContent=user.tasks;totalPoints.textContent=user.points;referralLink.textContent="https://t.me/"+BOT_USERNAME+"?start="+encodeURIComponent(user.referralCode||("ref_"+userID));let b=document.getElementById("checkBtn");if(user.completedTasks.includes("channel_join")||user.completedTasks.includes("channel")){b.textContent="✅ انجام شد";b.disabled=true;b.classList.add("done")}}
-async function api(path,opt={},timeout=15000){let c=new AbortController(),t=setTimeout(()=>c.abort(),timeout);try{let r=await fetch(API_URL+path,{...opt,signal:c.signal,headers:{"Content-Type":"application/json",...(opt.headers||{})}});let text=await r.text(),d={};try{d=text?JSON.parse(text):{}}catch(e){}return{r,d}}finally{clearTimeout(t)}}
-
-async function loadUser(){
- if(!userID){toast("⚠️ Mini App را از داخل تلگرام باز کنید.");return}
- const body={userID,user_id:userID,username,firstName,first_name:firstName,initData:tg?.initData||""};
- try{
-  let q=await api("/api/user/init",{method:"POST",body:JSON.stringify(body)});
-  if(q.r.status===404||q.r.status===405)q=await api("/api/user",{method:"POST",body:JSON.stringify(body)});
-  if(!q.r.ok||q.d.success===false)throw Error(q.d.message||"HTTP "+q.r.status);
-  let d=q.d.user||q.d.data||q.d;
-  user.points=Number(d.points??d.total_points??0);user.referrals=Number(d.referrals_count??d.referrals??0);user.tasks=Number(d.tasks_completed??d.tasks??0);user.completedTasks=Array.isArray(d.completed_tasks)?d.completed_tasks:[];user.referralCode=d.referral_code||d.referralCode||("ref_"+userID);update();loadReferrals();
- }catch(e){console.error(e);toast(e.name==="AbortError"?"⏱️ پاسخ سرور دیر شد.":"⚠️ اتصال به سرور برقرار نشد.")}
+if(tg){
+  tg.ready(); tg.expand();
+  try{tg.setHeaderColor("#6255e8");tg.setBackgroundColor("#f4f6fb")}catch(e){}
 }
-async function loadReferrals(){
- if(!userID)return;try{let q=await api("/api/referrals?userID="+encodeURIComponent(userID)+"&user_id="+encodeURIComponent(userID),{method:"GET"});if(!q.r.ok||q.d.success===false)throw Error();let a=q.d.referrals||[];user.referrals=Number(q.d.count??a.length);document.getElementById("referralList").innerHTML=a.length?a.map(x=>"<div style='padding:10px 0;border-bottom:1px solid #eee;font-size:11px'>👤 "+esc(x.first_name||x.username||"کاربر")+"</div>").join(""):"<div class='empty'>هنوز دعوت موفقی ثبت نشده است.</div>";update()}catch(e){document.getElementById("referralList").innerHTML="<div class='empty'>هنوز دعوت موفقی ثبت نشده است.</div>"}}
-async function checkMembership(){
- let b=document.getElementById("checkBtn");if(!userID)return toast("❌ کاربر تلگرام شناسایی نشد.");b.disabled=true;b.textContent="⏳ در حال بررسی...";
- try{let q=await api("/api/check-membership",{method:"POST",body:JSON.stringify({userID,user_id:userID,username,firstName,first_name:firstName,initData:tg?.initData||""})});if(!q.r.ok||q.d.success===false)throw Error(q.d.message||"خطا");if(!q.d.isMember){toast("❌ ابتدا در کانال عضو شوید.");b.disabled=false;b.textContent="🔄 بررسی دوباره";return}user.points=Number(q.d.totalPoints??q.d.total_points??q.d.points??user.points);if(!user.completedTasks.includes("channel_join")&&!user.completedTasks.includes("channel"))user.completedTasks.push("channel_join");if(!q.d.alreadyRewarded){user.tasks++;toast("🎉 تبریک! ۱۰ امتیاز دریافت کردید!")}else toast("✅ قبلاً پاداش این تسک را گرفته‌اید.");update()}catch(e){console.error(e);toast("❌ خطا در ارتباط با سرور.");b.disabled=false;b.textContent="🔄 تلاش دوباره"}}
-async function loadLeaderboard(){try{let q=await api("/api/leaderboard?limit=20",{method:"GET"});if(!q.r.ok||q.d.success===false)throw Error();let a=q.d.leaderboard||[];leaderboardList.innerHTML=a.length?a.map((x,i)=>"<div style='display:flex;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid #eee;font-size:11px'><b>"+(i+1)+"</b><span style='flex:1'>"+esc(x.first_name||x.username||"کاربر")+"</span><b>"+Number(x.points||0)+" ⭐</b></div>").join(""):"<div class='empty'>هنوز کاربری در لیدربورد نیست.</div>"}catch(e){leaderboardList.innerHTML="<div class='empty'>خطا در دریافت لیدربورد.</div>"}}
-function joinChannel(){let url="https://t.me/"+CHANNEL_USERNAME;try{tg?tg.openTelegramLink(url):open(url,"_blank")}catch(e){open(url,"_blank")}}
-async function copyReferral(){let s=referralLink.textContent;try{await navigator.clipboard.writeText(s);toast("✅ لینک دعوت کپی شد!")}catch(e){toast("📋 لینک را انتخاب و کپی کنید.")}}
-function shareReferral(){let s=referralLink.textContent,url="https://t.me/share/url?url="+encodeURIComponent(s)+"&text="+encodeURIComponent("🚀 به من در Amir Crypto Hub بپیوند و امتیاز بگیر!");try{tg?tg.openTelegramLink(url):open(url,"_blank")}catch(e){copyReferral()}}
-function esc(v){return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 
-document.addEventListener("DOMContentLoaded",async()=>{avatar.textContent=firstName.charAt(0).toUpperCase();username.textContent=firstName;update();await loadUser();await loadLeaderboard();document.getElementById("loading").classList.add("hide");setTimeout(()=>document.getElementById("loading")?.remove(),300)});
+const telegramUser=tg?.initDataUnsafe?.user||null;
+const userID=telegramUser?.id||0;
+const firstName=telegramUser?.first_name||"کاربر";
+const username=telegramUser?.username||"";
+
+let userData={userID,points:0,referrals:0,tasks:0,completedTasks:[],referralCode:""};
+
+document.addEventListener("DOMContentLoaded",async()=>{
+  initializeUI();
+  await loadUserData();
+  await loadLeaderboard();
+  await loadHistory();
+  hideLoading();
+});
+
+function initializeUI(){
+  document.getElementById("avatar").textContent=firstName.charAt(0).toUpperCase();
+  document.getElementById("username").textContent=firstName;
+  updateUI();
+}
+
+function generateRefCode(){return userID?`ref_${userID}`:"user"}
+function updateReferralLink(){
+  document.getElementById("referralLink").textContent=
+    `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(userData.referralCode||generateRefCode())}`;
+}
+
+async function loadUserData(){
+  if(!userID){
+    showToast("⚠️ لطفاً Mini App را از داخل تلگرام باز کنید.");
+    updateReferralLink();
+    return;
+  }
+
+  try{
+    /* FIX: /api/user/init به‌جای /api/user */
+    const response=await fetch(`${API_URL}/api/user/init`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        userID:userID,
+        username:username,
+        firstName:firstName,
+        initData:tg?.initData||""
+      })
+    });
+
+    const text=await response.text();
+    let data={};
+    try{data=JSON.parse(text)}catch(e){throw new Error(`پاسخ نامعتبر از سرور: ${text.slice(0,120)}`)}
+
+    if(!response.ok||!data.success) throw new Error(data.message||`HTTP ${response.status}`);
+
+    applyServerData(data.user||data);
+    await loadReferrals();
+  }catch(error){
+    console.error("loadUserData:",error);
+    showToast("⚠️ اتصال به سرور برقرار نشد.");
+    updateReferralLink();
+  }
+}
+
+function applyServerData(data){
+  userData.points=Number(data.points||0);
+  userData.referrals=Number(data.referrals_count??data.referrals??0);
+  userData.tasks=Number(data.tasks_completed??data.tasks??0);
+  userData.completedTasks=Array.isArray(data.completed_tasks)?data.completed_tasks:[];
+  userData.referralCode=data.referral_code||generateRefCode();
+  updateReferralLink();
+  updateUI();
+}
+
+function updateUI(){
+  document.getElementById("points").textContent=userData.points;
+  document.getElementById("referrals").textContent=userData.referrals;
+  document.getElementById("tasks").textContent=userData.tasks;
+  document.getElementById("totalPoints").textContent=userData.points;
+  updateTaskButton();
+}
+
+function updateTaskButton(){
+  const btn=document.getElementById("checkBtn");
+  if(!btn)return;
+  if(userData.completedTasks.includes("channel_join")||userData.completedTasks.includes("channel")){
+    btn.textContent="✅ انجام شد";btn.classList.add("completed");btn.disabled=true;
+  }
+}
+
+function navigateTo(pageId,buttonElement=null){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  const page=document.getElementById(pageId);
+  if(page)page.classList.add("active");
+  document.querySelectorAll(".nav-button").forEach(b=>b.classList.remove("active"));
+  if(!buttonElement)buttonElement=document.querySelector(`.nav-button[data-page="${pageId}"]`);
+  if(buttonElement)buttonElement.classList.add("active");
+  window.scrollTo({top:0,behavior:"smooth"});
+  if(pageId==="referralPage")loadReferrals();
+  if(pageId==="leaderboardPage")loadLeaderboard();
+  if(pageId==="walletPage")loadHistory();
+}
+
+function joinChannel(){
+  const url=`https://t.me/${CHANNEL_USERNAME}`;
+  try{tg?tg.openTelegramLink(url):window.open(url,"_blank")}catch(e){window.open(url,"_blank")}
+}
+
+async function checkMembership(){
+  const btn=document.getElementById("checkBtn");
+  if(!userID){showToast("❌ کاربر تلگرام شناسایی نشد.");return}
+  btn.disabled=true;btn.textContent="⏳ در حال بررسی...";
+  try{
+    const response=await fetch(`${API_URL}/api/check-membership`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({userID,username,firstName,initData:tg?.initData||""})
+    });
+    const text=await response.text();
+    let data={};try{data=JSON.parse(text)}catch(e){throw new Error(text.slice(0,120))}
+    if(!response.ok||!data.success)throw new Error(data.message||"خطا");
+
+    if(!data.isMember){
+      showToast("❌ ابتدا در کانال عضو شوید.");
+      btn.disabled=false;btn.textContent="🔄 بررسی دوباره";return;
+    }
+
+    userData.points=Number(data.totalPoints??data.points??userData.points);
+    if(!userData.completedTasks.includes("channel_join"))userData.completedTasks.push("channel_join");
+    if(!data.alreadyRewarded){
+      userData.tasks=Math.max(userData.tasks+1,userData.completedTasks.length);
+      showToast("🎉 تبریک! ۱۰ امتیاز دریافت کردید!");
+    }else showToast("✅ قبلاً پاداش این تسک را گرفته‌اید.");
+    updateUI();await loadHistory();
+  }catch(error){
+    console.error("checkMembership:",error);
+    showToast("❌ خطا در ارتباط با سرور.");
+    btn.disabled=false;btn.textContent="🔄 تلاش دوباره";
+  }
+}
+
+async function loadReferrals(){
+  const list=document.getElementById("referralList");
+  if(!userID){list.innerHTML="<p>کاربر شناسایی نشد.</p>";return}
+  try{
+    const response=await fetch(`${API_URL}/api/referrals?userID=${encodeURIComponent(userID)}`);
+    const text=await response.text();let data={};try{data=JSON.parse(text)}catch(e){throw new Error(text.slice(0,120))}
+    if(!response.ok||!data.success)throw new Error(data.message||"خطا");
+    renderReferrals(data.referrals||[]);
+    userData.referrals=Number(data.count??(data.referrals||[]).length);
+    updateUI();
+  }catch(error){
+    console.error("loadReferrals:",error);
+    list.innerHTML="<p style='font-size:11px;color:#8991a3'>هنوز دعوت موفقی ثبت نشده است.</p>";
+  }
+}
+
+function renderReferrals(referrals){
+  const list=document.getElementById("referralList");
+  if(!referrals.length){
+    list.innerHTML="<div class='empty'><div class='empty-icon'>👥</div><p>هنوز دعوت موفقی ثبت نشده است.</p></div>";return;
+  }
+  list.innerHTML=referrals.map(ref=>{
+    const rawName=ref.first_name||ref.username||"کاربر";
+    return `<div class="referral-item"><div class="referral-avatar">${escapeHtml(String(rawName).charAt(0).toUpperCase())}</div><div><div class="referral-name">${escapeHtml(rawName)}</div><div class="referral-date">دعوت موفق ${escapeHtml(ref.created_at||"")}</div></div></div>`;
+  }).join("");
+}
+
+async function copyReferral(){
+  const link=document.getElementById("referralLink").textContent.trim();
+  try{await navigator.clipboard.writeText(link);showToast("✅ لینک دعوت کپی شد!")}
+  catch(e){selectText(document.getElementById("referralLink"));showToast("📋 لینک انتخاب شد؛ آن را کپی کنید.")}
+}
+
+function shareReferral(){
+  const link=document.getElementById("referralLink").textContent.trim();
+  const shareUrl=`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("🚀 به من در Amir Crypto Hub بپیوند و امتیاز بگیر!")}`;
+  try{tg?tg.openTelegramLink(shareUrl):window.open(shareUrl,"_blank")}catch(e){copyReferral()}
+}
+
+async function loadLeaderboard(){
+  const list=document.getElementById("leaderboardList");
+  try{
+    const response=await fetch(`${API_URL}/api/leaderboard?limit=20`);
+    const text=await response.text();let data={};try{data=JSON.parse(text)}catch(e){throw new Error(text.slice(0,120))}
+    if(!response.ok||!data.success)throw new Error(data.message||"خطا");
+    const users=data.leaderboard||[];
+    if(!users.length){list.innerHTML="<div class='empty'><div class='empty-icon'>🏆</div><p>هنوز کاربری در لیدربورد نیست.</p></div>";return}
+    list.innerHTML=users.map((user,index)=>{
+      const raw=user.first_name||user.username||"کاربر";
+      const rank=index+1;const icon=rank===1?"🥇":rank===2?"🥈":rank===3?"🥉":`#${rank}`;
+      return `<div class="leader-row"><div class="rank">${icon}</div><div class="leader-avatar">${escapeHtml(String(raw).charAt(0).toUpperCase())}</div><div class="leader-info"><div class="leader-name">${escapeHtml(raw)}</div><div class="leader-id">ID: ${escapeHtml(user.user_id)}</div></div><div class="leader-points">${Number(user.points||0)} ⭐</div></div>`;
+    }).join("");
+  }catch(error){
+    console.error("loadLeaderboard:",error);
+    list.innerHTML="<div class='empty'><div class='empty-icon'>⚠️</div><p>خطا در دریافت لیدربورد.</p></div>";
+  }
+}
+
+async function loadHistory(){
+  document.getElementById("historyList").innerHTML="<div class='empty'><div class='empty-icon'>📊</div><p>تاریخچه امتیازات به‌زودی فعال می‌شود.</p></div>";
+}
+
+function requestConvert(){showToast("🔄 سیستم تبدیل امتیاز به‌زودی فعال می‌شود.")}
+function requestWithdraw(){showToast("💸 سیستم برداشت هنوز فعال نشده است.")}
+
+function selectText(element){
+  const selection=window.getSelection(),range=document.createRange();
+  range.selectNodeContents(element);selection.removeAllRanges();selection.addRange(range);
+}
+
+let toastTimer=null;
+function showToast(message){
+  document.querySelector(".toast")?.remove();
+  const toast=document.createElement("div");toast.className="toast";toast.textContent=message;document.body.appendChild(toast);
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.remove(),3000);
+}
+
+function hideLoading(){
+  const loading=document.getElementById("loading");if(!loading)return;
+  loading.classList.add("hide");setTimeout(()=>loading.remove(),300);
+}
+
+function escapeHtml(value){
+  return String(value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
 </script>
 </body>
 </html>

@@ -1,63 +1,234 @@
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
 body {
   margin: 0;
-  font-family: Tahoma, sans-serif;
-  background: var(--tg-theme-bg-color, #f2f2f2);
-  color: var(--tg-theme-text-color, #111);
+  font-family: -apple-system, Tahoma, sans-serif;
+  background: var(--tg-theme-bg-color, #0f1220);
+  color: var(--tg-theme-text-color, #fff);
 }
+
 header {
-  padding: 16px;
-  text-align: center;
-  background: var(--tg-theme-secondary-bg-color, #fff);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 18px 30px;
+  background: linear-gradient(135deg, #6c5ce7, #7f7fd5 55%, #3ecf8e);
+  border-radius: 0 0 24px 24px;
+  color: #fff;
 }
+
+#avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: bold;
+  flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,0.5);
+}
+
+#greetName { font-size: 14px; opacity: 0.9; margin-bottom: 4px; }
+#pointsDisplay { font-size: 24px; font-weight: 800; }
+
 #content {
   padding: 16px;
-  padding-bottom: 80px;
+  margin-top: -14px;
+  padding-bottom: 90px;
 }
+
 .card {
-  background: var(--tg-theme-secondary-bg-color, #fff);
-  border-radius: 12px;
-  padding: 14px;
+  background: var(--tg-theme-secondary-bg-color, #1a1e33);
+  border-radius: 16px;
+  padding: 16px;
   margin-bottom: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  animation: fadeUp 0.25s ease;
 }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cardTitle { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 6px; }
+.cardTitle .emoji { font-size: 20px; }
+.muted { opacity: 0.65; font-size: 13px; }
+
 button.action {
-  background: var(--tg-theme-button-color, #2ea6ff);
-  color: var(--tg-theme-button-text-color, #fff);
+  background: linear-gradient(135deg, #6c5ce7, #3ecf8e);
+  color: #fff;
   border: none;
-  border-radius: 10px;
-  padding: 10px 14px;
+  border-radius: 12px;
+  padding: 11px 16px;
   font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+  transition: transform 0.1s ease, opacity 0.2s ease;
+}
+button.action:active { transform: scale(0.97); }
+button.action:disabled {
+  background: #3a3f55;
+  color: #8a8fa3;
+}
+
+button.secondary {
+  background: rgba(255,255,255,0.08);
+  color: inherit;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
   cursor: pointer;
 }
-button.action:disabled {
-  background: #bbb;
-}
+
 input {
   width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.15);
+  margin-bottom: 10px;
+  background: rgba(255,255,255,0.05);
+  color: inherit;
+  font-size: 14px;
+}
+input::placeholder { color: #8a8fa3; }
+
+.taskRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.taskIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(108,92,231,0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.taskInfo { flex: 1; min-width: 0; }
+.taskInfo .title { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+.taskInfo .desc { font-size: 12px; opacity: 0.65; }
+.rewardBadge {
+  font-size: 12px;
+  background: rgba(62,207,142,0.18);
+  color: #3ecf8e;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-weight: 700;
+  display: inline-block;
+  margin-top: 6px;
+}
+
+.progressWrap {
+  background: rgba(255,255,255,0.08);
+  border-radius: 20px;
+  height: 8px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+.progressBar {
+  height: 100%;
+  background: linear-gradient(90deg, #6c5ce7, #3ecf8e);
+  border-radius: 20px;
+  transition: width 0.4s ease;
+}
+
+.streakRow { display: flex; gap: 6px; margin: 10px 0; }
+.streakDot {
+  flex: 1;
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.12);
+}
+.streakDot.filled { background: linear-gradient(90deg, #f6b93b, #fa8231); }
+
+.leaderRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.leaderRow:last-child { border-bottom: none; }
+.leaderRank {
+  width: 26px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 13px;
+  opacity: 0.8;
+}
+.leaderName { flex: 1; font-size: 14px; }
+.leaderPoints { font-size: 13px; font-weight: 700; color: #3ecf8e; }
+.leaderRow.me { background: rgba(108,92,231,0.14); border-radius: 10px; padding: 9px 8px; }
+
+.emptyState { text-align: center; padding: 34px 10px; opacity: 0.6; }
+.emptyState .emoji { font-size: 40px; display: block; margin-bottom: 10px; }
+
+.skeleton {
+  height: 62px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.05) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
   margin-bottom: 10px;
 }
+@keyframes shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
 #tabbar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   display: flex;
-  background: var(--tg-theme-secondary-bg-color, #fff);
-  border-top: 1px solid #ddd;
+  background: var(--tg-theme-secondary-bg-color, #171a2b);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 #tabbar button {
   flex: 1;
-  padding: 12px 0;
+  padding: 10px 0 8px;
   border: none;
   background: none;
+  font-size: 11px;
+  color: #8a8fa3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+#tabbar button.active { color: #fff; }
+.tabIcon { font-size: 19px; }
+
+#toast {
+  position: fixed;
+  bottom: 78px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 999;
+}
+.toastMsg {
+  background: #1a1e33;
+  color: #fff;
+  padding: 11px 18px;
+  border-radius: 30px;
   font-size: 13px;
-  color: inherit;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+  animation: toastIn 0.25s ease, toastOut 0.25s ease 2.3s forwards;
 }
-#tabbar button.active {
-  color: var(--tg-theme-button-color, #2ea6ff);
-  font-weight: bold;
-}
+@keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toastOut { to { opacity: 0; transform: translateY(10px); } }

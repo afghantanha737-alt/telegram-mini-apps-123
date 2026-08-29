@@ -3,12 +3,8 @@ const router = express.Router();
 const User = require('../models/User');
 const verifyTelegramInitData = require('../utils/verifyTelegram');
 
-function generateReferralCode() {
-  return Math.random().toString(36).substring(2, 9);
-}
-
 // POST /api/auth/enter
-// body: { initData, startParam }  (startParam = کد رفرال دعوت‌کننده، اگر وجود داشته باشد)
+// body: { initData, startParam }  (startParam = آیدی عددی دعوت‌کننده، اگر وجود داشته باشد)
 router.post('/enter', async (req, res) => {
   try {
     const { initData, startParam } = req.body;
@@ -26,7 +22,7 @@ router.post('/enter', async (req, res) => {
         telegramId: String(tgUser.id),
         username: tgUser.username || '',
         firstName: tgUser.first_name || '',
-        referralCode: generateReferralCode(),
+        referralCode: String(tgUser.id), // کد رفرال همون آیدی عددی کاربره
         referredBy: startParam || null
       });
 

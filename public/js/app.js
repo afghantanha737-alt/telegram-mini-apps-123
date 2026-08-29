@@ -161,7 +161,7 @@ async function renderReferral() {
   content.innerHTML = skeletonHTML(2);
 
   const data = await api('/api/referral/me?initData=' + encodeURIComponent(initData));
-  const botUsername = 'YOUR_BOT_USERNAME';
+  const botUsername = 'AmirAFG123_bot';
   const link = `https://t.me/${botUsername}?startapp=${data.referralCode}`;
 
   content.innerHTML = `

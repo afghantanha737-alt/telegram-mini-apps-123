@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>Amir Crypto Hub</title>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Tahoma, Arial, sans-serif;
+            background: #f5f7fb;
+            color: #172033;
+        }
+
+        button {
+            font-family: inherit;
+            cursor: pointer;
+            border: none;
+        }
+
+        .app {
+            max-width: 600px;
+            margin: auto;
+            min-height: 100vh;
+            padding-bottom: 85px;
+        }
+
+        /* HEADER */
+
+        .header {
+            background: linear-gradient(135deg, #111827, #243b64);
+            color: white;
+            padding: 22px 18px 30px;
+            border-radius: 0 0 28px 28px;
+        }
+
+        .user-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .avatar {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: #ffffff22;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 25px;
+            font-weight: bold;
+        }
+
+        .user-info {
+            flex: 1;
+        }
+
+        .welcome {
+            font-size: 13px;
+            opacity: .75;
+            margin-bottom: 5px;
+        }
+
+        .username {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        /* BALANCE */
+
+        .balance-card {
+            margin-top: 22px;
+            padding: 20px;
+            background: #ffffff15;
+            border: 1px solid #ffffff20;
+            border-radius: 22px;
+        }
+
+        .balance-title {
+            font-size: 13px;
+            opacity: .8;
+        }
+
+        .balance {
+            font-size: 34px;
+            font-weight: bold;
+            margin-top: 7px;
+        }
+
+        .star {
+            font-size: 25px;
+        }
+
+        /* CONTENT */
+
+        .content {
+            padding: 18px;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 8px 0 16px;
+        }
+
+        /* STATS */
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .stat {
+            background: white;
+            border-radius: 17px;
+            padding: 15px 8px;
+            text-align: center;
+            box-shadow: 0 5px 20px #00000008;
+        }
+
+        .stat-icon {
+            font-size: 22px;
+        }
+
+        .stat-value {
+            font-size: 19px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #7b8495;
+            margin-top: 3px;
+        }
+
+        /* CARDS */
+
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 18px;
+            margin-top: 14px;
+            box-shadow: 0 5px 20px #00000008;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .card-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 15px;
+            background: #eef3ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 23px;
+        }
+
+        .card-title {
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .card-description {
+            font-size: 13px;
+            color: #747d8e;
+            margin-top: 4px;
+            line-height: 1.7;
+        }
+
+        /* BUTTONS */
+
+        .primary-btn {
+            width: 100%;
+            padding: 13px;
+            margin-top: 15px;
+            border-radius: 13px;
+            background: #2563eb;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .primary-btn:disabled {
+            opacity: .6;
+        }
+
+        .secondary-btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 10px;
+            border-radius: 13px;
+            background: #eef2f7;
+            color: #26344d;
+            font-size: 14px;
+        }
+
+        /* REFERRAL */
+
+        .referral-link {
+            background: #f3f5f8;
+            border-radius: 12px;
+            padding: 12px;
+            font-size: 11px;
+            direction: ltr;
+            text-align: left;
+            word-break: break-all;
+            margin-top: 14px;
+        }
+
+        .ref-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 9px;
+        }
+
+        /* TASK */
+
+        .task {
+            background: white;
+            border-radius: 20px;
+            padding: 17px;
+            margin-top: 12px;
+            box-shadow: 0 5px 20px #00000008;
+        }
+
+        .task-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .task-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 15px;
+            background: #eef3ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 23px;
+        }
+
+        .task-info {
+            flex: 1;
+        }
+
+        .task-name {
+            font-weight: bold;
+        }
+
+        .task-reward {
+            color: #2563eb;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        /* STATUS */
+
+        .status {
+            margin-top: 12px;
+            padding: 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            text-align: center;
+            display: none;
+        }
+
+        .status.show {
+            display: block;
+        }
+
+        .status.success {
+            background: #eaf9ef;
+            color: #16803c;
+        }
+
+        .status.error {
+            background: #fff0f0;
+            color: #c62828;
+        }
+
+        .status.loading {
+            background: #eef3ff;
+            color: #315bb5;
+        }
+
+        /* LOADING */
+
+        .loading-screen {
+            position: fixed;
+            inset: 0;
+            background: #f5f7fb;
+            z-index: 999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .loading-logo {
+            width: 75px;
+            height: 75px;
+            border-radius: 23px;
+            background: #1d4ed8;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 35px;
+            margin-bottom: 15px;
+        }
+
+        .loading-text {
+            font-size: 14px;
+            color: #667085;
+        }
+
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid #dbe4ff;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: spin .8s linear infinite;
+            margin-top: 15px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* BOTTOM NAV */
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 600px;
+            background: white;
+            border-top: 1px solid #e8ebf0;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+            z-index: 100;
+        }
+
+        .nav-btn {
+            background: transparent;
+            color: #8a93a4;
+            padding: 7px 2px;
+            font-size: 11px;
+        }
+
+        .nav-btn .nav-icon {
+            display: block;
+            font-size: 21px;
+            margin-bottom: 3px;
+        }
+
+        .nav-btn.active {
+            color: #2563eb;
+            font-weight: bold;
+        }
+
+        /* ERROR */
+
+        .server-error {
+            background: #fff0f0;
+            color: #b42318;
+            padding: 13px;
+            border-radius: 14px;
+            font-size: 12px;
+            line-height: 1.8;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .server-error.show {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="loadingScreen" class="loading-screen">
+    <div class="loading-logo">🚀</div>
+    <div class="loading-text">
+        در حال باز کردن Amir Crypto Hub...
+    </div>
+    <div class="spinner"></div>
+</div>
+
+
+<div class="app">
+
+    <!-- HEADER -->
+
+    <header class="header">
+
+        <div class="user-box">
+
+            <div class="avatar" id="avatar">
+                👤
+            </div>
+
+            <div class="user-info">
+
+                <div class="welcome">
+                    خوش آمدید
+                </div>
+
+                <div class="username" id="username">
+                    کاربر
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="balance-card">
+
+            <div class="balance-title">
+                موجودی شما
+            </div>
+
+            <div class="balance">
+                <span id="points">0</span>
+                <span class="star">⭐</span>
+            </div>
+
+        </div>
+
+    </header>
+
+
+    <main class="content">
+
+        <!-- HOME -->
+
+        <section id="home" class="section active">
+
+            <div class="section-title">
+                داشبورد
+            </div>
+
+            <div class="stats">
+
+                <div class="stat">
+                    <div class="stat-icon">⭐</div>
+                    <div class="stat-value" id="statPoints">0</div>
+                    <div class="stat-label">پوینت</div>
+                </div>
+
+                <div class="stat">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-value" id="statReferrals">0</div>
+                    <div class="stat-label">دعوت‌ها</div>
+                </div>
+
+                <div class="stat">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-value" id="statTasks">0</div>
+                    <div class="stat-label">تسک‌ها</div>
+                </div>
+
+            </div>
+
+
+            <div id="serverError" class="server-error"></div>
+
+
+            <div class="card">
+
+                <div class="card-header">
+
+                    <div class="card-icon">
+                        🎯
+                    </div>
+
+                    <div>
+                        <div class="card-title">
+                            شروع کسب پوینت
+                        </div>
+
+                        <div class="card-description">
+                            تسک‌ها را انجام دهید و پوینت دریافت کنید.
+                        </div>
+                    </div>
+
+                </div>
+
+                <button
+                    class="primary-btn"
+                    onclick="showSection('tasks')">
+
+                    مشاهده تسک‌ها
+
+                </button>
+
+            </div>
+
+
+            <div class="card">
+
+                <div class="card-header">
+
+                    <div class="card-icon">
+                        👥
+                    </div>
+
+                    <div>
+
+                        <div class="card-title">
+                            دعوت دوستان
+                        </div>
+
+                        <div class="card-description">
+                            دوستان خود را دعوت کنید و پوینت بگیرید.
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <button
+                    class="primary-btn"
+                    onclick="showSection('referral')">
+
+                    دعوت دوستان
+
+                </button>
+
+            </div>
+
+        </section>
+
+
+        <!-- TASKS -->
+
+        <section id="tasks" class="section">
+
+            <div class="section-title">
+                🎯 تسک‌ها
+            </div>
+
+
+            <div class="task">
+
+                <div class="task-top">
+
+                    <div class="task-icon">
+                        📢
+                    </div>
+
+                    <div class="task-info">
+
+                        <div class="task-name">
+                            عضویت در کانال Amir Crypto Hub
+                        </div>
+
+                        <div class="task-reward">
+                            جایزه: ⭐ 10 پوینت
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <button
+                    id="channelButton"
+                    class="primary-btn"
+                    onclick="completeChannelTask()">
+
+                    بررسی عضویت و دریافت جایزه
+
+                </button>
+
+
+                <div
+                    id="channelStatus"
+                    class="status">
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <div class="card-header">
+
+                    <div class="card-icon">
+                        💡
+                    </div>
+
+                    <div>
+
+                        <div class="card-title">
+                            تسک‌های تبلیغاتی
+                        </div>
+
+                        <div class="card-description">
+                            در نسخه بعدی، مدیر می‌تواند تسک‌های تبلیغاتی
+                            جدید ایجاد کند.
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- REFERRAL -->
+
+        <section id="referral" class="section">
+
+            <div class="section-title">
+                👥 دعوت دوستان
+            </div>
+
+
+            <div class="card">
+
+                <div class="card-header">
+
+                    <div class="card-icon">
+                        🎁
+                    </div>
+
+                    <div>
+
+                        <div class="card-title">
+                            دوستانت را دعوت کن
+                        </div>
+
+                        <div class="card-description">
+                            لینک دعوت خود را برای دوستانت ارسال کن.
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="referral-link"
+                     id="referralLink">
+
+                    در حال دریافت لینک...
+
+                </div>
+
+
+                <div class="ref-buttons">
+
+                    <button
+                        class="primary-btn"
+                        onclick="copyReferral()">
+
+                        📋 کپی
+
+                    </button>
+
+                    <button
+                        class="secondary-btn"
+                        onclick="shareReferral()">
+
+                        📤 اشتراک‌گذاری
+
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <div class="card-header">
+
+                    <div class="card-icon">
+                        👥
+                    </div>
+
+                    <div>
+
+                        <div class="card-title">
+                            تعداد دعوت‌ها
+                        </div>
+
+                        <div class="card-description">
+                            دوستان دعوت‌شده:
+                            <b id="referralCount">0</b>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- POINTS -->
+
+        <section id="pointsSection" class="section">
+
+            <div class="section-title">
+                ⭐ پوینت‌های من
+            </div>
+
+
+            <div class="card">
+
+                <div class="card-header">
+
+                    <div class="card-icon">
+                        ⭐
+                    </div>
+
+                    <div>
+
+                        <div class="card-title">
+                            موجودی پوینت
+                        </div>
+
+                        <div class="card-description">
+                            موجودی فعلی شما
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="balance"
+                     style="color:#2563eb;margin-top:20px;">
+
+                    <span id="pointsPage">
+                        0
+                    </span>
+
+                    ⭐
+
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <div class="card-header">
+
+                    <div class="card-icon">
+                        💰
+                    </div>
+
+                    <div>
+
+                        <div class="card-title">
+                            برداشت
+                        </div>
+
+                        <div class="card-description">
+                            سیستم تبدیل پوینت به کریپتو
+                            در مرحله بعدی اضافه خواهد شد.
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+
+<!-- NAVIGATION -->
+
+<nav class="bottom-nav">
+
+    <button
+        class="nav-btn active"
+        data-section="home"
+        onclick="showSection('home')">
+
+        <span class="nav-icon">🏠</span>
+        خانه
+
+    </button>
+
+
+    <button
+        class="nav-btn"
+        data-section="tasks"
+        onclick="showSection('tasks')">
+
+        <span class="nav-icon">🎯</span>
+        تسک‌ها
+
+    </button>
+
+
+    <button
+        class="nav-btn"
+        data-section="referral"
+        onclick="showSection('referral')">
+
+        <span class="nav-icon">👥</span>
+        دعوت
+
+    </button>
+
+
+    <button
+        class="nav-btn"
+        data-section="pointsSection"
+        onclick="showSection('pointsSection')">
+
+        <span class="nav-icon">⭐</span>
+        پوینت
+
+    </button>
+
+</nav>
+
+
+<script>
+
+    // =====================================================
+    // CONFIG
+    // =====================================================
+
+    const API_URL =
+        "https://telegram-mini-apps-123.onrender.com";
+
+
+    // =====================================================
+    // TELEGRAM
+    // =====================================================
+
+    const tg = window.Telegram
+        ? window.Telegram.WebApp
+        : null;
+
+
+    if (tg) {
+        tg.ready();
+        tg.expand();
+    }
+
+
+    // =====================================================
+    // GLOBAL USER
+    // =====================================================
+
+    let currentUser = null;
+    let referralLink = "";
+
+
+    // =====================================================
+    // TELEGRAM USER
+    // =====================================================
+
+    function getTelegramUser() {
+
+        if (
+            tg &&
+            tg.initDataUnsafe &&
+            tg.initDataUnsafe.user
+        ) {
+
+            return tg.initDataUnsafe.user;
+
+        }
+
+        return null;
+    }
+
+
+    // =====================================================
+    // REFERRAL PARAMETER
+    // =====================================================
+
+    function getReferralCode() {
+
+        try {
+
+            const params =
+                new URLSearchParams(
+                    window.location.search
+                );
+
+            const start =
+                params.get("start");
+
+            if (start) {
+                return start;
+            }
+
+        } catch (error) {
+
+            console.log(error);
+
+        }
+
+        return null;
+    }
+
+
+    // =====================================================
+    // SHOW ERROR
+    // =====================================================
+
+    function showServerError(message) {
+
+        const box =
+            document.getElementById(
+                "serverError"
+            );
+
+        box.textContent =
+            message;
+
+        box.classList.add(
+            "show"
+        );
+    }
+
+
+    // =====================================================
+    // CLEAR ERROR
+    // =====================================================
+
+    function clearServerError() {
+
+        const box =
+            document.getElementById(
+                "serverError"
+            );
+
+        box.textContent = "";
+
+        box.classList.remove(
+            "show"
+        );
+    }
+
+
+    // =====================================================
+    // LOAD USER
+    // =====================================================
+
+    async function loadUser() {
+
+        clearServerError();
+
+        const user =
+            getTelegramUser();
+
+
+        /*
+         * Mini App must normally be opened
+         * from Telegram.
+         */
+
+        if (!user) {
+
+            document.getElementById(
+                "loadingScreen"
+            ).style.display = "none";
+
+            showServerError(
+                "این Mini App باید از داخل Telegram باز شود."
+            );
+
+            return;
+
+        }
+
+
+        currentUser = user;
+
+
+        // USER DISPLAY
+
+        const name =
+            user.first_name ||
+            user.username ||
+            "کاربر";
+
+
+        document.getElementById(
+            "username"
+        ).textContent =
+            name;
+
+
+        const avatar =
+            document.getElementById(
+                "avatar"
+            );
+
+
+        if (
+            user.first_name &&
+            user.first_name.length > 0
+        ) {
+
+            avatar.textContent =
+                user.first_name
+                    .charAt(0)
+                    .toUpperCase();
+
+        }
+
+
+        // REFERRAL
+
+        const referralCode =
+            getReferralCode();
+
+
+        try {
+
+            const response =
+                await fetch(
+                    `${API_URL}/api/user/init`,
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+
+                            user_id:
+                                user.id,
+
+                            username:
+                                user.username || "",
+
+                            first_name:
+                                user.first_name || "User",
+
+                            referral_code:
+                                referralCode
+
+                        })
+                    }
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    `HTTP ${response.status}`
+                );
+
+            }
+
+
+            const data =
+                await response.json();
+
+
+            if (!data.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "خطا در دریافت اطلاعات کاربر"
+                );
+
+            }
+
+
+            updateUserData(
+                data.user
+            );
+
+
+            referralLink =
+                data.referral_link ||
+                "";
+
+
+            document.getElementById(
+                "referralLink"
+            ).textContent =
+                referralLink;
+
+
+        } catch (error) {
+
+            console.error(
+                "API ERROR:",
+                error
+            );
+
+
+            showServerError(
+                "ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید."
+            );
+
+        }
+
+
+        document.getElementById(
+            "loadingScreen"
+        ).style.display =
+            "none";
+    }
+
+
+    // =====================================================
+    // UPDATE UI
+    // =====================================================
+
+    function updateUserData(user) {
+
+        if (!user) {
+            return;
+        }
+
+
+        const points =
+            Number(
+                user.points || 0
+            );
+
+
+        const referrals =
+            Number(
+                user.referrals_count || 0
+            );
+
+
+        const tasks =
+            Number(
+                user.tasks_completed || 0
+            );
+
+
+        document.getElementById(
+            "points"
+        ).textContent =
+            points;
+
+
+        document.getElementById(
+            "statPoints"
+        ).textContent =
+            points;
+
+
+        document.getElementById(
+            "statReferrals"
+        ).textContent =
+            referrals;
+
+
+        document.getElementById(
+            "statTasks"
+        ).textContent =
+            tasks;
+
+
+        document.getElementById(
+            "pointsPage"
+        ).textContent =
+            points;
+
+
+        document.getElementById(
+            "referralCount"
+        ).textContent =
+            referrals;
+
+
+        // CHANNEL TASK
+
+        if (
+            Array.isArray(
+                user.completed_tasks
+            ) &&
+            user.completed_tasks.includes(
+                "channel_join"
+            )
+        ) {
+
+            const button =
+                document.getElementById(
+                    "channelButton"
+                );
+
+            button.textContent =
+                "✅ تکمیل شده";
+
+            button.disabled =
+                true;
+
+
+            setTaskStatus(
+                "عضویت شما قبلاً تأیید شده است.",
+                "success"
+            );
+
+        }
+
+    }
+
+
+    // =====================================================
+    // NAVIGATION
+    // =====================================================
+
+    function showSection(sectionId) {
+
+        document
+            .querySelectorAll(".section")
+            .forEach(
+                section => {
+                    section.classList.remove(
+                        "active"
+                    );
+                }
+            );
+
+
+        const section =
+            document.getElementById(
+                sectionId
+            );
+
+
+        if (section) {
+
+            section.classList.add(
+                "active"
+            );
+
+        }
+
+
+        document
+            .querySelectorAll(".nav-btn")
+            .forEach(
+                button => {
+
+                    button.classList.remove(
+                        "active"
+                    );
+
+
+                    if (
+                        button.dataset.section ===
+                        sectionId
+                    ) {
+
+                        button.classList.add(
+                            "active"
+                        );
+
+                    }
+
+                }
+            );
+
+
+        window.scrollTo({
+            top: 0,
+            behavior: "smooth"
+        });
+
+    }
+
+
+    // =====================================================
+    // TASK STATUS
+    // =====================================================
+
+    function setTaskStatus(
+        message,
+        type
+    ) {
+
+        const status =
+            document.getElementById(
+                "channelStatus"
+            );
+
+
+        status.textContent =
+            message;
+
+
+        status.className =
+            `status show ${type}`;
+
+    }
+
+
+    // =====================================================
+    // CHANNEL TASK
+    // =====================================================
+
+    async function completeChannelTask() {
+
+        if (!currentUser) {
+
+            setTaskStatus(
+                "کاربر شناسایی نشد.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        const button =
+            document.getElementById(
+                "channelButton"
+            );
+
+
+        button.disabled =
+            true;
+
+
+        button.textContent =
+            "در حال بررسی...";
+
+
+        setTaskStatus(
+            "در حال بررسی عضویت شما...",
+            "loading"
+        );
+
+
+        try {
+
+            const response =
+                await fetch(
+                    `${API_URL}/api/task/channel`,
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+
+                            user_id:
+                                currentUser.id
+
+                        })
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (
+                response.status === 403 &&
+                data.error === "not_member"
+            ) {
+
+                setTaskStatus(
+                    "ابتدا عضو کانال @AmirCryptoHub شوید و سپس دوباره بررسی کنید.",
+                    "error"
+                );
+
+
+                button.disabled =
+                    false;
+
+                button.textContent =
+                    "بررسی عضویت و دریافت جایزه";
+
+
+                if (tg) {
+
+                    tg.openTelegramLink(
+                        "https://t.me/AmirCryptoHub"
+                    );
+
+                }
+
+
+                return;
+
+            }
+
+
+            if (!response.ok || !data.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "Task error"
+                );
+
+            }
+
+
+            const newPoints =
+                Number(
+                    data.points || 0
+                );
+
+
+            document.getElementById(
+                "points"
+            ).textContent =
+                newPoints;
+
+
+            document.getElementById(
+                "statPoints"
+            ).textContent =
+                newPoints;
+
+
+            document.getElementById(
+                "pointsPage"
+            ).textContent =
+                newPoints;
+
+
+            button.textContent =
+                "✅ تکمیل شده";
+
+            button.disabled =
+                true;
+
+
+            setTaskStatus(
+                data.already
+                    ? "این تسک قبلاً تکمیل شده است."
+                    : "تبریک! ۱۰ پوینت دریافت کردید ⭐",
+                "success"
+            );
+
+
+            if (tg) {
+
+                tg.HapticFeedback.notificationOccurred(
+                    "success"
+                );
+
+            }
+
+
+        } catch (error) {
+
+            console.error(
+                error
+            );
+
+
+            setTaskStatus(
+                "خطا در ارتباط با سرور. دوباره تلاش کنید.",
+                "error"
+            );
+
+
+            button.disabled =
+                false;
+
+            button.textContent =
+                "بررسی عضویت و دریافت جایزه";
+
+        }
+
+    }
+
+
+    // =====================================================
+    // COPY REFERRAL
+    // =====================================================
+
+    async function copyReferral() {
+
+        if (!referralLink) {
+
+            return;
+
+        }
+
+
+        try {
+
+            await navigator.clipboard.writeText(
+                referralLink
+            );
+
+
+            if (tg) {
+
+                tg.showPopup({
+                    title: "انجام شد",
+                    message: "لینک دعوت کپی شد.",
+                    buttons: [
+                        {
+                            type: "ok"
+                        }
+                    ]
+                });
+
+            } else {
+
+                alert(
+                    "لینک دعوت کپی شد."
+                );
+
+            }
+
+        } catch (error) {
+
+            alert(
+                referralLink
+            );
+
+        }
+
+    }
+
+
+    // =====================================================
+    // SHARE REFERRAL
+    // =====================================================
+
+    function shareReferral() {
+
+        if (!referralLink) {
+            return;
+        }
+
+
+        const text =
+            "🚀 به Amir Crypto Hub بپیوند و با انجام تسک‌ها پوینت دریافت کن!";
+
+
+        const shareUrl =
+            "https://t.me/share/url?url=" +
+            encodeURIComponent(
+                referralLink
+            ) +
+            "&text=" +
+            encodeURIComponent(
+                text
+            );
+
+
+        if (tg) {
+
+            tg.openTelegramLink(
+                shareUrl
+            );
+
+        } else {
+
+            window.open(
+                shareUrl,
+                "_blank"
+            );
+
+        }
+
+    }
+
+
+    // =====================================================
+    // START
+    // =====================================================
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        function() {
+
+            loadUser();
+
+        }
+    );
+
+</script>
+
+</body>
+</html>

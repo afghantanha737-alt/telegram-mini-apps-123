@@ -13,6 +13,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/points', require('./routes/points'));
 app.use('/api/referral', require('./routes/referral'));
+app.use('/api/leaderboard', require('./routes/leaderboard'));
 app.use('/api/admin', require('./routes/admin'));
 
 mongoose.connect(process.env.MONGO_URI)

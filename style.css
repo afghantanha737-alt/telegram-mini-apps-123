@@ -1,0 +1,63 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Tahoma, sans-serif;
+  background: var(--tg-theme-bg-color, #f2f2f2);
+  color: var(--tg-theme-text-color, #111);
+}
+header {
+  padding: 16px;
+  text-align: center;
+  background: var(--tg-theme-secondary-bg-color, #fff);
+}
+#content {
+  padding: 16px;
+  padding-bottom: 80px;
+}
+.card {
+  background: var(--tg-theme-secondary-bg-color, #fff);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+button.action {
+  background: var(--tg-theme-button-color, #2ea6ff);
+  color: var(--tg-theme-button-text-color, #fff);
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+button.action:disabled {
+  background: #bbb;
+}
+input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  margin-bottom: 10px;
+}
+#tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: var(--tg-theme-secondary-bg-color, #fff);
+  border-top: 1px solid #ddd;
+}
+#tabbar button {
+  flex: 1;
+  padding: 12px 0;
+  border: none;
+  background: none;
+  font-size: 13px;
+  color: inherit;
+}
+#tabbar button.active {
+  color: var(--tg-theme-button-color, #2ea6ff);
+  font-weight: bold;
+}

@@ -8,6 +8,8 @@ const userSchema = new mongoose.Schema({
   referralCode: { type: String, required: true, unique: true },
   referredBy: { type: String, default: null }, // referralCode of the inviter
   walletAddress: { type: String, default: '' },
+  lastCheckIn: { type: Date, default: null },
+  streak: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 });
 

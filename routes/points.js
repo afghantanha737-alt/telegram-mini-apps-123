@@ -13,18 +13,51 @@ router.get('/me', async (req, res) => {
   const user = await User.findOne({ telegramId: String(tgUser.id) });
   if (!user) return res.status(404).json({ error: 'کاربر پیدا نشد' });
 
-  const rate = Number(process.env.POINTS_TO_CRYPTO_RATE || 1000); // هر چند پوینت = ۱ واحد کریپتو (فرضی)
+  const rate = Number(process.env.POINTS_TO_CRYPTO_RATE || 1000);
+
+  const now = new Date();
+  const last = user.lastCheckIn ? new Date(user.lastCheckIn) : null;
+  const canCheckIn = !last || (now - last) >= 24 * 60 * 60 * 1000;
+
   res.json({
     points: user.points,
     estimatedCryptoValue: user.points / rate,
-    rate
+    rate,
+    streak: user.streak,
+    canCheckIn,
+    firstName: user.firstName
   });
 });
 
+// POST /api/points/daily-checkin
+router.post('/daily-checkin', async (req, res) => {
+  const { initData } = req.body;
+  const tgUser = verifyTelegramInitData(initData, process.env.BOT_TOKEN);
+  if (!tgUser) return res.status(401).json({ error: 'تایید هویت ناموفق' });
+
+  const user = await User.findOne({ telegramId: String(tgUser.id) });
+  if (!user) return res.status(404).json({ error: 'کاربر پیدا نشد' });
+
+  const now = new Date();
+  const last = user.lastCheckIn ? new Date(user.lastCheckIn) : null;
+
+  if (last && (now - last) < 24 * 60 * 60 * 1000) {
+    return res.status(400).json({ error: 'امروز قبلا جایزه رو گرفتی، فردا دوباره سر بزن' });
+  }
+
+  const withinStreakWindow = last && (now - last) < 48 * 60 * 60 * 1000;
+  user.streak = withinStreakWindow ? user.streak + 1 : 1;
+  user.lastCheckIn = now;
+
+  const DAILY_BASE = 10;
+  const bonus = DAILY_BASE + Math.min(user.streak - 1, 6) * 5;
+  user.points += bonus;
+  await user.save();
+
+  res.json({ success: true, points: user.points, streak: user.streak, bonus });
+});
+
 // POST /api/points/withdraw
-// body: { initData, pointsAmount, walletAddress }
-// نکته مهم: این فقط یک "درخواست" ثبت می‌کند. ارسال واقعی کریپتو باید توسط ادمین تایید و انجام شود
-// (یا بعدا به یک درگاه پرداخت کریپتو مثل NOWPayments وصل شود)
 router.post('/withdraw', async (req, res) => {
   try {
     const { initData, pointsAmount, walletAddress } = req.body;

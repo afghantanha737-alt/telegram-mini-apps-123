@@ -57,6 +57,24 @@ router.post('/daily-checkin', async (req, res) => {
   res.json({ success: true, points: user.points, streak: user.streak, bonus });
 });
 
+// یه پیام به ادمین (یا کانال مشخص‌شده) درباره‌ی درخواست برداشت جدید می‌فرسته
+async function notifyAdmin(text) {
+  const botToken = process.env.BOT_TOKEN;
+  const chatId = process.env.ADMIN_CHAT_ID;
+  if (!chatId) return; // اگه تنظیم نشده بود، فقط رد شو
+
+  const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
+    });
+  } catch (err) {
+    console.error('خطا در ارسال پیام به ادمین:', err.message);
+  }
+}
+
 // POST /api/points/withdraw
 router.post('/withdraw', async (req, res) => {
   try {
@@ -82,6 +100,16 @@ router.post('/withdraw', async (req, res) => {
       walletAddress,
       status: 'pending'
     });
+
+    const username = user.username ? '@' + user.username : '(بدون یوزرنیم)';
+    const message =
+      `📤 <b>درخواست برداشت جدید</b>\n\n` +
+      `👤 کاربر: ${user.firstName || ''} ${username}\n` +
+      `🆔 آیدی عددی: <code>${user.telegramId}</code>\n` +
+      `💎 مقدار پوینت: ${pointsAmount}\n` +
+      `👛 آدرس کیف پول: <code>${walletAddress}</code>\n` +
+      `🕒 زمان: ${new Date().toLocaleString('fa-IR')}`;
+    await notifyAdmin(message);
 
     res.json({ success: true, withdrawal });
   } catch (err) {

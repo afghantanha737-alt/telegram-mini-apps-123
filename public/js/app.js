@@ -5,6 +5,8 @@ try { tg.setHeaderColor && tg.setHeaderColor('#6c5ce7'); } catch (e) {}
 
 const initData = tg.initData;
 const startParam = tg.initDataUnsafe?.start_param || null;
+// DEBUG موقت: نشون‌دادن مقدار دریافتی برای پیدا کردن مشکل رفرال - بعدا حذف میشه
+setTimeout(() => tg.showAlert('DEBUG start_param: ' + JSON.stringify(startParam)), 500);
 
 let currentUser = null;
 

@@ -14,12 +14,12 @@ function checkAdmin(req, res, next) {
 
 router.use(checkAdmin);
 
-// POST /api/admin/tasks   body: { title, description, link, pointsReward }
+// POST /api/admin/tasks   body: { title, description, link, pointsReward, verifyChannel }
 router.post('/tasks', async (req, res) => {
-  const { title, description, link, pointsReward } = req.body;
+  const { title, description, link, pointsReward, verifyChannel } = req.body;
   if (!title || !pointsReward) return res.status(400).json({ error: 'عنوان و پوینت الزامی است' });
 
-  const task = await Task.create({ title, description, link, pointsReward });
+  const task = await Task.create({ title, description, link, pointsReward, verifyChannel });
   res.json({ task });
 });
 

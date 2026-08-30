@@ -67,4 +67,10 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
   res.json({ withdrawal: w });
 });
 
+// GET /api/admin/users  - لیست کاربران برای بررسی وضعیت رفرال (دیباگ)
+router.get('/users', async (req, res) => {
+  const User = require('../models/User');
+  const users = await User.find().sort({ createdAt: -1 }).select('telegramId firstName username points referralCode referredBy createdAt');
+  res.json({ users });
+});
 module.exports = router;

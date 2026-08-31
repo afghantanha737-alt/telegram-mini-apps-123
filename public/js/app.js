@@ -216,7 +216,7 @@ async function renderPoints() {
     <div class="card">
       <div class="cardTitle"><span class="emoji">📤</span> درخواست برداشت</div>
       <input id="withdrawAmount" type="number" placeholder="مقدار پوینت">
-      <input id="walletAddress" placeholder="آدرس Gram تان را از کیف پول تون‌کیپر واریز کنید">
+      <input id="walletAddress" placeholder="آدرس Gram تان را از کیف پول تون‌کیپر وارد کنید">
       <button class="action" id="withdrawBtn">ثبت درخواست برداشت</button>
     </div>
 

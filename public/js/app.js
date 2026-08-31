@@ -164,7 +164,8 @@ async function renderReferral() {
 
   const data = await api('/api/referral/me?initData=' + encodeURIComponent(initData));
   const botUsername = 'AmirAFG123_bot';
-  const link = `https://t.me/${botUsername}?startapp=${data.referralCode}`;
+  const appShortName = 'app'; // همون اسم کوتاهی که توی BotFather با /newapp ساختی
+  const link = `https://t.me/${botUsername}/${appShortName}?startapp=${data.referralCode}`;
 
   content.innerHTML = `
     <div class="card" style="text-align:center;">

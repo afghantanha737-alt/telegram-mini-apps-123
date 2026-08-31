@@ -210,13 +210,13 @@ async function renderPoints() {
     <div class="card" style="text-align:center;">
       <div class="muted">موجودی فعلی</div>
       <div style="font-size:30px;font-weight:800;margin:6px 0;">${pointsData.points.toLocaleString('fa-IR')} 💎</div>
-      <div class="muted">≈ ${pointsData.estimatedCryptoValue.toFixed(4)} واحد کریپتو</div>
+      <div class="muted">≈ ${pointsData.estimatedCryptoValue.toFixed(4)} Gram</div>
     </div>
 
     <div class="card">
       <div class="cardTitle"><span class="emoji">📤</span> درخواست برداشت</div>
       <input id="withdrawAmount" type="number" placeholder="مقدار پوینت">
-      <input id="walletAddress" placeholder="آدرس کیف پول">
+      <input id="walletAddress" placeholder="آدرس Gram تان را از کیف پول تون‌کیپر واریز کنید">
       <button class="action" id="withdrawBtn">ثبت درخواست برداشت</button>
     </div>
 

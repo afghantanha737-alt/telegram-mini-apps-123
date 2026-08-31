@@ -30,7 +30,7 @@ router.post('/enter', async (req, res) => {
       if (startParam) {
         const inviter = await User.findOne({ referralCode: startParam });
         if (inviter) {
-          const REFERRAL_BONUS = 50; // پوینت هدیه ازای هر دعوت - قابل تغییر
+          const REFERRAL_BONUS = 20; // پوینت هدیه ازای هر دعوت - قابل تغییر
           inviter.points += REFERRAL_BONUS;
           await inviter.save();
         }

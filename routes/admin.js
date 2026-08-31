@@ -92,4 +92,36 @@ router.get('/stats', async (req, res) => {
   });
 });
 
+// POST /api/admin/broadcast   body: { message }
+// برای همه‌ی کاربرانی که ربات رو استارت کردن پیام می‌فرسته
+router.post('/broadcast', async (req, res) => {
+  const { message } = req.body;
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: 'متن پیام الزامی است' });
+  }
+
+  const User = require('../models/User');
+  const users = await User.find().select('telegramId');
+  const botToken = process.env.BOT_TOKEN;
+
+  let success = 0;
+  let failed = 0;
+
+  for (const u of users) {
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: u.telegramId, text: message, parse_mode: 'HTML' })
+      });
+      const data = await r.json();
+      if (data.ok) success++; else failed++;
+    } catch (err) {
+      failed++;
+    }
+    await new Promise(resolve => setTimeout(resolve, 40));
+  }
+  res.json({ total: users.length, success, failed });
+});
+
 module.exports = router;

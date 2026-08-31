@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پنل مدیریت</title>
+<style>
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { margin:0; font-family: Tahoma, sans-serif; background:#0f1220; color:#fff; padding-bottom: 80px; }
+header { padding:16px; background: linear-gradient(135deg,#6c5ce7,#3ecf8e); font-weight:800; font-size:18px; text-align:center; }
+#loginBox { max-width:340px; margin:80px auto; padding:20px; }
+#loginBox input { width:100%; padding:12px; border-radius:10px; border:1px solid #444; background:#1a1e33; color:#fff; margin-bottom:10px; }
+#loginBox button, .action { width:100%; padding:12px; border:none; border-radius:10px; background:linear-gradient(135deg,#6c5ce7,#3ecf8e); color:#fff; font-weight:700; cursor:pointer; }
+#tabbar { display:flex; background:#171a2b; position:sticky; top:0; z-index:10; }
+#tabbar button { flex:1; padding:12px 0; background:none; border:none; color:#8a8fa3; font-size:13px; border-bottom:2px solid transparent; }
+#tabbar button.active { color:#fff; border-bottom-color:#3ecf8e; }
+#content { padding:14px; }
+.card { background:#1a1e33; border-radius:14px; padding:14px; margin-bottom:10px; }
+.row { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; font-size:13px; }
+.row b { color:#8a8fa3; font-weight:400; }
+.badge { padding:3px 9px; border-radius:20px; font-size:12px; font-weight:700; display:inline-block; }
+.badge.pending { background:rgba(246,185,59,.2); color:#f6b93b; }
+.badge.approved { background:rgba(62,207,142,.2); color:#3ecf8e; }
+.badge.rejected { background:rgba(235,77,75,.2); color:#eb4d4b; }
+.btnRow { display:flex; gap:8px; margin-top:10px; }
+.btnRow button { flex:1; padding:10px; border:none; border-radius:8px; font-weight:700; cursor:pointer; }
+.approveBtn { background:#3ecf8e; color:#08331f; }
+.rejectBtn { background:#eb4d4b; color:#fff; }
+.toggleBtn { background:#333a55; color:#fff; }
+input, textarea { width:100%; padding:10px; border-radius:8px; border:1px solid #444; background:#12152a; color:#fff; margin-bottom:8px; font-size:14px; }
+.muted { color:#8a8fa3; font-size:12px; }
+.empty { text-align:center; padding:30px; color:#8a8fa3; }
+h3 { margin:4px 0 12px; font-size:15px; }
+</style>
+</head>
+<body>
+
+<header>🛠️ پنل مدیریت مینی‌اپ</header>
+
+<div id="loginBox">
+  <p class="muted">رمز ادمین (ADMIN_SECRET) رو وارد کن:</p>
+  <input id="secretInput" type="password" placeholder="رمز ادمین">
+  <button onclick="doLogin()">ورود</button>
+</div>
+
+<div id="panel" style="display:none;">
+  <div id="tabbar">
+    <button data-tab="withdrawals" class="active">برداشت‌ها</button>
+    <button data-tab="tasks">تسک‌ها</button>
+    <button data-tab="users">کاربران</button>
+  </div>
+  <div id="content"></div>
+</div>
+
+<script>
+let SECRET = localStorage.getItem('admin_secret') || '';
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', 'x-admin-secret': SECRET, ...(options.headers || {}) }
+  });
+  return res.json();
+}
+
+function doLogin() {
+  SECRET = document.getElementById('secretInput').value.trim();
+  if (!SECRET) return;
+  localStorage.setItem('admin_secret', SECRET);
+  document.getElementById('loginBox').style.display = 'none';
+  document.getElementById('panel').style.display = 'block';
+  renderTab('withdrawals');
+}
+
+if (SECRET) {
+  document.getElementById('loginBox').style.display = 'none';
+  document.getElementById('panel').style.display = 'block';
+  renderTab('withdrawals');
+}
+
+document.querySelectorAll('#tabbar button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#tabbar button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderTab(btn.dataset.tab);
+  });
+});
+
+function renderTab(tab) {
+  if (tab === 'withdrawals') renderWithdrawals();
+  if (tab === 'tasks') renderTasks();
+  if (tab === 'users') renderUsers();
+}
+
+// ---------- برداشت‌ها ----------
+async function renderWithdrawals() {
+  const content = document.getElementById('content');
+  content.innerHTML = '<p class="muted">در حال بارگذاری...</p>';
+  const data = await api('/api/admin/withdrawals');
+  if (data.error) { content.innerHTML = `<p class="empty">خطا: ${data.error} (رمز اشتباهه؟)</p>`; return; }
+
+  const items = data.withdrawals || [];
+  if (items.length === 0) { content.innerHTML = '<div class="empty">درخواستی وجود نداره</div>'; return; }
+
+  content.innerHTML = items.map(w => `
+    <div class="card">
+      <div class="row"><b>کاربر</b><span>${w.userId}</span></div>
+      <div class="row"><b>مقدار</b><span>${w.pointsAmount} پوینت</span></div>
+      <div class="row"><b>کیف پول</b><span style="word-break:break-all;font-size:11px;">${w.walletAddress}</span></div>
+      <div class="row"><b>تاریخ</b><span>${new Date(w.createdAt).toLocaleString('fa-IR')}</span></div>
+      <div class="row"><b>وضعیت</b><span class="badge ${w.status}">${w.status === 'pending' ? 'در انتظار' : w.status === 'approved' ? 'تایید شده' : 'رد شده'}</span></div>
+      ${w.status === 'pending' ? `
+        <div class="btnRow">
+          <button class="approveBtn" onclick="processWithdrawal('${w._id}','approve')">✅ تایید</button>
+          <button class="rejectBtn" onclick="processWithdrawal('${w._id}','reject')">❌ رد</button>
+        </div>` : ''}
+    </div>
+  `).join('');
+}
+
+async function processWithdrawal(id, action) {
+  const data = await api(`/api/admin/withdrawals/${id}/${action}`, { method: 'POST' });
+  if (data.error) { alert(data.error); return; }
+  renderWithdrawals();
+}
+
+// ---------- تسک‌ها ----------
+async function renderTasks() {
+  const content = document.getElementById('content');
+  content.innerHTML = '<p class="muted">در حال بارگذاری...</p>';
+  const data = await api('/api/admin/tasks');
+  if (data.error) { content.innerHTML = `<p class="empty">خطا: ${data.error}</p>`; return; }
+
+  const items = data.tasks || [];
+
+  const formHTML = `
+    <div class="card">
+      <h3>➕ افزودن تسک جدید</h3>
+      <input id="tTitle" placeholder="عنوان تسک">
+      <input id="tDesc" placeholder="توضیح کوتاه (اختیاری)">
+      <input id="tLink" placeholder="لینک (اختیاری)">
+      <input id="tPoints" type="number" placeholder="پاداش پوینت">
+      <input id="tVerify" placeholder="یوزرنیم کانال برای بررسی خودکار (اختیاری، مثلا @channel)">
+      <button class="action" onclick="createTask()">ساخت تسک</button>
+    </div>
+  `;
+
+  const listHTML = items.length === 0 ? '<div class="empty">هنوز تسکی نساختی</div>' : items.map(t => `
+    <div class="card">
+      <div class="row"><b>عنوان</b><span>${t.title}</span></div>
+      <div class="row"><b>پاداش</b><span>${t.pointsReward} پوینت</span></div>
+      <div class="row"><b>وضعیت</b><span class="badge ${t.active ? 'approved' : 'rejected'}">${t.active ? 'فعال' : 'غیرفعال'}</span></div>
+      <div class="btnRow">
+        <button class="toggleBtn" onclick="toggleTask('${t._id}', ${!t.active})">${t.active ? 'غیرفعال کن' : 'فعال کن'}</button>
+      </div>
+    </div>
+  `).join('');
+
+  content.innerHTML = formHTML + listHTML;
+}
+
+async function createTask() {
+  const title = document.getElementById('tTitle').value.trim();
+  const description = document.getElementById('tDesc').value.trim();
+  const link = document.getElementById('tLink').value.trim();
+  const pointsReward = Number(document.getElementById('tPoints').value);
+  const verifyChannel = document.getElementById('tVerify').value.trim();
+
+  if (!title || !pointsReward) { alert('عنوان و پاداش الزامیه'); return; }
+
+  const data = await api('/api/admin/tasks', {
+    method: 'POST',
+    body: JSON.stringify({ title, description, link, pointsReward, verifyChannel })
+  });
+  if (data.error) { alert(data.error); return; }
+  renderTasks();
+}
+
+async function toggleTask(id, active) {
+  await api(`/api/admin/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) });
+  renderTasks();
+}
+
+// ---------- کاربران ----------
+async function renderUsers() {
+  const content = document.getElementById('content');
+  content.innerHTML = '<p class="muted">در حال بارگذاری...</p>';
+  const data = await api('/api/admin/users');
+  if (data.error) { content.innerHTML = `<p class="empty">خطا: ${data.error}</p>`; return; }
+
+  const items = data.users || [];
+  content.innerHTML = `<p class="muted">مجموع: ${items.length} کاربر</p>` + items.map(u => `
+    <div class="card">
+      <div class="row"><b>نام</b><span>${u.firstName || ''} ${u.username ? '@' + u.username : ''}</span></div>
+      <div class="row"><b>آیدی</b><span>${u.telegramId}</span></div>
+      <div class="row"><b>پوینت</b><span>${u.points}</span></div>
+      <div class="row"><b>دعوت‌کننده</b><span>${u.referredBy || '—'}</span></div>
+      <div class="row"><b>تاریخ عضویت</b><span>${new Date(u.createdAt).toLocaleDateString('fa-IR')}</span></div>
+    </div>
+  `).join('');
+}
+</script>
+</body>
+</html>

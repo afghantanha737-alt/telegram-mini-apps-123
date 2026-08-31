@@ -59,7 +59,6 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
     { status: 'rejected', processedAt: new Date() },
     { new: true }
   );
-  // اگر رد شد، پوینت‌ها را به کاربر برگردان
   if (w) {
     const User = require('../models/User');
     await User.findOneAndUpdate({ telegramId: w.userId }, { $inc: { points: w.pointsAmount } });
@@ -73,4 +72,24 @@ router.get('/users', async (req, res) => {
   const users = await User.find().sort({ createdAt: -1 }).select('telegramId firstName username points referralCode referredBy createdAt');
   res.json({ users });
 });
+
+// GET /api/admin/stats  - آمار کلی برای داشبورد
+router.get('/stats', async (req, res) => {
+  const User = require('../models/User');
+  const [totalUsers, totalPointsAgg, pendingCount, activeTasks, totalTasks] = await Promise.all([
+    User.countDocuments(),
+    User.aggregate([{ $group: { _id: null, sum: { $sum: '$points' } } }]),
+    Withdrawal.countDocuments({ status: 'pending' }),
+    Task.countDocuments({ active: true }),
+    Task.countDocuments()
+  ]);
+  res.json({
+    totalUsers,
+    totalPointsInCirculation: totalPointsAgg[0]?.sum || 0,
+    pendingWithdrawals: pendingCount,
+    activeTasks,
+    totalTasks
+  });
+});
+
 module.exports = router;

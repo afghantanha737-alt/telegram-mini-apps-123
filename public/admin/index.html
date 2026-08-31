@@ -48,6 +48,7 @@ h3 { margin:4px 0 12px; font-size:15px; }
     <button data-tab="withdrawals" class="active">برداشت‌ها</button>
     <button data-tab="tasks">تسک‌ها</button>
     <button data-tab="users">کاربران</button>
+    <button data-tab="broadcast">پیام همگانی</button>
   </div>
   <div id="content"></div>
 </div>
@@ -90,6 +91,7 @@ function renderTab(tab) {
   if (tab === 'withdrawals') renderWithdrawals();
   if (tab === 'tasks') renderTasks();
   if (tab === 'users') renderUsers();
+  if (tab === 'broadcast') renderBroadcast();
 }
 
 // ---------- برداشت‌ها ----------
@@ -179,6 +181,43 @@ async function createTask() {
 async function toggleTask(id, active) {
   await api(`/api/admin/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) });
   renderTasks();
+}
+
+// ---------- پیام همگانی ----------
+async function renderBroadcast() {
+  const content = document.getElementById('content');
+  content.innerHTML = `
+    <div class="card">
+      <h3>📢 ارسال پیام به همه‌ی کاربران</h3>
+      <p class="muted">این پیام برای هر کسی که ربات رو استارت کرده، مستقیم توی چت خصوصی فرستاده میشه. می‌تونی از تگ‌های ساده HTML مثل &lt;b&gt;پررنگ&lt;/b&gt; استفاده کنی.</p>
+      <textarea id="broadcastMsg" rows="6" placeholder="متن پیام رو اینجا بنویس..."></textarea>
+      <button class="action" id="broadcastBtn" onclick="sendBroadcast()">ارسال به همه</button>
+      <p id="broadcastResult" class="muted" style="margin-top:10px;"></p>
+    </div>
+  `;
+}
+
+async function sendBroadcast() {
+  const message = document.getElementById('broadcastMsg').value.trim();
+  const resultEl = document.getElementById('broadcastResult');
+  if (!message) { alert('متن پیام رو بنویس'); return; }
+  if (!confirm('مطمئنی می‌خوای این پیام برای همه‌ی کاربران فرستاده بشه؟')) return;
+
+  const btn = document.getElementById('broadcastBtn');
+  btn.disabled = true;
+  btn.innerText = 'در حال ارسال...';
+  resultEl.innerText = 'در حال ارسال، لطفا صبر کن (ممکنه چند ثانیه طول بکشه)...';
+
+  const data = await api('/api/admin/broadcast', {
+    method: 'POST',
+    body: JSON.stringify({ message })
+  });
+
+  btn.disabled = false;
+  btn.innerText = 'ارسال به همه';
+
+  if (data.error) { resultEl.innerText = 'خطا: ' + data.error; return; }
+  resultEl.innerText = `تمام شد ✅ — موفق: ${data.success} از ${data.total} (ناموفق: ${data.failed})`;
 }
 
 // ---------- کاربران ----------

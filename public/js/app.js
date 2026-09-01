@@ -5,7 +5,6 @@ try { tg.setHeaderColor && tg.setHeaderColor('#6c5ce7'); } catch (e) {}
 
 const initData = tg.initData;
 const startParam = tg.initDataUnsafe?.start_param || null;
-// DEBUG موقت: نشون‌دادن مقدار دریافتی برای پیدا کردن مشکل رفرال - بعدا حذف میشه
 
 let currentUser = null;
 
@@ -47,6 +46,34 @@ async function enterApp() {
   });
   currentUser = data.user;
   updateHeader();
+  return data;
+}
+
+function showCaptcha(question) {
+  document.getElementById('captchaOverlay').style.display = 'flex';
+  document.getElementById('captchaQuestion').innerText = question + ' = ?';
+  document.getElementById('captchaError').innerText = '';
+  document.getElementById('captchaAnswer').value = '';
+}
+
+function hideCaptcha() {
+  document.getElementById('captchaOverlay').style.display = 'none';
+}
+
+async function submitCaptcha() {
+  const answer = document.getElementById('captchaAnswer').value;
+  const data = await api('/api/auth/captcha', {
+    method: 'POST',
+    body: JSON.stringify({ initData, answer })
+  });
+  if (data.success) {
+    hideCaptcha();
+    setActiveTab('home');
+    renderHome();
+    return;
+  }
+  document.getElementById('captchaError').innerText = 'جواب اشتباه بود، دوباره امتحان کن';
+  showCaptcha(data.captchaQuestion);
 }
 
 function updateHeader() {
@@ -163,7 +190,7 @@ async function renderReferral() {
 
   const data = await api('/api/referral/me?initData=' + encodeURIComponent(initData));
   const botUsername = 'AmirAFG123_bot';
-  const appShortName = 'app'; // همون اسم کوتاهی که توی BotFather با /newapp ساختی
+  const appShortName = 'app';
   const link = `https://t.me/${botUsername}/${appShortName}?startapp=${data.referralCode}`;
 
   content.innerHTML = `
@@ -216,7 +243,7 @@ async function renderPoints() {
     <div class="card">
       <div class="cardTitle"><span class="emoji">📤</span> درخواست برداشت</div>
       <input id="withdrawAmount" type="number" placeholder="مقدار پوینت">
-      <input id="walletAddress" placeholder="آدرس Gram تان را از کیف پول تون‌کیپر وارد کنید">
+      <input id="walletAddress" placeholder="آدرس Gram تان را از کیف پول تون‌کیپر واریز کنید">
       <button class="action" id="withdrawBtn">ثبت درخواست برداشت</button>
     </div>
 
@@ -255,7 +282,11 @@ document.querySelectorAll('#tabbar button').forEach(btn => {
 });
 
 (async function init() {
-  await enterApp();
+  const data = await enterApp();
+  if (!data.captchaPassed) {
+    showCaptcha(data.captchaQuestion);
+    return;
+  }
   setActiveTab('home');
   renderHome();
 })();

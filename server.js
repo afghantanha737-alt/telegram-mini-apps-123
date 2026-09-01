@@ -15,9 +15,15 @@ app.use('/api/points', require('./routes/points'));
 app.use('/api/referral', require('./routes/referral'));
 app.use('/api/leaderboard', require('./routes/leaderboard'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/telegram', require('./routes/telegramWebhook'));
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB وصل شد'))
+  .then(() => {
+    console.log('MongoDB وصل شد');
+    const runReferralSweep = require('./utils/referralSweep');
+    setInterval(runReferralSweep, 15 * 60 * 1000);
+    runReferralSweep();
+  })
   .catch(err => console.error('خطا در اتصال به MongoDB:', err.message));
 
 const PORT = process.env.PORT || 3000;

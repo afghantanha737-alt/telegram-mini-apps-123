@@ -6,10 +6,13 @@ const userSchema = new mongoose.Schema({
   firstName: { type: String, default: '' },
   points: { type: Number, default: 0 },
   referralCode: { type: String, required: true, unique: true },
-  referredBy: { type: String, default: null }, // referralCode of the inviter
+  referredBy: { type: String, default: null },
   walletAddress: { type: String, default: '' },
   lastCheckIn: { type: Date, default: null },
   streak: { type: Number, default: 0 },
+  captchaPassed: { type: Boolean, default: false },
+  captchaExpected: { type: Number, default: null },
+  referralBonusPaid: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 

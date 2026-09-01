@@ -211,6 +211,38 @@ input::placeholder { color: #8a8fa3; }
 #tabbar button.active { color: #fff; }
 .tabIcon { font-size: 19px; }
 
+#captchaOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10,11,20,0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+.captchaBox {
+  background: #1a1e33;
+  border-radius: 18px;
+  padding: 26px 20px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+.captchaIcon { font-size: 36px; margin-bottom: 8px; }
+.captchaBox h3 { font-size: 15px; margin: 0 0 14px; font-weight: 700; }
+.captchaQ {
+  font-size: 26px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #6c5ce7, #3ecf8e);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 16px;
+}
+.captchaErr { color: #eb4d4b; font-size: 12px; margin-top: 8px; min-height: 16px; }
+
 #toast {
   position: fixed;
   bottom: 78px;

@@ -39,6 +39,74 @@ function taskIconFor(link) {
   return '🔗';
 }
 
+const WHEEL_SEGMENTS = [2, 3, 5, 7, 10, 15, 20];
+const WHEEL_COLORS = ['#6c5ce7', '#3ecf8e', '#7f7fd5', '#f6b93b', '#eb4d4b', '#00b894', '#fd79a8'];
+
+function wheelSVG() {
+  const n = WHEEL_SEGMENTS.length;
+  const anglePer = 360 / n;
+  const cx = 100, cy = 100, r = 95;
+  let paths = '';
+  let labels = '';
+
+  for (let i = 0; i < n; i++) {
+    const startAngle = i * anglePer;
+    const endAngle = startAngle + anglePer;
+    const x1 = cx + r * Math.sin(startAngle * Math.PI / 180);
+    const y1 = cy - r * Math.cos(startAngle * Math.PI / 180);
+    const x2 = cx + r * Math.sin(endAngle * Math.PI / 180);
+    const y2 = cy - r * Math.cos(endAngle * Math.PI / 180);
+    paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z" fill="${WHEEL_COLORS[i % WHEEL_COLORS.length]}" stroke="#0f1220" stroke-width="2"/>`;
+
+    const midAngle = startAngle + anglePer / 2;
+    const lx = cx + (r * 0.62) * Math.sin(midAngle * Math.PI / 180);
+    const ly = cy - (r * 0.62) * Math.cos(midAngle * Math.PI / 180);
+    labels += `<text x="${lx}" y="${ly}" fill="#fff" font-size="15" font-weight="800" text-anchor="middle" dominant-baseline="middle">${WHEEL_SEGMENTS[i]}</text>`;
+  }
+
+  return `<svg id="wheelSvg" viewBox="0 0 200 200" width="220" height="220">
+    <g id="wheelGroup" style="transform-origin: 100px 100px;">${paths}${labels}</g>
+    <circle cx="100" cy="100" r="14" fill="#0f1220" stroke="#fff" stroke-width="2"/>
+  </svg>`;
+}
+
+let wheelRotation = 0;
+
+async function doSpin() {
+  const btn = document.getElementById('spinBtn');
+  btn.disabled = true;
+  btn.innerText = 'در حال چرخش...';
+
+  const data = await api('/api/points/spin', {
+    method: 'POST',
+    body: JSON.stringify({ initData })
+  });
+
+  if (data.error) {
+    toast(data.error);
+    btn.disabled = false;
+    btn.innerText = 'بچرخون 🎯';
+    return;
+  }
+
+  const n = data.segments.length;
+  const anglePer = 360 / n;
+  const targetAngle = data.segmentIndex * anglePer + anglePer / 2;
+  const finalRotation = wheelRotation + (5 * 360) + (360 - targetAngle) - (wheelRotation % 360);
+  wheelRotation = finalRotation;
+
+  const wheelGroup = document.getElementById('wheelGroup');
+  wheelGroup.style.transition = 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
+  wheelGroup.style.transform = `rotate(${finalRotation}deg)`;
+
+  setTimeout(() => {
+    currentUser.points = data.points;
+    updateHeader();
+    toast(`🎉 ${data.won} پوینت بردی!`);
+    renderHome();
+  }, 4200);
+}
+
 async function enterApp() {
   const data = await api('/api/auth/enter', {
     method: 'POST',
@@ -107,8 +175,9 @@ async function renderHome() {
   const progress = ((data.points || 0) % 500) / 500 * 100;
 
   let streakDots = '';
+  const filled = Math.min(data.streak || 0, 7);
   for (let i = 1; i <= 7; i++) {
-    streakDots += `<div class="streakDot ${i <= (data.streak % 7 || (data.streak > 0 ? 7 : 0)) ? 'filled' : ''}"></div>`;
+    streakDots += `<div class="streakDot ${i <= filled ? 'filled' : ''}"></div>`;
   }
 
   content.innerHTML = `
@@ -119,12 +188,23 @@ async function renderHome() {
     </div>
 
     <div class="card">
-      <div class="cardTitle"><span class="emoji">🔥</span> جایزه‌ی روزانه (استریک: ${data.streak || 0} روز)</div>
+      <div class="cardTitle"><span class="emoji">🔥</span> جایزه‌ی روزانه (روز ${filled} از ۷)</div>
       <div class="streakRow">${streakDots}</div>
       <button class="action" id="checkinBtn" ${data.canCheckIn ? '' : 'disabled'}>
-        ${data.canCheckIn ? 'دریافت جایزه امروز 🎁' : 'امروز گرفتی، فردا دوباره بیا ✅'}
+        ${data.canCheckIn ? 'دریافت جایزه امروز (۲+) 🎁' : 'امروز گرفتی، فردا دوباره بیا ✅'}
       </button>
     </div>
+
+    ${data.spinAvailable ? `
+    <div class="card" id="wheelCard" style="text-align:center;">
+      <div class="cardTitle" style="justify-content:center;"><span class="emoji">🎡</span> گردونه‌ی شانس هفتگی</div>
+      <p class="muted">هفت روز پشت‌سرهم اومدی! یه چرخش رایگان داری.</p>
+      <div class="wheelWrap">
+        <div class="wheelPointer">▼</div>
+        ${wheelSVG()}
+      </div>
+      <button class="action" id="spinBtn" onclick="doSpin()">بچرخون 🎯</button>
+    </div>` : ''}
 
     <div class="card">
       <div class="cardTitle"><span class="emoji">💡</span> چطور پوینت جمع کنم؟</div>

@@ -60,6 +60,14 @@ function hideCaptcha() {
   document.getElementById('captchaOverlay').style.display = 'none';
 }
 
+function showTerms() {
+  document.getElementById('termsOverlay').style.display = 'flex';
+}
+
+function hideTerms() {
+  document.getElementById('termsOverlay').style.display = 'none';
+}
+
 async function submitCaptcha() {
   const answer = document.getElementById('captchaAnswer').value;
   const data = await api('/api/auth/captcha', {
@@ -121,6 +129,7 @@ async function renderHome() {
     <div class="card">
       <div class="cardTitle"><span class="emoji">💡</span> چطور پوینت جمع کنم؟</div>
       <div class="muted">با انجام تسک‌ها و دعوت دوستان پوینت جمع کن و اونو به کریپتو تبدیل کن.</div>
+      <div class="termsLink" onclick="showTerms()">قوانین و شرایط استفاده</div>
     </div>
   `;
 

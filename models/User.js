@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema({
   walletAddress: { type: String, default: '' },
   lastCheckIn: { type: Date, default: null },
   streak: { type: Number, default: 0 },
+  spinAvailable: { type: Boolean, default: false },
   captchaPassed: { type: Boolean, default: false },
   captchaExpected: { type: Number, default: null },
   referralBonusPaid: { type: Boolean, default: false },

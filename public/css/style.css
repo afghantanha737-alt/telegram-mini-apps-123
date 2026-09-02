@@ -186,6 +186,24 @@ input::placeholder { color: #8a8fa3; }
   100% { background-position: 0 50%; }
 }
 
+.wheelWrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin: 14px 0;
+}
+.wheelPointer {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 22px;
+  color: #f6b93b;
+  z-index: 5;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+}
+#wheelSvg { filter: drop-shadow(0 6px 16px rgba(0,0,0,0.35)); }
+
 #tabbar {
   position: fixed;
   bottom: 0;

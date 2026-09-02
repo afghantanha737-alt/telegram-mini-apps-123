@@ -25,12 +25,13 @@ router.get('/me', async (req, res) => {
     rate,
     streak: user.streak,
     canCheckIn,
-    spinAvailable: user.spinAvailable,
+    spinChances: user.spinChances,
+    totalCheckins: user.totalCheckins,
     firstName: user.firstName
   });
 });
 
-const SPIN_SEGMENTS = [2, 3, 5, 7, 10, 15, 20]; // مقادیر گردونه‌ی شانس روز هفتم
+const SPIN_SEGMENTS = [2, 3, 5, 7, 10, 15, 25]; // مقادیر گردونه‌ی شانس
 
 // POST /api/points/daily-checkin
 router.post('/daily-checkin', async (req, res) => {
@@ -48,18 +49,20 @@ router.post('/daily-checkin', async (req, res) => {
     return res.status(400).json({ error: 'امروز قبلا جایزه رو گرفتی، فردا دوباره سر بزن' });
   }
 
-  // اگه هنوز چرخوندن گردونه‌ی دور قبل رو استفاده نکرده، استریک روی ۷ می‌مونه تا اول بچرخونه
   const withinStreakWindow = last && (now - last) < 48 * 60 * 60 * 1000;
-  if (!user.spinAvailable) {
-    user.streak = withinStreakWindow ? user.streak + 1 : 1;
-    if (user.streak >= 7) {
-      user.streak = 7;
-      user.spinAvailable = true;
-    }
+  user.streak = withinStreakWindow ? user.streak + 1 : 1;
+  user.totalCheckins += 1;
+
+  let earnedSpin = false;
+  if (user.streak >= 7) {
+    user.spinChances += 1;
+    user.streak = 0;
+    earnedSpin = true;
   }
+
   user.lastCheckIn = now;
 
-  const DAILY_BASE = 2; // پاداش ثابت روزانه
+  const DAILY_BASE = 2;
   user.points += DAILY_BASE;
   await user.save();
 
@@ -68,7 +71,8 @@ router.post('/daily-checkin', async (req, res) => {
     points: user.points,
     streak: user.streak,
     bonus: DAILY_BASE,
-    spinAvailable: user.spinAvailable
+    spinChances: user.spinChances,
+    earnedSpin
   });
 });
 
@@ -81,7 +85,7 @@ router.post('/spin', async (req, res) => {
   const user = await User.findOne({ telegramId: String(tgUser.id) });
   if (!user) return res.status(404).json({ error: 'کاربر پیدا نشد' });
 
-  if (!user.spinAvailable) {
+  if (user.spinChances < 1) {
     return res.status(400).json({ error: 'چرخوندنی برات موجود نیست' });
   }
 
@@ -89,8 +93,7 @@ router.post('/spin', async (req, res) => {
   const won = SPIN_SEGMENTS[segmentIndex];
 
   user.points += won;
-  user.spinAvailable = false;
-  user.streak = 0; // چرخه‌ی جدید از فردا شروع میشه
+  user.spinChances -= 1;
   await user.save();
 
   res.json({
@@ -98,12 +101,12 @@ router.post('/spin', async (req, res) => {
     points: user.points,
     won,
     segmentIndex,
-    segments: SPIN_SEGMENTS
+    segments: SPIN_SEGMENTS,
+    spinChances: user.spinChances
   });
 });
 
 // یه پیام به ادمین (یا کانال مشخص‌شده) درباره‌ی درخواست برداشت جدید می‌فرسته
-// همراه با دو دکمه تایید/رد، و اطلاعات پیام (chatId, messageId) رو برمی‌گردونه
 async function notifyAdmin(text, withdrawalId) {
   const botToken = process.env.BOT_TOKEN;
   const chatId = process.env.ADMIN_CHAT_ID;

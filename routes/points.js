@@ -25,9 +25,12 @@ router.get('/me', async (req, res) => {
     rate,
     streak: user.streak,
     canCheckIn,
+    spinAvailable: user.spinAvailable,
     firstName: user.firstName
   });
 });
+
+const SPIN_SEGMENTS = [2, 3, 5, 7, 10, 15, 20]; // مقادیر گردونه‌ی شانس روز هفتم
 
 // POST /api/points/daily-checkin
 router.post('/daily-checkin', async (req, res) => {
@@ -45,33 +48,92 @@ router.post('/daily-checkin', async (req, res) => {
     return res.status(400).json({ error: 'امروز قبلا جایزه رو گرفتی، فردا دوباره سر بزن' });
   }
 
+  // اگه هنوز چرخوندن گردونه‌ی دور قبل رو استفاده نکرده، استریک روی ۷ می‌مونه تا اول بچرخونه
   const withinStreakWindow = last && (now - last) < 48 * 60 * 60 * 1000;
-  user.streak = withinStreakWindow ? user.streak + 1 : 1;
+  if (!user.spinAvailable) {
+    user.streak = withinStreakWindow ? user.streak + 1 : 1;
+    if (user.streak >= 7) {
+      user.streak = 7;
+      user.spinAvailable = true;
+    }
+  }
   user.lastCheckIn = now;
 
-  const DAILY_BASE = 10;
-  const bonus = DAILY_BASE + Math.min(user.streak - 1, 6) * 5;
-  user.points += bonus;
+  const DAILY_BASE = 2; // پاداش ثابت روزانه
+  user.points += DAILY_BASE;
   await user.save();
 
-  res.json({ success: true, points: user.points, streak: user.streak, bonus });
+  res.json({
+    success: true,
+    points: user.points,
+    streak: user.streak,
+    bonus: DAILY_BASE,
+    spinAvailable: user.spinAvailable
+  });
+});
+
+// POST /api/points/spin
+router.post('/spin', async (req, res) => {
+  const { initData } = req.body;
+  const tgUser = verifyTelegramInitData(initData, process.env.BOT_TOKEN);
+  if (!tgUser) return res.status(401).json({ error: 'تایید هویت ناموفق' });
+
+  const user = await User.findOne({ telegramId: String(tgUser.id) });
+  if (!user) return res.status(404).json({ error: 'کاربر پیدا نشد' });
+
+  if (!user.spinAvailable) {
+    return res.status(400).json({ error: 'چرخوندنی برات موجود نیست' });
+  }
+
+  const segmentIndex = Math.floor(Math.random() * SPIN_SEGMENTS.length);
+  const won = SPIN_SEGMENTS[segmentIndex];
+
+  user.points += won;
+  user.spinAvailable = false;
+  user.streak = 0; // چرخه‌ی جدید از فردا شروع میشه
+  await user.save();
+
+  res.json({
+    success: true,
+    points: user.points,
+    won,
+    segmentIndex,
+    segments: SPIN_SEGMENTS
+  });
 });
 
 // یه پیام به ادمین (یا کانال مشخص‌شده) درباره‌ی درخواست برداشت جدید می‌فرسته
-async function notifyAdmin(text) {
+// همراه با دو دکمه تایید/رد، و اطلاعات پیام (chatId, messageId) رو برمی‌گردونه
+async function notifyAdmin(text, withdrawalId) {
   const botToken = process.env.BOT_TOKEN;
   const chatId = process.env.ADMIN_CHAT_ID;
-  if (!chatId) return; // اگه تنظیم نشده بود، فقط رد شو
+  if (!chatId) return null;
 
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
   try {
-    await fetch(url, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '✅ تایید', callback_data: `approve_${withdrawalId}` },
+            { text: '❌ رد', callback_data: `reject_${withdrawalId}` }
+          ]]
+        }
+      })
     });
+    const data = await res.json();
+    if (data.ok) {
+      return { chatId: String(data.result.chat.id), messageId: data.result.message_id };
+    }
+    return null;
   } catch (err) {
     console.error('خطا در ارسال پیام به ادمین:', err.message);
+    return null;
   }
 }
 
@@ -109,7 +171,13 @@ router.post('/withdraw', async (req, res) => {
       `💎 مقدار پوینت: ${pointsAmount}\n` +
       `👛 آدرس کیف پول: <code>${walletAddress}</code>\n` +
       `🕒 زمان: ${new Date().toLocaleString('fa-IR')}`;
-    await notifyAdmin(message);
+
+    const sent = await notifyAdmin(message, withdrawal._id);
+    if (sent) {
+      withdrawal.adminChatId = sent.chatId;
+      withdrawal.adminMessageId = sent.messageId;
+      await withdrawal.save();
+    }
 
     res.json({ success: true, withdrawal });
   } catch (err) {

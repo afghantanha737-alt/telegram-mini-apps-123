@@ -211,6 +211,62 @@ input::placeholder { color: #8a8fa3; }
 #tabbar button.active { color: #fff; }
 .tabIcon { font-size: 19px; }
 
+#termsOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10,11,20,0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2100;
+  padding: 20px;
+}
+.termsBox {
+  background: #1a1e33;
+  border-radius: 18px;
+  max-width: 400px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+.termsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.termsHeader h3 { margin: 0; font-size: 15px; }
+.closeBtn {
+  background: rgba(255,255,255,0.08);
+  border: none;
+  color: #fff;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+}
+.termsBody {
+  padding: 16px 18px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.9;
+}
+.termsBody p { margin: 0 0 14px; opacity: 0.9; }
+.termsBody b { color: #3ecf8e; }
+.termsLink {
+  display: block;
+  text-align: center;
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.6;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 #captchaOverlay {
   position: fixed;
   inset: 0;

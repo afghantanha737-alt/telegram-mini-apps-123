@@ -222,7 +222,8 @@ input::placeholder { color: #8a8fa3; }
   padding: 20px;
 }
 .termsBox {
-  background: #1a1e33;
+  background: #ffffff;
+  color: #1a1a1a;
   border-radius: 18px;
   max-width: 400px;
   width: 100%;
@@ -236,13 +237,13 @@ input::placeholder { color: #8a8fa3; }
   align-items: center;
   justify-content: space-between;
   padding: 16px 18px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(0,0,0,0.1);
 }
-.termsHeader h3 { margin: 0; font-size: 15px; }
+.termsHeader h3 { margin: 0; font-size: 15px; color: #1a1a1a; }
 .closeBtn {
-  background: rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.06);
   border: none;
-  color: #fff;
+  color: #1a1a1a;
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -254,9 +255,10 @@ input::placeholder { color: #8a8fa3; }
   overflow-y: auto;
   font-size: 13px;
   line-height: 1.9;
+  color: #1a1a1a;
 }
-.termsBody p { margin: 0 0 14px; opacity: 0.9; }
-.termsBody b { color: #3ecf8e; }
+.termsBody p { margin: 0 0 14px; opacity: 1; color: #1a1a1a; }
+.termsBody b { color: #6c5ce7; }
 .termsLink {
   display: block;
   text-align: center;

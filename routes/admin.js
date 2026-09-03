@@ -123,5 +123,20 @@ router.post('/broadcast', async (req, res) => {
   }
   res.json({ total: users.length, success, failed });
 });
+// POST /api/admin/grant-spins   body: { telegramId, amount }
+router.post('/grant-spins', async (req, res) => {
+  const { telegramId, amount } = req.body;
+  if (!telegramId || !amount) return res.status(400).json({ error: 'آیدی و مقدار الزامی است' });
+
+  const User = require('../models/User');
+  const user = await User.findOneAndUpdate(
+    { telegramId: String(telegramId) },
+    { $inc: { spinChances: Number(amount) } },
+    { new: true }
+  );
+  if (!user) return res.status(404).json({ error: 'کاربر پیدا نشد' });
+
+  res.json({ success: true, telegramId: user.telegramId, spinChances: user.spinChances });
+});
 
 module.exports = router;

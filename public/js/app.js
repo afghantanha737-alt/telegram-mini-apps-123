@@ -39,13 +39,13 @@ function taskIconFor(link) {
   return '🔗';
 }
 
-const WHEEL_SEGMENTS = [2, 3, 5, 7, 10, 15, 20];
-const WHEEL_COLORS = ['#6c5ce7', '#3ecf8e', '#7f7fd5', '#f6b93b', '#eb4d4b', '#00b894', '#fd79a8'];
+const WHEEL_SEGMENTS = [2, 3, 5, 7, 10, 15, 25];
+const FLAG_COLORS = ['#111111', '#D32011', '#046A38'];
 
 function wheelSVG() {
   const n = WHEEL_SEGMENTS.length;
   const anglePer = 360 / n;
-  const cx = 100, cy = 100, r = 95;
+  const cx = 100, cy = 100, r = 88;
   let paths = '';
   let labels = '';
 
@@ -56,17 +56,22 @@ function wheelSVG() {
     const y1 = cy - r * Math.cos(startAngle * Math.PI / 180);
     const x2 = cx + r * Math.sin(endAngle * Math.PI / 180);
     const y2 = cy - r * Math.cos(endAngle * Math.PI / 180);
-    paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z" fill="${WHEEL_COLORS[i % WHEEL_COLORS.length]}" stroke="#0f1220" stroke-width="2"/>`;
+    paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z" fill="${FLAG_COLORS[i % 3]}" stroke="#D4AF37" stroke-width="1.5"/>`;
 
     const midAngle = startAngle + anglePer / 2;
-    const lx = cx + (r * 0.62) * Math.sin(midAngle * Math.PI / 180);
-    const ly = cy - (r * 0.62) * Math.cos(midAngle * Math.PI / 180);
-    labels += `<text x="${lx}" y="${ly}" fill="#fff" font-size="15" font-weight="800" text-anchor="middle" dominant-baseline="middle">${WHEEL_SEGMENTS[i]}</text>`;
+    const lx = cx + (r * 0.6) * Math.sin(midAngle * Math.PI / 180);
+    const ly = cy - (r * 0.6) * Math.cos(midAngle * Math.PI / 180);
+    labels += `<text x="${lx}" y="${ly}" fill="#fff" font-size="16" font-weight="800" text-anchor="middle" dominant-baseline="middle">
+      <tspan x="${lx}" dy="-4">${WHEEL_SEGMENTS[i]}</tspan>
+      <tspan x="${lx}" dy="13" font-size="8" font-weight="500">Points</tspan>
+    </text>`;
   }
 
-  return `<svg id="wheelSvg" viewBox="0 0 200 200" width="220" height="220">
+  return `<svg id="wheelSvg" viewBox="0 0 200 200" width="230" height="230">
+    <circle cx="100" cy="100" r="97" fill="none" stroke="#D4AF37" stroke-width="7"/>
     <g id="wheelGroup" style="transform-origin: 100px 100px;">${paths}${labels}</g>
-    <circle cx="100" cy="100" r="14" fill="#0f1220" stroke="#fff" stroke-width="2"/>
+    <circle cx="100" cy="100" r="18" fill="#111" stroke="#D4AF37" stroke-width="3"/>
+    <text x="100" y="106" font-size="18" text-anchor="middle">⭐</text>
   </svg>`;
 }
 
@@ -85,7 +90,7 @@ async function doSpin() {
   if (data.error) {
     toast(data.error);
     btn.disabled = false;
-    btn.innerText = 'بچرخون 🎯';
+    btn.innerText = '🎡 SPIN NOW';
     return;
   }
 
@@ -173,11 +178,21 @@ async function renderHome() {
 
   const level = Math.floor((data.points || 0) / 500) + 1;
   const progress = ((data.points || 0) % 500) / 500 * 100;
+  const streakInCycle = Math.min(data.streak || 0, 7);
+  const canSpin = (data.spinChances || 0) > 0;
 
-  let streakDots = '';
-  const filled = Math.min(data.streak || 0, 7);
+  let streakItems = '';
   for (let i = 1; i <= 7; i++) {
-    streakDots += `<div class="streakDot ${i <= filled ? 'filled' : ''}"></div>`;
+    const done = i <= streakInCycle;
+    const isGiftDay = i === 7;
+    streakItems += `
+      <div class="streakItem">
+        <div class="streakCircle ${done ? 'done' : ''} ${isGiftDay && !done ? 'gift' : ''}">
+          ${done ? '✓' : (isGiftDay ? '🎁' : i)}
+        </div>
+        <div class="streakLabel">${i}</div>
+        <div class="streakPts">${isGiftDay ? '+2+Spin' : '+2'}</div>
+      </div>`;
   }
 
   content.innerHTML = `
@@ -187,24 +202,53 @@ async function renderHome() {
       <div class="muted">${500 - (data.points % 500)} پوینت تا سطح بعدی</div>
     </div>
 
+    <div class="luckyCard">
+      <div class="luckyTitle">🎡 Lucky Spinner 🇦🇫</div>
+      <div class="luckySubtitle">Spin &amp; Win Points</div>
+
+      <div class="statsRow">
+        <div class="statBox points">
+          <div class="label">My Points</div>
+          <div class="value">${data.points.toLocaleString('fa-IR')}</div>
+        </div>
+        <div class="statBox checkin">
+          <div class="label">Today</div>
+          <div class="value">${data.canCheckIn ? '+2' : '✓'}</div>
+        </div>
+        <div class="statBox streak">
+          <div class="label">Streak</div>
+          <div class="value">${streakInCycle} Days</div>
+        </div>
+      </div>
+
+      <div class="wheelWrap">
+        <div class="wheelPointer"></div>
+        ${wheelSVG()}
+      </div>
+
+      <button class="spinNowBtn" id="spinBtn" onclick="doSpin()" ${canSpin ? '' : 'disabled'}>
+        🎯 SPIN NOW
+      </button>
+      <div class="muted" style="margin-top:6px;font-size:11px;">Tap the button to spin</div>
+
+      <div class="chancesRow">
+        <div class="chancesLeft">🎫 Available Chances: ${data.spinChances || 0}</div>
+        <div class="muted" style="font-size:10px;">Complete 7-day check-in for +1 chance</div>
+      </div>
+    </div>
+
     <div class="card">
-      <div class="cardTitle"><span class="emoji">🔥</span> جایزه‌ی روزانه (روز ${filled} از ۷)</div>
-      <div class="streakRow">${streakDots}</div>
+      <div class="cardTitle"><span class="emoji">🔥</span> 7-Day Streak <span class="muted" style="margin-right:auto;font-weight:400;">🏆 Total: ${data.totalCheckins || 0} Days</span></div>
+      <div class="streakGrid">${streakItems}</div>
       <button class="action" id="checkinBtn" ${data.canCheckIn ? '' : 'disabled'}>
         ${data.canCheckIn ? 'دریافت جایزه امروز (۲+) 🎁' : 'امروز گرفتی، فردا دوباره بیا ✅'}
       </button>
     </div>
 
-    ${data.spinAvailable ? `
-    <div class="card" id="wheelCard" style="text-align:center;">
-      <div class="cardTitle" style="justify-content:center;"><span class="emoji">🎡</span> گردونه‌ی شانس هفتگی</div>
-      <p class="muted">هفت روز پشت‌سرهم اومدی! یه چرخش رایگان داری.</p>
-      <div class="wheelWrap">
-        <div class="wheelPointer">▼</div>
-        ${wheelSVG()}
-      </div>
-      <button class="action" id="spinBtn" onclick="doSpin()">بچرخون 🎯</button>
-    </div>` : ''}
+    <div class="card howItWorks">
+      <div class="cardTitle"><span class="emoji">🎁</span> چطور کار می‌کنه؟</div>
+      <div class="muted">هر روز چک‌این کن و ۲ پوینت بگیر. بعد از ۷ روز پشت‌سرهم، یه چرخش رایگان گردونه به دست میاری.</div>
+    </div>
 
     <div class="card">
       <div class="cardTitle"><span class="emoji">💡</span> چطور پوینت جمع کنم؟</div>
@@ -223,7 +267,7 @@ async function renderHome() {
       if (res.error) { toast(res.error); return; }
       currentUser.points = res.points;
       updateHeader();
-      toast(`${res.bonus}+ پوینت گرفتی! 🎉`);
+      toast(res.earnedSpin ? '🎉 هفت روز کامل شد! یه چرخش رایگان گرفتی' : `${res.bonus}+ پوینت گرفتی! 🎉`);
       renderHome();
     });
   }

@@ -284,18 +284,19 @@ input::placeholder { color: #8a8fa3; }
 }
 #tabbar button {
   flex: 1;
-  padding: 10px 0 8px;
+  padding: 9px 0 8px;
   border: none;
   background: none;
-  font-size: 11px;
+  font-size: 9.5px;
   color: #8a8fa3;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
+  white-space: nowrap;
 }
 #tabbar button.active { color: #fff; }
-.tabIcon { font-size: 19px; }
+.tabIcon { font-size: 17px; }
 
 #termsOverlay {
   position: fixed;

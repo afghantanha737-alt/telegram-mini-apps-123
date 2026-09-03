@@ -108,7 +108,7 @@ async function doSpin() {
     currentUser.points = data.points;
     updateHeader();
     toast(`🎉 ${data.won} پوینت بردی!`);
-    renderHome();
+    renderDailyCheck();
   }, 4200);
 }
 
@@ -175,9 +175,35 @@ async function renderHome() {
   content.innerHTML = skeletonHTML(2);
 
   const data = await api('/api/points/me?initData=' + encodeURIComponent(initData));
-
   const level = Math.floor((data.points || 0) / 500) + 1;
   const progress = ((data.points || 0) % 500) / 500 * 100;
+
+  content.innerHTML = `
+    <div class="card">
+      <div class="cardTitle"><span class="emoji">🏆</span> سطح ${level}</div>
+      <div class="progressWrap"><div class="progressBar" style="width:${progress}%"></div></div>
+      <div class="muted">${500 - (data.points % 500)} پوینت تا سطح بعدی</div>
+    </div>
+
+    <div class="card" style="text-align:center;">
+      <div style="font-size:34px;">👋</div>
+      <div style="font-weight:800;font-size:16px;margin:6px 0;">به مینی‌اپ خوش اومدی</div>
+      <div class="muted">از تب «Daily Check» جایزه‌ی روزانه بگیر، از «Tasks» تسک انجام بده و از «Wallet» موجودیت رو ببین.</div>
+    </div>
+
+    <div class="card">
+      <div class="cardTitle"><span class="emoji">💡</span> چطور پوینت جمع کنم؟</div>
+      <div class="muted">با انجام تسک‌ها و دعوت دوستان پوینت جمع کن و اونو به کریپتو تبدیل کن.</div>
+      <div class="termsLink" onclick="showTerms()">قوانین و شرایط استفاده</div>
+    </div>
+  `;
+}
+
+async function renderDailyCheck() {
+  const content = document.getElementById('content');
+  content.innerHTML = skeletonHTML(2);
+
+  const data = await api('/api/points/me?initData=' + encodeURIComponent(initData));
   const streakInCycle = Math.min(data.streak || 0, 7);
   const canSpin = (data.spinChances || 0) > 0;
 
@@ -196,12 +222,6 @@ async function renderHome() {
   }
 
   content.innerHTML = `
-    <div class="card">
-      <div class="cardTitle"><span class="emoji">🏆</span> سطح ${level}</div>
-      <div class="progressWrap"><div class="progressBar" style="width:${progress}%"></div></div>
-      <div class="muted">${500 - (data.points % 500)} پوینت تا سطح بعدی</div>
-    </div>
-
     <div class="luckyCard">
       <div class="luckyTitle">🎡 Lucky Spinner 🇦🇫</div>
       <div class="luckySubtitle">Spin &amp; Win Points</div>
@@ -246,14 +266,8 @@ async function renderHome() {
     </div>
 
     <div class="card howItWorks">
-      <div class="cardTitle"><span class="emoji">🎁</span> چطور کار می‌کنه؟</div>
-      <div class="muted">هر روز چک‌این کن و ۲ پوینت بگیر. بعد از ۷ روز پشت‌سرهم، یه چرخش رایگان گردونه به دست میاری.</div>
-    </div>
-
-    <div class="card">
-      <div class="cardTitle"><span class="emoji">💡</span> چطور پوینت جمع کنم؟</div>
-      <div class="muted">با انجام تسک‌ها و دعوت دوستان پوینت جمع کن و اونو به کریپتو تبدیل کن.</div>
-      <div class="termsLink" onclick="showTerms()">قوانین و شرایط استفاده</div>
+      <div class="cardTitle"><span class="emoji">🎁</span> How it works?</div>
+      <div class="muted">Check-in daily to earn 2 Points.<br>Complete 7 days to get 1 spin chance.</div>
     </div>
   `;
 
@@ -268,7 +282,7 @@ async function renderHome() {
       currentUser.points = res.points;
       updateHeader();
       toast(res.earnedSpin ? '🎉 هفت روز کامل شد! یه چرخش رایگان گرفتی' : `${res.bonus}+ پوینت گرفتی! 🎉`);
-      renderHome();
+      renderDailyCheck();
     });
   }
 }
@@ -317,25 +331,42 @@ async function completeTask(taskId) {
   renderTasks();
 }
 
-async function renderReferral() {
+async function renderProfile() {
   const content = document.getElementById('content');
-  content.innerHTML = skeletonHTML(2);
+  content.innerHTML = skeletonHTML(3);
 
-  const data = await api('/api/referral/me?initData=' + encodeURIComponent(initData));
+  const [pointsData, referralData] = await Promise.all([
+    api('/api/points/me?initData=' + encodeURIComponent(initData)),
+    api('/api/referral/me?initData=' + encodeURIComponent(initData))
+  ]);
+
   const botUsername = 'AmirAFG123_bot';
   const appShortName = 'app';
-  const link = `https://t.me/${botUsername}/${appShortName}?startapp=${data.referralCode}`;
+  const link = `https://t.me/${botUsername}/${appShortName}?startapp=${referralData.referralCode}`;
 
   content.innerHTML = `
     <div class="card" style="text-align:center;">
+      <div id="profileAvatar" style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#6c5ce7,#3ecf8e);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;margin:0 auto 10px;">${(currentUser?.firstName || 'A')[0].toUpperCase()}</div>
+      <div style="font-weight:800;font-size:16px;">${currentUser?.firstName || 'دوست من'}</div>
+      <div class="muted">آیدی عددی: ${currentUser?.telegramId || '-'}</div>
+      <div class="muted">موجودی: ${pointsData.points.toLocaleString('fa-IR')} پوینت</div>
+    </div>
+
+    <div class="card" style="text-align:center;">
       <div style="font-size:34px;">👥</div>
-      <div style="font-size:26px;font-weight:800;margin:4px 0;">${data.invitedCount}</div>
+      <div style="font-size:26px;font-weight:800;margin:4px 0;">${referralData.invitedCount}</div>
       <div class="muted">نفر با لینک تو عضو شدن</div>
     </div>
+
     <div class="card">
       <div class="cardTitle"><span class="emoji">🔗</span> لینک اختصاصی تو</div>
       <input readonly value="${link}" onclick="this.select()">
       <button class="action" id="shareBtn">اشتراک‌گذاری لینک</button>
+    </div>
+
+    <div class="card">
+      <div class="cardTitle"><span class="emoji">📜</span> اطلاعات و قوانین</div>
+      <div class="termsLink" onclick="showTerms()">قوانین و شرایط استفاده</div>
     </div>
   `;
 
@@ -349,7 +380,7 @@ async function renderReferral() {
   });
 }
 
-async function renderPoints() {
+async function renderWallet() {
   const content = document.getElementById('content');
   content.innerHTML = skeletonHTML(3);
 
@@ -402,10 +433,10 @@ async function requestWithdraw() {
   toast('درخواست برداشت ثبت شد ✅');
   currentUser.points -= pointsAmount;
   updateHeader();
-  renderPoints();
+  renderWallet();
 }
 
-const tabs = { home: renderHome, tasks: renderTasks, referral: renderReferral, points: renderPoints };
+const tabs = { home: renderHome, tasks: renderTasks, daily: renderDailyCheck, wallet: renderWallet, profile: renderProfile };
 
 document.querySelectorAll('#tabbar button').forEach(btn => {
   btn.addEventListener('click', () => {

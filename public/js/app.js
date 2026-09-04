@@ -1,3 +1,8 @@
+/* =========================================================
+   PREMIUM TELEGRAM MINI APP
+   Main Application Logic
+   ========================================================= */
+
 const tg = window.Telegram.WebApp;
 
 tg.expand();
@@ -12,16 +17,120 @@ const initData = tg.initData;
 const startParam = tg.initDataUnsafe?.start_param || null;
 
 let currentUser = null;
+let wheelRotation = 0;
+
+/* =========================================================
+   THEME
+   ========================================================= */
+
+function applyTheme(theme) {
+  const selectedTheme = theme === 'light' ? 'light' : 'dark';
+
+  document.documentElement.dataset.theme = selectedTheme;
+  localStorage.setItem('miniAppTheme', selectedTheme);
+
+  try {
+    if (selectedTheme === 'light') {
+      tg.setHeaderColor && tg.setHeaderColor('#f5f6f8');
+      tg.setBackgroundColor && tg.setBackgroundColor('#f5f6f8');
+    } else {
+      tg.setHeaderColor && tg.setHeaderColor('#050609');
+      tg.setBackgroundColor && tg.setBackgroundColor('#050609');
+    }
+  } catch (e) {}
+
+  updateThemeUI();
+}
+
+function getTheme() {
+  return localStorage.getItem('miniAppTheme') || 'dark';
+}
+
+function toggleTheme() {
+  const nextTheme = getTheme() === 'dark' ? 'light' : 'dark';
+
+  applyTheme(nextTheme);
+
+  if (typeof haptic === 'function') {
+    haptic('light');
+  }
+
+  toast(
+    nextTheme === 'light'
+      ? '☀️ حالت سفید فعال شد'
+      : '🌙 حالت سیاه فعال شد'
+  );
+}
+
+function updateThemeUI() {
+  const theme = getTheme();
+
+  const label = document.getElementById('themeLabel');
+  const icon = document.getElementById('themeIcon');
+  const toggle = document.getElementById('themeToggle');
+
+  if (label) {
+    label.innerText =
+      theme === 'light' ? 'حالت سفید' : 'حالت سیاه';
+  }
+
+  if (icon) {
+    icon.innerText = theme === 'light' ? '☀️' : '🌙';
+  }
+
+  if (toggle) {
+    toggle.setAttribute(
+      'aria-label',
+      theme === 'light'
+        ? 'تغییر به حالت سیاه'
+        : 'تغییر به حالت سفید'
+    );
+  }
+}
+
+/* Apply saved theme immediately */
+applyTheme(getTheme());
+
+
+/* =========================================================
+   HAPTIC
+   ========================================================= */
+
+function haptic(type = 'light') {
+  try {
+    if (!tg.HapticFeedback) return;
+
+    if (type === 'success') {
+      tg.HapticFeedback.notificationOccurred('success');
+      return;
+    }
+
+    if (type === 'error') {
+      tg.HapticFeedback.notificationOccurred('error');
+      return;
+    }
+
+    if (type === 'warning') {
+      tg.HapticFeedback.notificationOccurred('warning');
+      return;
+    }
+
+    tg.HapticFeedback.impactOccurred(type);
+  } catch (e) {}
+}
+
 
 /* =========================================================
    HELPERS
-========================================================= */
+   ========================================================= */
 
 function toast(msg) {
   const box = document.getElementById('toast');
+
   if (!box) return;
 
   const el = document.createElement('div');
+
   el.className = 'toastMsg';
   el.innerText = msg;
 
@@ -35,21 +144,6 @@ function toast(msg) {
   }, 2600);
 }
 
-function haptic(type = 'light') {
-  try {
-    if (tg.HapticFeedback) {
-      if (type === 'success') {
-        tg.HapticFeedback.notificationOccurred('success');
-      } else if (type === 'error') {
-        tg.HapticFeedback.notificationOccurred('error');
-      } else if (type === 'warning') {
-        tg.HapticFeedback.notificationOccurred('warning');
-      } else {
-        tg.HapticFeedback.impactOccurred(type);
-      }
-    }
-  } catch (e) {}
-}
 
 async function api(path, options = {}) {
   try {
@@ -61,15 +155,7 @@ async function api(path, options = {}) {
       }
     });
 
-    let data;
-
-    try {
-      data = await res.json();
-    } catch (e) {
-      return {
-        error: 'پاسخ نامعتبر از سرور دریافت شد'
-      };
-    }
+    const data = await res.json();
 
     if (!res.ok && !data.error) {
       data.error = 'خطایی در ارتباط با سرور رخ داد';
@@ -80,10 +166,11 @@ async function api(path, options = {}) {
     console.error('API Error:', error);
 
     return {
-      error: 'اتصال به سرور برقرار نشد'
+      error: 'اتصال به سرور برقرار نشد. دوباره تلاش کن.'
     };
   }
 }
+
 
 function skeletonHTML(n = 3) {
   return Array(n)
@@ -91,14 +178,14 @@ function skeletonHTML(n = 3) {
     .join('');
 }
 
+
 function formatPoints(value) {
   return Number(value || 0).toLocaleString('fa-IR');
 }
 
-function escapeHTML(value) {
-  if (value === null || value === undefined) return '';
 
-  return String(value)
+function escapeHTML(value) {
+  return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -106,9 +193,10 @@ function escapeHTML(value) {
     .replace(/'/g, '&#039;');
 }
 
+
 /* =========================================================
    TASK ICON
-========================================================= */
+   ========================================================= */
 
 function taskIconFor(link) {
   if (!link) return '🎯';
@@ -138,9 +226,10 @@ function taskIconFor(link) {
   return '🔗';
 }
 
+
 /* =========================================================
-   LUCKY SPINNER
-========================================================= */
+   WHEEL
+   ========================================================= */
 
 const WHEEL_SEGMENTS = [2, 3, 5, 7, 10, 15, 25];
 
@@ -149,6 +238,7 @@ const FLAG_COLORS = [
   '#D32011',
   '#046A38'
 ];
+
 
 function wheelSVG() {
   const n = WHEEL_SEGMENTS.length;
@@ -169,36 +259,36 @@ function wheelSVG() {
       cx +
       r *
         Math.sin(
-          (startAngle * Math.PI) / 180
+          startAngle * Math.PI / 180
         );
 
     const y1 =
       cy -
       r *
         Math.cos(
-          (startAngle * Math.PI) / 180
+          startAngle * Math.PI / 180
         );
 
     const x2 =
       cx +
       r *
         Math.sin(
-          (endAngle * Math.PI) / 180
+          endAngle * Math.PI / 180
         );
 
     const y2 =
       cy -
       r *
         Math.cos(
-          (endAngle * Math.PI) / 180
+          endAngle * Math.PI / 180
         );
 
     paths += `
       <path
         d="M${cx},${cy}
-        L${x1},${y1}
-        A${r},${r} 0 0,1 ${x2},${y2}
-        Z"
+           L${x1},${y1}
+           A${r},${r} 0 0,1 ${x2},${y2}
+           Z"
         fill="${FLAG_COLORS[i % 3]}"
         stroke="#D4AF37"
         stroke-width="1.5"
@@ -210,18 +300,16 @@ function wheelSVG() {
 
     const lx =
       cx +
-      r *
-        0.6 *
+      (r * 0.6) *
         Math.sin(
-          (midAngle * Math.PI) / 180
+          midAngle * Math.PI / 180
         );
 
     const ly =
       cy -
-      r *
-        0.6 *
+      (r * 0.6) *
         Math.cos(
-          (midAngle * Math.PI) / 180
+          midAngle * Math.PI / 180
         );
 
     labels += `
@@ -234,10 +322,7 @@ function wheelSVG() {
         text-anchor="middle"
         dominant-baseline="middle"
       >
-        <tspan
-          x="${lx}"
-          dy="-4"
-        >
+        <tspan x="${lx}" dy="-4">
           ${WHEEL_SEGMENTS[i]}
         </tspan>
 
@@ -259,6 +344,7 @@ function wheelSVG() {
       viewBox="0 0 200 200"
       width="230"
       height="230"
+      aria-label="Lucky Spinner"
     >
       <circle
         cx="100"
@@ -298,7 +384,10 @@ function wheelSVG() {
   `;
 }
 
-let wheelRotation = 0;
+
+/* =========================================================
+   SPIN
+   ========================================================= */
 
 async function doSpin() {
   const btn = document.getElementById('spinBtn');
@@ -318,8 +407,8 @@ async function doSpin() {
   });
 
   if (data.error) {
-    haptic('error');
     toast(data.error);
+    haptic('error');
 
     btn.disabled = false;
     btn.innerText = '🎡 SPIN NOW';
@@ -327,20 +416,9 @@ async function doSpin() {
     return;
   }
 
-  if (
-    !data.segments ||
-    !Array.isArray(data.segments) ||
-    typeof data.segmentIndex !== 'number'
-  ) {
-    toast('اطلاعات چرخش نامعتبر است');
-
-    btn.disabled = false;
-    btn.innerText = '🎡 SPIN NOW';
-
-    return;
-  }
-
-  const n = data.segments.length;
+  const n =
+    data.segments?.length ||
+    WHEEL_SEGMENTS.length;
 
   const anglePer = 360 / n;
 
@@ -350,7 +428,7 @@ async function doSpin() {
 
   const finalRotation =
     wheelRotation +
-    5 * 360 +
+    (5 * 360) +
     (360 - targetAngle) -
     (wheelRotation % 360);
 
@@ -369,8 +447,7 @@ async function doSpin() {
 
   setTimeout(() => {
     if (currentUser) {
-      currentUser.points =
-        Number(data.points || 0);
+      currentUser.points = data.points;
     }
 
     updateHeader();
@@ -385,9 +462,10 @@ async function doSpin() {
   }, 4200);
 }
 
+
 /* =========================================================
    AUTH
-========================================================= */
+   ========================================================= */
 
 async function enterApp() {
   const data = await api('/api/auth/enter', {
@@ -399,7 +477,8 @@ async function enterApp() {
   });
 
   if (data.error) {
-    throw new Error(data.error);
+    toast(data.error);
+    return data;
   }
 
   currentUser = data.user;
@@ -409,9 +488,10 @@ async function enterApp() {
   return data;
 }
 
+
 /* =========================================================
    CAPTCHA
-========================================================= */
+   ========================================================= */
 
 function showCaptcha(question) {
   const overlay =
@@ -426,13 +506,13 @@ function showCaptcha(question) {
   const answerEl =
     document.getElementById('captchaAnswer');
 
-  if (!overlay) return;
-
-  overlay.style.display = 'flex';
+  if (overlay) {
+    overlay.style.display = 'flex';
+  }
 
   if (questionEl) {
     questionEl.innerText =
-      question + ' = ?';
+      `${question} = ?`;
   }
 
   if (errorEl) {
@@ -441,9 +521,13 @@ function showCaptcha(question) {
 
   if (answerEl) {
     answerEl.value = '';
-    setTimeout(() => answerEl.focus(), 100);
+
+    setTimeout(() => {
+      answerEl.focus();
+    }, 100);
   }
 }
+
 
 function hideCaptcha() {
   const overlay =
@@ -454,42 +538,13 @@ function hideCaptcha() {
   }
 }
 
-function showTerms() {
-  const overlay =
-    document.getElementById('termsOverlay');
-
-  if (overlay) {
-    overlay.style.display = 'flex';
-  }
-}
-
-function hideTerms() {
-  const overlay =
-    document.getElementById('termsOverlay');
-
-  if (overlay) {
-    overlay.style.display = 'none';
-  }
-}
 
 async function submitCaptcha() {
   const answerEl =
     document.getElementById('captchaAnswer');
 
-  const errorEl =
-    document.getElementById('captchaError');
-
   const answer =
-    answerEl?.value?.trim() || '';
-
-  if (!answer) {
-    if (errorEl) {
-      errorEl.innerText =
-        'جواب را وارد کن';
-    }
-
-    return;
-  }
+    answerEl?.value || '';
 
   const data = await api('/api/auth/captcha', {
     method: 'POST',
@@ -505,7 +560,6 @@ async function submitCaptcha() {
     haptic('success');
 
     setActiveTab('home');
-
     renderHome();
 
     return;
@@ -513,42 +567,68 @@ async function submitCaptcha() {
 
   haptic('error');
 
+  const errorEl =
+    document.getElementById('captchaError');
+
   if (errorEl) {
     errorEl.innerText =
       'جواب اشتباه بود، دوباره امتحان کن';
   }
 
-  if (data.captchaQuestion) {
-    showCaptcha(data.captchaQuestion);
+  showCaptcha(data.captchaQuestion);
+}
+
+
+/* =========================================================
+   TERMS
+   ========================================================= */
+
+function showTerms() {
+  const overlay =
+    document.getElementById('termsOverlay');
+
+  if (overlay) {
+    overlay.style.display = 'flex';
   }
 }
 
+
+function hideTerms() {
+  const overlay =
+    document.getElementById('termsOverlay');
+
+  if (overlay) {
+    overlay.style.display = 'none';
+  }
+}
+
+
 /* =========================================================
    HEADER
-========================================================= */
+   ========================================================= */
 
 function updateHeader() {
   const name =
     currentUser?.firstName ||
     'دوست من';
 
-  const greetName =
+  const greet =
     document.getElementById('greetName');
 
-  const pointsDisplay =
+  const points =
     document.getElementById('pointsDisplay');
 
   const avatar =
     document.getElementById('avatar');
 
-  if (greetName) {
-    greetName.innerText =
+  if (greet) {
+    greet.innerText =
       `سلام ${name} 👋`;
   }
 
-  if (pointsDisplay) {
-    pointsDisplay.innerText =
-      `${formatPoints(currentUser?.points || 0)} پوینت`;
+  if (points) {
+    points.innerText =
+      `${formatPoints(currentUser?.points)} پوینت`;
   }
 
   if (avatar) {
@@ -557,9 +637,10 @@ function updateHeader() {
   }
 }
 
+
 /* =========================================================
-   TAB NAVIGATION
-========================================================= */
+   NAVIGATION
+   ========================================================= */
 
 function setActiveTab(tab) {
   document
@@ -572,9 +653,10 @@ function setActiveTab(tab) {
     });
 }
 
+
 /* =========================================================
-   HOME — PREMIUM DASHBOARD
-========================================================= */
+   HOME
+   ========================================================= */
 
 async function renderHome() {
   const content =
@@ -584,488 +666,366 @@ async function renderHome() {
 
   content.innerHTML = `
     <div class="homeLoading">
-      <div class="skeleton homeSkeletonHero"></div>
+      <div class="homeSkeletonHero"></div>
 
       <div class="homeSkeletonGrid">
-        <div class="skeleton homeSkeletonSmall"></div>
-        <div class="skeleton homeSkeletonSmall"></div>
+        <div class="homeSkeletonSmall"></div>
+        <div class="homeSkeletonSmall"></div>
       </div>
 
-      <div class="skeleton homeSkeletonSection"></div>
+      <div class="homeSkeletonSection"></div>
     </div>
   `;
 
-  try {
-    const data = await api(
-      '/api/points/me?initData=' +
-        encodeURIComponent(initData)
-    );
+  const data = await api(
+    '/api/points/me?initData=' +
+    encodeURIComponent(initData)
+  );
 
-    if (data.error) {
-      throw new Error(data.error);
-    }
-
-    const points =
-      Number(data.points || 0);
-
-    const level =
-      Math.floor(points / 500) + 1;
-
-    const currentLevelPoints =
-      points % 500;
-
-    const progress =
-      Math.min(
-        100,
-        (currentLevelPoints / 500) * 100
-      );
-
-    const pointsToNextLevel =
-      points === 0
-        ? 500
-        : 500 - currentLevelPoints;
-
-    const streak =
-      Number(data.streak || 0);
-
-    const totalCheckins =
-      Number(data.totalCheckins || 0);
-
+  if (data.error) {
     content.innerHTML = `
-      <!-- HERO BALANCE -->
+      <div class="emptyState">
+        <span class="emoji">⚠️</span>
+        ${escapeHTML(data.error)}
+      </div>
+    `;
 
-      <section class="homeHero reveal">
+    return;
+  }
 
-        <div class="heroGlow"></div>
+  const points =
+    Number(data.points || 0);
 
-        <div class="homeHeroTop">
+  const level =
+    Math.floor(points / 500) + 1;
 
-          <div>
-            <div class="heroEyebrow">
-              موجودی شما
-            </div>
+  const currentLevelPoints =
+    points % 500;
 
-            <div class="heroBalance">
-              ${formatPoints(points)}
-            </div>
+  const progress =
+    (currentLevelPoints / 500) * 100;
 
-            <div class="heroCurrency">
-              POINTS
-            </div>
-          </div>
+  const remaining =
+    500 - currentLevelPoints;
 
-          <div class="heroCoin">
-            <span>✦</span>
-          </div>
+  content.innerHTML = `
+    <section class="homeHero reveal">
+      <div class="heroGlow"></div>
 
-        </div>
-
-        <div class="levelArea">
-
-          <div class="levelTop">
-
-            <div class="levelName">
-              LEVEL ${level}
-            </div>
-
-            <div class="levelProgressText">
-              ${Math.round(progress)}%
-            </div>
-
-          </div>
-
-          <div class="levelTrack">
-            <div
-              class="levelTrackFill"
-              style="width:${progress}%"
-            ></div>
-          </div>
-
-          <div class="levelBottom">
-
-            <span>
-              ${formatPoints(currentLevelPoints)} / 500
-            </span>
-
-            <span>
-              ${formatPoints(pointsToNextLevel)}
-              پوینت تا Level ${level + 1}
-            </span>
-
-          </div>
-
-        </div>
-
-      </section>
-
-
-      <!-- QUICK STATS -->
-
-      <section class="homeStats reveal">
-
-        <button
-          type="button"
-          class="homeStatCard"
-          onclick="setActiveTab('daily'); renderDailyCheck();"
-        >
-
-          <div class="homeStatIcon streakIcon">
-            🔥
-          </div>
-
-          <div class="homeStatInfo">
-
-            <span class="homeStatLabel">
-              Streak
-            </span>
-
-            <strong>
-              ${formatPoints(streak)}
-              <small>روز</small>
-            </strong>
-
-          </div>
-
-          <span class="homeStatArrow">
-            ›
-          </span>
-
-        </button>
-
-
-        <button
-          type="button"
-          class="homeStatCard"
-          onclick="setActiveTab('daily'); renderDailyCheck();"
-        >
-
-          <div class="homeStatIcon dailyIcon">
-            🎁
-          </div>
-
-          <div class="homeStatInfo">
-
-            <span class="homeStatLabel">
-              Daily Reward
-            </span>
-
-            <strong>
-              ${data.canCheckIn ? '+2' : '✓'}
-              <small>
-                ${data.canCheckIn ? 'پوینت' : 'گرفته شد'}
-              </small>
-            </strong>
-
-          </div>
-
-          <span class="homeStatArrow">
-            ›
-          </span>
-
-        </button>
-
-      </section>
-
-
-      <!-- WELCOME -->
-
-      <section class="homeWelcome reveal">
-
-        <div class="homeWelcomeIcon">
-          ✨
-        </div>
-
-        <div class="homeWelcomeContent">
-
-          <h2>
-            آماده‌ای پوینت جمع کنی؟
-          </h2>
-
-          <p>
-            هر روز برگرد، تسک انجام بده و با دعوت دوستان پاداشت رو بیشتر کن.
-          </p>
-
-        </div>
-
-      </section>
-
-
-      <!-- EARN MORE -->
-
-      <section class="homeSection reveal">
-
-        <div class="homeSectionHeader">
-
-          <div>
-
-            <span class="sectionEyebrow">
-              EARN MORE
-            </span>
-
-            <h3>
-              راه‌های کسب پوینت
-            </h3>
-
-          </div>
-
-        </div>
-
-
-        <div class="earningList">
-
-          <button
-            type="button"
-            class="earningItem"
-            onclick="setActiveTab('daily'); renderDailyCheck();"
-          >
-
-            <div class="earningIcon earningGold">
-              🎡
-            </div>
-
-            <div class="earningContent">
-
-              <strong>
-                جایزه روزانه
-              </strong>
-
-              <span>
-                هر روز Check-in کن و شانس Spin بگیر
-              </span>
-
-            </div>
-
-            <div class="earningArrow">
-              ›
-            </div>
-
-          </button>
-
-
-          <button
-            type="button"
-            class="earningItem"
-            onclick="setActiveTab('tasks'); renderTasks();"
-          >
-
-            <div class="earningIcon earningPurple">
-              ✓
-            </div>
-
-            <div class="earningContent">
-
-              <strong>
-                انجام تسک‌ها
-              </strong>
-
-              <span>
-                تسک‌های فعال را انجام بده و پوینت بگیر
-              </span>
-
-            </div>
-
-            <div class="earningArrow">
-              ›
-            </div>
-
-          </button>
-
-
-          <button
-            type="button"
-            class="earningItem"
-            onclick="setActiveTab('profile'); renderProfile();"
-          >
-
-            <div class="earningIcon earningBlue">
-              👥
-            </div>
-
-            <div class="earningContent">
-
-              <strong>
-                دعوت دوستان
-              </strong>
-
-              <span>
-                دوستانت را دعوت کن و تیم خودت را بساز
-              </span>
-
-            </div>
-
-            <div class="earningArrow">
-              ›
-            </div>
-
-          </button>
-
-        </div>
-
-      </section>
-
-
-      <!-- USER JOURNEY -->
-
-      <section class="homeSection reveal">
-
-        <div class="homeSectionHeader">
-
-          <div>
-
-            <span class="sectionEyebrow">
-              YOUR JOURNEY
-            </span>
-
-            <h3>
-              فعالیت شما
-            </h3>
-
-          </div>
-
-        </div>
-
-
-        <div class="journeyCard">
-
-          <div class="journeyRow">
-
-            <div class="journeyIcon">
-              🔥
-            </div>
-
-            <div class="journeyText">
-
-              <strong>
-                مجموع Check-in
-              </strong>
-
-              <span>
-                روزهایی که برگشتی
-              </span>
-
-            </div>
-
-            <div class="journeyValue">
-              ${formatPoints(totalCheckins)}
-            </div>
-
-          </div>
-
-
-          <div class="journeyDivider"></div>
-
-
-          <div class="journeyRow">
-
-            <div class="journeyIcon">
-              ⭐
-            </div>
-
-            <div class="journeyText">
-
-              <strong>
-                سطح فعلی
-              </strong>
-
-              <span>
-                با 500 پوینت وارد سطح بعد شو
-              </span>
-
-            </div>
-
-            <div class="journeyValue">
-              ${level}
-            </div>
-
-          </div>
-
-        </div>
-
-      </section>
-
-
-      <!-- START GUIDE -->
-
-      <section class="homeInfo reveal">
-
-        <div class="homeInfoIcon">
-          💡
-        </div>
-
+      <div class="homeHeroTop">
         <div>
+          <div class="heroEyebrow">
+            موجودی فعلی
+          </div>
+
+          <div class="heroBalance">
+            ${formatPoints(points)}
+            <span class="heroCurrency">
+              POINTS
+            </span>
+          </div>
+        </div>
+
+        <div class="heroCoin">
+          💎
+        </div>
+      </div>
+
+      <div class="levelArea">
+        <div class="levelTop">
+          <span>
+            Level ${level}
+          </span>
+
+          <span>
+            ${formatPoints(currentLevelPoints)} / 500
+          </span>
+        </div>
+
+        <div class="levelTrack">
+          <div
+            class="levelTrackFill"
+            style="width:${progress}%"
+          ></div>
+        </div>
+
+        <div class="levelBottom">
+          <span class="levelName">
+            سطح ${level}
+          </span>
+
+          <span class="levelProgressText">
+            ${formatPoints(remaining)}
+            پوینت تا سطح بعد
+          </span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="homeStats reveal">
+      <button
+        class="homeStatCard"
+        data-home-tab="daily"
+      >
+        <div class="homeStatIcon streakIcon">
+          🔥
+        </div>
+
+        <div class="homeStatInfo">
+          <span class="homeStatLabel">
+            Streak
+          </span>
 
           <strong>
-            چطور شروع کنم؟
+            ${formatPoints(data.streak || 0)}
+            روز
           </strong>
-
-          <p>
-            اول جایزه روزانه‌ات را بگیر، بعد تسک‌ها را انجام بده و در نهایت دوستانت را دعوت کن.
-          </p>
-
         </div>
 
-      </section>
+        <span class="homeStatArrow">
+          ←
+        </span>
+      </button>
 
-
-      <!-- TERMS -->
 
       <button
-        type="button"
-        class="homeTerms"
+        class="homeStatCard"
+        data-home-tab="daily"
+      >
+        <div class="homeStatIcon dailyIcon">
+          🎁
+        </div>
+
+        <div class="homeStatInfo">
+          <span class="homeStatLabel">
+            Daily Check
+          </span>
+
+          <strong>
+            ${data.canCheckIn ? '+2' : '✓'}
+          </strong>
+        </div>
+
+        <span class="homeStatArrow">
+          ←
+        </span>
+      </button>
+    </section>
+
+
+    <section class="homeWelcome reveal">
+      <div class="homeWelcomeIcon">
+        ✨
+      </div>
+
+      <div class="homeWelcomeContent">
+        <strong>
+          به مینی‌اپ خوش اومدی
+        </strong>
+
+        <p>
+          تسک انجام بده، دوستانت رو دعوت کن
+          و هر روز جایزه بگیر.
+        </p>
+      </div>
+    </section>
+
+
+    <section class="homeSection reveal">
+      <div class="homeSectionHeader">
+        <div>
+          <span class="sectionEyebrow">
+            EARN MORE
+          </span>
+
+          <h3>
+            چطور پوینت جمع کنم؟
+          </h3>
+        </div>
+      </div>
+
+      <div class="earningList">
+
+        <button
+          class="earningItem"
+          data-home-tab="tasks"
+        >
+          <div class="earningIcon earningPurple">
+            ✓
+          </div>
+
+          <div class="earningContent">
+            <strong>
+              انجام تسک‌ها
+            </strong>
+
+            <span>
+              با انجام تسک‌ها پوینت بگیر
+            </span>
+          </div>
+
+          <span class="earningArrow">
+            ←
+          </span>
+        </button>
+
+
+        <button
+          class="earningItem"
+          data-home-tab="profile"
+        >
+          <div class="earningIcon earningGold">
+            👥
+          </div>
+
+          <div class="earningContent">
+            <strong>
+              دعوت دوستان
+            </strong>
+
+            <span>
+              دوستانت را دعوت کن و جایزه بگیر
+            </span>
+          </div>
+
+          <span class="earningArrow">
+            ←
+          </span>
+        </button>
+
+
+        <button
+          class="earningItem"
+          data-home-tab="daily"
+        >
+          <div class="earningIcon earningBlue">
+            🎡
+          </div>
+
+          <div class="earningContent">
+            <strong>
+              Lucky Spinner
+            </strong>
+
+            <span>
+              هر روز Check-in کن و Spin بگیر
+            </span>
+          </div>
+
+          <span class="earningArrow">
+            ←
+          </span>
+        </button>
+
+      </div>
+    </section>
+
+
+    <section class="journeyCard reveal">
+      <div class="journeyRow">
+        <div class="journeyIcon">
+          🎯
+        </div>
+
+        <div class="journeyText">
+          <strong>
+            مسیر تو
+          </strong>
+
+          <span>
+            ادامه بده تا به سطح بعدی برسی
+          </span>
+        </div>
+
+        <div class="journeyValue">
+          ${level}
+        </div>
+      </div>
+
+      <div class="journeyDivider"></div>
+
+      <div class="journeyRow">
+        <div class="journeyIcon">
+          💎
+        </div>
+
+        <div class="journeyText">
+          <strong>
+            مجموع پوینت
+          </strong>
+
+          <span>
+            موجودی فعلی حساب
+          </span>
+        </div>
+
+        <div class="journeyValue">
+          ${formatPoints(points)}
+        </div>
+      </div>
+    </section>
+
+
+    <section class="homeInfo reveal">
+      <div class="homeInfoIcon">
+        💡
+      </div>
+
+      <div>
+        <strong>
+          یک نکته
+        </strong>
+
+        <p>
+          هر روز وارد برنامه شو تا Streak خودت
+          را حفظ کنی و شانس Spin بیشتری بگیری.
+        </p>
+      </div>
+    </section>
+
+
+    <div class="homeTerms">
+      <button
+        class="termsLink"
         onclick="showTerms()"
       >
         قوانین و شرایط استفاده
       </button>
-    `;
+    </div>
+  `;
 
-    requestAnimationFrame(() => {
-      content
-        .querySelectorAll('.reveal')
-        .forEach((element, index) => {
-          setTimeout(() => {
-            element.classList.add('visible');
-          }, index * 55);
-        });
+  document
+    .querySelectorAll('[data-home-tab]')
+    .forEach(button => {
+      button.addEventListener(
+        'click',
+        () => {
+          const tab =
+            button.dataset.homeTab;
+
+          setActiveTab(tab);
+
+          if (tabs[tab]) {
+            tabs[tab]();
+          }
+        }
+      );
     });
 
-  } catch (error) {
-    console.error(
-      'Home render error:',
-      error
-    );
-
-    content.innerHTML = `
-      <div class="emptyState">
-
-        <div class="emptyStateIcon">
-          ⚠️
-        </div>
-
-        <div class="emptyStateTitle">
-          دریافت اطلاعات ناموفق بود
-        </div>
-
-        <div class="emptyStateText">
-          اتصال اینترنت را بررسی کن و دوباره تلاش کن.
-        </div>
-
-        <button
-          type="button"
-          class="action"
-          style="margin-top:16px;"
-          onclick="renderHome()"
-        >
-          تلاش دوباره
-        </button>
-
-      </div>
-    `;
-  }
+  requestAnimationFrame(() => {
+    document
+      .querySelectorAll('.reveal')
+      .forEach(el => {
+        el.classList.add('visible');
+      });
+  });
 }
+
 
 /* =========================================================
    DAILY CHECK
-========================================================= */
+   ========================================================= */
 
 async function renderDailyCheck() {
   const content =
@@ -1078,34 +1038,14 @@ async function renderDailyCheck() {
 
   const data = await api(
     '/api/points/me?initData=' +
-      encodeURIComponent(initData)
+    encodeURIComponent(initData)
   );
 
   if (data.error) {
     content.innerHTML = `
       <div class="emptyState">
-
-        <div class="emptyStateIcon">
-          ⚠️
-        </div>
-
-        <div class="emptyStateTitle">
-          خطا در دریافت اطلاعات
-        </div>
-
-        <div class="emptyStateText">
-          ${escapeHTML(data.error)}
-        </div>
-
-        <button
-          type="button"
-          class="action"
-          style="margin-top:16px;"
-          onclick="renderDailyCheck()"
-        >
-          تلاش دوباره
-        </button>
-
+        <span class="emoji">⚠️</span>
+        ${escapeHTML(data.error)}
       </div>
     `;
 
@@ -1113,13 +1053,10 @@ async function renderDailyCheck() {
   }
 
   const streakInCycle =
-    Math.min(
-      Number(data.streak || 0),
-      7
-    );
+    Math.min(data.streak || 0, 7);
 
   const canSpin =
-    Number(data.spinChances || 0) > 0;
+    (data.spinChances || 0) > 0;
 
   let streakItems = '';
 
@@ -1133,11 +1070,11 @@ async function renderDailyCheck() {
     streakItems += `
       <div class="streakItem">
 
-        <div
-          class="streakCircle
+        <div class="
+          streakCircle
           ${done ? 'done' : ''}
-          ${isGiftDay && !done ? 'gift' : ''}"
-        >
+          ${isGiftDay && !done ? 'gift' : ''}
+        ">
           ${
             done
               ? '✓'
@@ -1170,11 +1107,9 @@ async function renderDailyCheck() {
         Spin &amp; Win Points
       </div>
 
-
       <div class="statsRow">
 
         <div class="statBox points">
-
           <div class="label">
             My Points
           </div>
@@ -1182,12 +1117,10 @@ async function renderDailyCheck() {
           <div class="value">
             ${formatPoints(data.points)}
           </div>
-
         </div>
 
 
         <div class="statBox checkin">
-
           <div class="label">
             Today
           </div>
@@ -1195,12 +1128,10 @@ async function renderDailyCheck() {
           <div class="value">
             ${data.canCheckIn ? '+2' : '✓'}
           </div>
-
         </div>
 
 
         <div class="statBox streak">
-
           <div class="label">
             Streak
           </div>
@@ -1208,18 +1139,14 @@ async function renderDailyCheck() {
           <div class="value">
             ${streakInCycle} Days
           </div>
-
         </div>
 
       </div>
 
 
       <div class="wheelWrap">
-
         <div class="wheelPointer"></div>
-
         ${wheelSVG()}
-
       </div>
 
 
@@ -1232,28 +1159,21 @@ async function renderDailyCheck() {
         🎯 SPIN NOW
       </button>
 
-      <div
-        class="muted"
-        style="margin-top:6px;font-size:11px;"
-      >
+      <div class="spinHint">
         Tap the button to spin
       </div>
 
 
       <div class="chancesRow">
-
         <div class="chancesLeft">
           🎫 Available Chances:
           ${data.spinChances || 0}
         </div>
 
-        <div
-          class="muted"
-          style="font-size:10px;"
-        >
-          Complete 7-day check-in for +1 chance
+        <div class="muted tiny">
+          Complete 7-day check-in
+          for +1 chance
         </div>
-
       </div>
 
     </div>
@@ -1262,28 +1182,22 @@ async function renderDailyCheck() {
     <div class="card">
 
       <div class="cardTitle">
-
-        <span class="emoji">
-          🔥
-        </span>
+        <span class="emoji">🔥</span>
 
         7-Day Streak
 
         <span
-          class="muted"
-          style="margin-right:auto;font-weight:400;"
+          class="muted streakTotal"
         >
           🏆 Total:
           ${data.totalCheckins || 0}
           Days
         </span>
-
       </div>
 
       <div class="streakGrid">
         ${streakItems}
       </div>
-
 
       <button
         class="action"
@@ -1303,13 +1217,8 @@ async function renderDailyCheck() {
     <div class="card howItWorks">
 
       <div class="cardTitle">
-
-        <span class="emoji">
-          🎁
-        </span>
-
+        <span class="emoji">🎁</span>
         How it works?
-
       </div>
 
       <div class="muted">
@@ -1342,8 +1251,8 @@ async function renderDailyCheck() {
         );
 
         if (res.error) {
-          haptic('error');
           toast(res.error);
+          haptic('error');
 
           btn.disabled = false;
 
@@ -1352,7 +1261,7 @@ async function renderDailyCheck() {
 
         if (currentUser) {
           currentUser.points =
-            Number(res.points || 0);
+            res.points;
         }
 
         updateHeader();
@@ -1362,7 +1271,7 @@ async function renderDailyCheck() {
         toast(
           res.earnedSpin
             ? '🎉 هفت روز کامل شد! یه چرخش رایگان گرفتی'
-            : `${res.bonus || 2}+ پوینت گرفتی! 🎉`
+            : `${res.bonus}+ پوینت گرفتی! 🎉`
         );
 
         renderDailyCheck();
@@ -1371,9 +1280,10 @@ async function renderDailyCheck() {
   }
 }
 
+
 /* =========================================================
    TASKS
-========================================================= */
+   ========================================================= */
 
 async function renderTasks() {
   const content =
@@ -1386,34 +1296,14 @@ async function renderTasks() {
 
   const data = await api(
     '/api/tasks?initData=' +
-      encodeURIComponent(initData)
+    encodeURIComponent(initData)
   );
 
   if (data.error) {
     content.innerHTML = `
       <div class="emptyState">
-
-        <div class="emptyStateIcon">
-          ⚠️
-        </div>
-
-        <div class="emptyStateTitle">
-          خطا در دریافت تسک‌ها
-        </div>
-
-        <div class="emptyStateText">
-          ${escapeHTML(data.error)}
-        </div>
-
-        <button
-          type="button"
-          class="action"
-          style="margin-top:16px;"
-          onclick="renderTasks()"
-        >
-          تلاش دوباره
-        </button>
-
+        <span class="emoji">⚠️</span>
+        ${escapeHTML(data.error)}
       </div>
     `;
 
@@ -1426,17 +1316,13 @@ async function renderTasks() {
   if (tasks.length === 0) {
     content.innerHTML = `
       <div class="emptyState">
-
-        <span class="emoji">
-          🗒️
-        </span>
+        <span class="emoji">🗒️</span>
 
         فعلا تسکی وجود نداره
 
         <br>
 
         بعدا دوباره سر بزن
-
       </div>
     `;
 
@@ -1444,104 +1330,79 @@ async function renderTasks() {
   }
 
   content.innerHTML =
-    tasks
-      .map(task => {
+    tasks.map(task => `
+      <div class="card taskCard">
 
-        const taskId =
-          escapeHTML(task._id);
+        <div class="taskRow">
 
-        const title =
-          escapeHTML(task.title);
+          <div class="taskIcon">
+            ${taskIconFor(task.link)}
+          </div>
 
-        const description =
-          escapeHTML(
-            task.description || ''
-          );
+          <div class="taskInfo">
 
-        const link =
-          escapeHTML(
-            task.link || ''
-          );
-
-        return `
-          <div class="card">
-
-            <div class="taskRow">
-
-              <div class="taskIcon">
-                ${taskIconFor(task.link)}
-              </div>
-
-              <div class="taskInfo">
-
-                <div class="title">
-                  ${title}
-                </div>
-
-                <div class="desc">
-                  ${description}
-                </div>
-
-                <div class="rewardBadge">
-                  +${formatPoints(task.pointsReward)}
-                  پوینت
-                </div>
-
-              </div>
-
+            <div class="title">
+              ${escapeHTML(task.title)}
             </div>
 
+            <div class="desc">
+              ${escapeHTML(task.description || '')}
+            </div>
 
-            ${
-              link
-                ? `
-                  <a
-                    href="${link}"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style="display:block;margin-top:10px;"
-                  >
-                    <button
-                      class="secondary"
-                      style="width:100%;"
-                    >
-                      باز کردن لینک
-                    </button>
-                  </a>
-                `
-                : ''
-            }
-
-
-            <div style="margin-top:8px;">
-
-              <button
-                class="action"
-                ${
-                  task.completed
-                    ? 'disabled'
-                    : ''
-                }
-                onclick="completeTask('${taskId}')"
-              >
-                ${
-                  task.completed
-                    ? 'انجام شده ✅'
-                    : 'انجام دادم'
-                }
-              </button>
-
+            <div class="rewardBadge">
+              +${formatPoints(task.pointsReward)}
+              پوینت
             </div>
 
           </div>
-        `;
-      })
-      .join('');
+
+        </div>
+
+
+        ${
+          task.link
+            ? `
+              <a
+                href="${escapeHTML(task.link)}"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="taskLink"
+              >
+                <button
+                  class="secondary"
+                  type="button"
+                >
+                  باز کردن لینک
+                </button>
+              </a>
+            `
+            : ''
+        }
+
+
+        <div class="taskAction">
+          <button
+            class="action"
+            ${task.completed ? 'disabled' : ''}
+            onclick="completeTask('${task._id}')"
+          >
+            ${
+              task.completed
+                ? 'انجام شده ✅'
+                : 'انجام دادم'
+            }
+          </button>
+        </div>
+
+      </div>
+    `)
+    .join('');
 }
+
 
 async function completeTask(taskId) {
   const data = await api(
-    `/api/tasks/${encodeURIComponent(taskId)}/complete`,
+    `/api/tasks/${taskId}/complete`,
     {
       method: 'POST',
       body: JSON.stringify({
@@ -1551,31 +1412,30 @@ async function completeTask(taskId) {
   );
 
   if (data.error) {
-    haptic('error');
     toast(data.error);
+    haptic('error');
 
     return;
   }
 
   if (currentUser) {
     currentUser.points =
-      Number(data.points || 0);
+      data.points;
   }
 
   updateHeader();
 
   haptic('success');
 
-  toast(
-    'پوینت اضافه شد! 🎉'
-  );
+  toast('پوینت اضافه شد! 🎉');
 
   renderTasks();
 }
 
+
 /* =========================================================
    PROFILE
-========================================================= */
+   ========================================================= */
 
 async function renderProfile() {
   const content =
@@ -1584,7 +1444,7 @@ async function renderProfile() {
   if (!content) return;
 
   content.innerHTML =
-    skeletonHTML(3);
+    skeletonHTML(4);
 
   const [
     pointsData,
@@ -1592,12 +1452,12 @@ async function renderProfile() {
   ] = await Promise.all([
     api(
       '/api/points/me?initData=' +
-        encodeURIComponent(initData)
+      encodeURIComponent(initData)
     ),
 
     api(
       '/api/referral/me?initData=' +
-        encodeURIComponent(initData)
+      encodeURIComponent(initData)
     )
   ]);
 
@@ -1607,24 +1467,8 @@ async function renderProfile() {
   ) {
     content.innerHTML = `
       <div class="emptyState">
-
-        <div class="emptyStateIcon">
-          ⚠️
-        </div>
-
-        <div class="emptyStateTitle">
-          دریافت اطلاعات ناموفق بود
-        </div>
-
-        <button
-          type="button"
-          class="action"
-          style="margin-top:16px;"
-          onclick="renderProfile()"
-        >
-          تلاش دوباره
-        </button>
-
+        <span class="emoji">⚠️</span>
+        خطا در دریافت اطلاعات پروفایل
       </div>
     `;
 
@@ -1637,53 +1481,37 @@ async function renderProfile() {
   const appShortName =
     'app';
 
-  const referralCode =
-    referralData.referralCode || '';
-
   const link =
-    `https://t.me/${botUsername}/${appShortName}?startapp=${referralCode}`;
+    `https://t.me/${botUsername}/${appShortName}?startapp=${referralData.referralCode}`;
 
   const firstName =
     currentUser?.firstName ||
     'دوست من';
 
+  const theme =
+    getTheme();
+
   content.innerHTML = `
-    <div
-      class="card"
-      style="text-align:center;"
-    >
+
+    <div class="profileHero">
 
       <div
         id="profileAvatar"
-        style="
-          width:64px;
-          height:64px;
-          border-radius:50%;
-          background:linear-gradient(135deg,#8B5CF6,#F5B942);
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          font-size:26px;
-          font-weight:800;
-          margin:0 auto 10px;
-        "
+        class="profileAvatar"
       >
         ${(firstName[0] || 'A').toUpperCase()}
       </div>
 
-      <div
-        style="font-weight:800;font-size:16px;"
-      >
+      <div class="profileName">
         ${escapeHTML(firstName)}
       </div>
 
-      <div class="muted">
+      <div class="profileId">
         آیدی عددی:
         ${escapeHTML(currentUser?.telegramId || '-')}
       </div>
 
-      <div class="muted">
-        موجودی:
+      <div class="profileBalance">
         ${formatPoints(pointsData.points)}
         پوینت
       </div>
@@ -1691,22 +1519,104 @@ async function renderProfile() {
     </div>
 
 
-    <div
-      class="card"
-      style="text-align:center;"
-    >
+    <div class="profileStats">
 
-      <div style="font-size:34px;">
-        👥
+      <div class="profileStat">
+        <span class="profileStatIcon">
+          💎
+        </span>
+
+        <strong>
+          ${formatPoints(pointsData.points)}
+        </strong>
+
+        <small>
+          موجودی
+        </small>
       </div>
 
-      <div
-        style="
-          font-size:26px;
-          font-weight:800;
-          margin:4px 0;
-        "
+
+      <div class="profileStat">
+        <span class="profileStatIcon">
+          👥
+        </span>
+
+        <strong>
+          ${formatPoints(referralData.invitedCount)}
+        </strong>
+
+        <small>
+          دعوت شده
+        </small>
+      </div>
+
+    </div>
+
+
+    <!-- APPEARANCE -->
+
+    <div class="appearanceCard">
+
+      <div class="appearanceInfo">
+
+        <div
+          class="appearanceIcon"
+          id="themeIcon"
+        >
+          ${theme === 'light' ? '☀️' : '🌙'}
+        </div>
+
+        <div class="appearanceText">
+
+          <strong>
+            ظاهر برنامه
+          </strong>
+
+          <span id="themeLabel">
+            ${
+              theme === 'light'
+                ? 'حالت سفید'
+                : 'حالت سیاه'
+            }
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <button
+        id="themeToggle"
+        class="themeToggle"
+        type="button"
+        aria-label="${
+          theme === 'light'
+            ? 'تغییر به حالت سیاه'
+            : 'تغییر به حالت سفید'
+        }"
       >
+
+        <span class="themeSwitchTrack">
+
+          <span class="themeSwitchThumb">
+            ${theme === 'light' ? '☀️' : '🌙'}
+          </span>
+
+        </span>
+
+      </button>
+
+    </div>
+
+
+    <div class="card referralCard">
+
+      <div class="cardTitle">
+        <span class="emoji">👥</span>
+        دعوت دوستان
+      </div>
+
+      <div class="referralBigNumber">
         ${formatPoints(referralData.invitedCount)}
       </div>
 
@@ -1720,24 +1630,20 @@ async function renderProfile() {
     <div class="card">
 
       <div class="cardTitle">
-
-        <span class="emoji">
-          🔗
-        </span>
-
+        <span class="emoji">🔗</span>
         لینک اختصاصی تو
-
       </div>
 
       <input
         readonly
         value="${escapeHTML(link)}"
         onclick="this.select()"
-      />
+      >
 
       <button
         class="action"
         id="shareBtn"
+        type="button"
       >
         اشتراک‌گذاری لینک
       </button>
@@ -1748,24 +1654,36 @@ async function renderProfile() {
     <div class="card">
 
       <div class="cardTitle">
-
-        <span class="emoji">
-          📜
-        </span>
-
+        <span class="emoji">📜</span>
         اطلاعات و قوانین
-
       </div>
 
-      <div
+      <button
         class="termsLink"
         onclick="showTerms()"
+        type="button"
       >
         قوانین و شرایط استفاده
-      </div>
+      </button>
 
     </div>
   `;
+
+
+  /* Theme button */
+
+  const themeToggle =
+    document.getElementById('themeToggle');
+
+  if (themeToggle) {
+    themeToggle.addEventListener(
+      'click',
+      toggleTheme
+    );
+  }
+
+
+  /* Share button */
 
   const shareBtn =
     document.getElementById('shareBtn');
@@ -1775,48 +1693,38 @@ async function renderProfile() {
       'click',
       async () => {
 
-        try {
-          if (navigator.share) {
+        haptic('light');
 
+        if (navigator.share) {
+          try {
             await navigator.share({
               url: link,
               title:
                 'بیا این ربات رو ببین'
             });
-
-          } else if (
-            navigator.clipboard
-          ) {
-
+          } catch (e) {}
+        } else {
+          try {
             await navigator.clipboard.writeText(
               link
             );
 
-            toast(
-              'لینک کپی شد 📋'
-            );
-
-          } else {
-
-            toast(
-              'لینک آماده اشتراک‌گذاری است'
-            );
+            toast('لینک کپی شد 📋');
+          } catch (e) {
+            toast('کپی لینک انجام نشد');
           }
-
-        } catch (error) {
-          console.log(
-            'Share cancelled',
-            error
-          );
         }
       }
     );
   }
+
+  updateThemeUI();
 }
+
 
 /* =========================================================
    WALLET
-========================================================= */
+   ========================================================= */
 
 async function renderWallet() {
   const content =
@@ -1833,12 +1741,12 @@ async function renderWallet() {
   ] = await Promise.all([
     api(
       '/api/points/me?initData=' +
-        encodeURIComponent(initData)
+      encodeURIComponent(initData)
     ),
 
     api(
       '/api/leaderboard/top?initData=' +
-        encodeURIComponent(initData)
+      encodeURIComponent(initData)
     )
   ]);
 
@@ -1848,24 +1756,8 @@ async function renderWallet() {
   ) {
     content.innerHTML = `
       <div class="emptyState">
-
-        <div class="emptyStateIcon">
-          ⚠️
-        </div>
-
-        <div class="emptyStateTitle">
-          دریافت اطلاعات کیف پول ناموفق بود
-        </div>
-
-        <button
-          type="button"
-          class="action"
-          style="margin-top:16px;"
-          onclick="renderWallet()"
-        >
-          تلاش دوباره
-        </button>
-
+        <span class="emoji">⚠️</span>
+        خطا در دریافت اطلاعات کیف پول
       </div>
     `;
 
@@ -1874,75 +1766,60 @@ async function renderWallet() {
 
   const leaderRows =
     (leaderData.top || [])
-      .map(user => {
+      .map(user => `
+        <div
+          class="
+            leaderRow
+            ${user.isMe ? 'me' : ''}
+          "
+        >
 
-        const rank =
-          Number(user.rank || 0);
-
-        const rankIcon =
-          rank <= 3
-            ? ['🥇', '🥈', '🥉'][rank - 1]
-            : rank;
-
-        return `
-          <div
-            class="leaderRow ${user.isMe ? 'me' : ''}"
-          >
-
-            <div class="leaderRank">
-              ${rankIcon}
-            </div>
-
-            <div class="leaderName">
-              ${escapeHTML(user.name)}
-            </div>
-
-            <div class="leaderPoints">
-              ${formatPoints(user.points)}
-            </div>
-
+          <div class="leaderRank">
+            ${
+              user.rank <= 3
+                ? ['🥇', '🥈', '🥉'][user.rank - 1]
+                : user.rank
+            }
           </div>
-        `;
-      })
-      .join('') ||
+
+          <div class="leaderName">
+            ${escapeHTML(user.name)}
+          </div>
+
+          <div class="leaderPoints">
+            ${formatPoints(user.points)}
+          </div>
+
+        </div>
+      `)
+      .join('')
+    ||
     `
       <div class="emptyState">
-        <span class="emoji">
-          🏁
-        </span>
-
+        <span class="emoji">🏁</span>
         هنوز کسی توی جدول نیست
       </div>
     `;
 
-  const estimatedValue =
-    Number(
-      pointsData.estimatedCryptoValue || 0
-    );
 
   content.innerHTML = `
-    <div
-      class="card"
-      style="text-align:center;"
-    >
 
-      <div class="muted">
+    <div class="walletHero">
+
+      <div class="walletEyebrow">
         موجودی فعلی
       </div>
 
-      <div
-        style="
-          font-size:30px;
-          font-weight:800;
-          margin:6px 0;
-        "
-      >
+      <div class="walletBalance">
         ${formatPoints(pointsData.points)}
-        💎
+        <span>💎</span>
       </div>
 
-      <div class="muted">
-        ≈ ${estimatedValue.toFixed(4)}
+      <div class="walletCrypto">
+        ≈
+        ${Number(
+          pointsData.estimatedCryptoValue || 0
+        ).toFixed(4)}
         Gram
       </div>
 
@@ -1952,13 +1829,8 @@ async function renderWallet() {
     <div class="card">
 
       <div class="cardTitle">
-
-        <span class="emoji">
-          📤
-        </span>
-
+        <span class="emoji">📤</span>
         درخواست برداشت
-
       </div>
 
       <input
@@ -1966,16 +1838,17 @@ async function renderWallet() {
         type="number"
         inputmode="numeric"
         placeholder="مقدار پوینت"
-      />
+      >
 
       <input
         id="walletAddress"
         placeholder="آدرس Gram تان را از کیف پول تون‌کیپر واریز کنید"
-      />
+      >
 
       <button
         class="action"
         id="withdrawBtn"
+        type="button"
       >
         ثبت درخواست برداشت
       </button>
@@ -1986,19 +1859,15 @@ async function renderWallet() {
     <div class="card">
 
       <div class="cardTitle">
-
-        <span class="emoji">
-          🏆
-        </span>
-
+        <span class="emoji">🏆</span>
         برترین‌های هفته
-
       </div>
 
       ${leaderRows}
 
     </div>
   `;
+
 
   const withdrawBtn =
     document.getElementById(
@@ -2013,9 +1882,10 @@ async function renderWallet() {
   }
 }
 
+
 /* =========================================================
    WITHDRAW
-========================================================= */
+   ========================================================= */
 
 async function requestWithdraw() {
   const amountEl =
@@ -2034,31 +1904,21 @@ async function requestWithdraw() {
   const walletAddress =
     walletEl?.value?.trim() || '';
 
-  if (!pointsAmount) {
-    toast(
-      'مقدار پوینت را وارد کن'
-    );
+  if (
+    !pointsAmount ||
+    pointsAmount <= 0
+  ) {
+    toast('مقدار برداشت را وارد کن');
+    haptic('warning');
 
     return;
   }
 
   if (!walletAddress) {
-    toast(
-      'آدرس کیف پول را وارد کن'
-    );
+    toast('آدرس کیف پول را وارد کن');
+    haptic('warning');
 
     return;
-  }
-
-  const btn =
-    document.getElementById(
-      'withdrawBtn'
-    );
-
-  if (btn) {
-    btn.disabled = true;
-    btn.innerText =
-      'در حال ثبت درخواست...';
   }
 
   const data = await api(
@@ -2074,31 +1934,24 @@ async function requestWithdraw() {
   );
 
   if (data.error) {
-    haptic('error');
-
     toast(data.error);
-
-    if (btn) {
-      btn.disabled = false;
-      btn.innerText =
-        'ثبت درخواست برداشت';
-    }
+    haptic('error');
 
     return;
   }
-
-  haptic('success');
 
   toast(
     'درخواست برداشت ثبت شد ✅'
   );
 
+  haptic('success');
+
   if (currentUser) {
     currentUser.points =
       Math.max(
         0,
-        Number(currentUser.points || 0) -
-          pointsAmount
+        currentUser.points -
+        pointsAmount
       );
   }
 
@@ -2107,9 +1960,10 @@ async function requestWithdraw() {
   renderWallet();
 }
 
+
 /* =========================================================
-   TAB ROUTES
-========================================================= */
+   TABS
+   ========================================================= */
 
 const tabs = {
   home: renderHome,
@@ -2119,118 +1973,105 @@ const tabs = {
   profile: renderProfile
 };
 
-/* =========================================================
-   TAB EVENTS
-========================================================= */
 
 document
   .querySelectorAll('#tabbar button')
-  .forEach(button => {
+  .forEach(btn => {
 
-    button.addEventListener(
+    btn.addEventListener(
       'click',
       () => {
 
         const tab =
-          button.dataset.tab;
+          btn.dataset.tab;
 
         if (!tabs[tab]) return;
+
+        haptic('light');
 
         setActiveTab(tab);
 
         tabs[tab]();
-
       }
     );
 
   });
 
+
+/* =========================================================
+   CAPTCHA ENTER KEY
+   ========================================================= */
+
+document.addEventListener(
+  'keydown',
+  event => {
+
+    if (
+      event.key === 'Enter' &&
+      document.activeElement?.id ===
+        'captchaAnswer'
+    ) {
+      submitCaptcha();
+    }
+
+  }
+);
+
+
 /* =========================================================
    TELEGRAM EVENTS
-========================================================= */
+   ========================================================= */
 
 try {
-  tg.onEvent &&
-    tg.onEvent(
-      'themeChanged',
-      () => {
-        // Telegram theme changed.
-        // CSS remains responsible for the visual system.
-      }
-    );
 
-  tg.onEvent &&
-    tg.onEvent(
-      'viewportChanged',
-      () => {
-        // Telegram viewport changed.
-        // The CSS uses safe-area / responsive sizing.
-      }
-    );
+  tg.onEvent(
+    'themeChanged',
+    () => {
+      /*
+       * We intentionally do not overwrite
+       * the user's Mini App theme selection.
+       */
+      updateThemeUI();
+    }
+  );
+
+  tg.onEvent(
+    'viewportChanged',
+    () => {
+      document.documentElement.style.setProperty(
+        '--tg-viewport-height',
+        `${tg.viewportHeight || window.innerHeight}px`
+      );
+    }
+  );
+
 } catch (e) {}
+
 
 /* =========================================================
    INITIALIZATION
-========================================================= */
+   ========================================================= */
 
 (async function init() {
-  try {
-    const data =
-      await enterApp();
 
-    if (!data.captchaPassed) {
+  const data =
+    await enterApp();
 
-      showCaptcha(
-        data.captchaQuestion
-      );
+  if (data?.error) {
+    return;
+  }
 
-      return;
-    }
+  if (!data?.captchaPassed) {
 
-    setActiveTab('home');
-
-    renderHome();
-
-  } catch (error) {
-
-    console.error(
-      'App initialization error:',
-      error
+    showCaptcha(
+      data.captchaQuestion
     );
 
-    const content =
-      document.getElementById('content');
-
-    if (content) {
-      content.innerHTML = `
-        <div class="emptyState">
-
-          <div class="emptyStateIcon">
-            ⚠️
-          </div>
-
-          <div class="emptyStateTitle">
-            اجرای برنامه ناموفق بود
-          </div>
-
-          <div class="emptyStateText">
-            ${escapeHTML(
-              error?.message ||
-              'لطفاً دوباره تلاش کن.'
-            )}
-          </div>
-
-          <button
-            type="button"
-            class="action"
-            style="margin-top:16px;"
-            onclick="location.reload()"
-          >
-            اجرای دوباره
-          </button>
-
-        </div>
-      `;
-    }
+    return;
   }
+
+  setActiveTab('home');
+
+  renderHome();
+
 })();

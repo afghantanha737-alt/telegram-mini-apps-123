@@ -2236,3 +2236,679 @@ select:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+/* =========================================================
+   PREMIUM HOME DASHBOARD
+========================================================= */
+
+.homeHero {
+  position: relative;
+  overflow: hidden;
+  padding: 22px 20px 20px;
+  margin-bottom: 14px;
+  border-radius: 24px;
+  background:
+    radial-gradient(
+      circle at 90% 0%,
+      rgba(139, 92, 246, 0.22),
+      transparent 38%
+    ),
+    linear-gradient(
+      145deg,
+      #171321 0%,
+      #0d0d13 55%,
+      #090a0e 100%
+    );
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow:
+    0 18px 50px rgba(0,0,0,0.30),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.heroGlow {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  top: -90px;
+  right: -50px;
+  border-radius: 50%;
+  background: rgba(139,92,246,0.18);
+  filter: blur(35px);
+  pointer-events: none;
+}
+
+.homeHeroTop {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.heroEyebrow {
+  margin-bottom: 6px;
+  color: rgba(255,255,255,0.58);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.heroBalance {
+  color: #ffffff;
+  font-size: clamp(34px, 10vw, 48px);
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -1px;
+}
+
+.heroCurrency {
+  margin-top: 7px;
+  color: #a78bfa;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.heroCoin {
+  flex: 0 0 auto;
+  width: 58px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle at 35% 30%,
+      #f9d978,
+      #d99a25 55%,
+      #8f6415 100%
+    );
+  border: 2px solid rgba(255,220,120,0.55);
+  box-shadow:
+    0 8px 25px rgba(245,185,66,0.20),
+    inset 0 2px 5px rgba(255,255,255,0.35);
+}
+
+.heroCoin span {
+  color: #fff7d6;
+  font-size: 27px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+
+.levelArea {
+  position: relative;
+  z-index: 1;
+  margin-top: 25px;
+}
+
+.levelTop,
+.levelBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.levelTop {
+  margin-bottom: 8px;
+}
+
+.levelName {
+  color: #f5b942;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.levelProgressText {
+  color: rgba(255,255,255,0.72);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.levelTrack {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.35);
+}
+
+.levelTrackFill {
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      90deg,
+      #7c3aed,
+      #a78bfa,
+      #f5b942
+    );
+  box-shadow:
+    0 0 14px rgba(139,92,246,0.35);
+  transition: width 0.8s cubic-bezier(.22,1,.36,1);
+}
+
+.levelBottom {
+  margin-top: 8px;
+  color: rgba(255,255,255,0.42);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+
+/* =========================================================
+   HOME QUICK STATS
+========================================================= */
+
+.homeStats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.homeStatCard {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.035);
+  color: inherit;
+  text-align: right;
+  cursor: pointer;
+  transition:
+    transform .18s ease,
+    background .18s ease,
+    border-color .18s ease;
+}
+
+.homeStatCard:active {
+  transform: scale(.97);
+}
+
+.homeStatCard:hover {
+  background: rgba(255,255,255,0.055);
+  border-color: rgba(139,92,246,0.22);
+}
+
+.homeStatIcon {
+  flex: 0 0 auto;
+  width: 39px;
+  height: 39px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  font-size: 19px;
+}
+
+.streakIcon {
+  background: rgba(245,158,11,0.12);
+}
+
+.dailyIcon {
+  background: rgba(139,92,246,0.13);
+}
+
+.homeStatInfo {
+  min-width: 0;
+  flex: 1;
+}
+
+.homeStatLabel {
+  display: block;
+  margin-bottom: 3px;
+  color: rgba(255,255,255,0.45);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.homeStatInfo strong {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 850;
+}
+
+.homeStatInfo strong small {
+  color: rgba(255,255,255,0.45);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.homeStatArrow {
+  flex: 0 0 auto;
+  color: rgba(255,255,255,0.28);
+  font-size: 23px;
+  line-height: 1;
+}
+
+
+/* =========================================================
+   HOME WELCOME
+========================================================= */
+
+.homeWelcome {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 20px;
+  padding: 15px;
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(139,92,246,0.10),
+      rgba(255,255,255,0.025)
+    );
+  border: 1px solid rgba(139,92,246,0.14);
+}
+
+.homeWelcomeIcon {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: rgba(139,92,246,0.13);
+  font-size: 20px;
+}
+
+.homeWelcomeContent {
+  min-width: 0;
+}
+
+.homeWelcomeContent h2 {
+  margin: 0 0 4px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.homeWelcomeContent p {
+  margin: 0;
+  color: rgba(255,255,255,0.48);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+
+/* =========================================================
+   HOME SECTIONS
+========================================================= */
+
+.homeSection {
+  margin-bottom: 20px;
+}
+
+.homeSectionHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.sectionEyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: #8b5cf6;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 1.7px;
+}
+
+.homeSectionHeader h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+
+/* =========================================================
+   EARNING LIST
+========================================================= */
+
+.earningList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.earningItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid rgba(255,255,255,0.065);
+  border-radius: 17px;
+  background: rgba(255,255,255,0.028);
+  color: inherit;
+  text-align: right;
+  cursor: pointer;
+  transition:
+    transform .18s ease,
+    background .18s ease,
+    border-color .18s ease;
+}
+
+.earningItem:hover {
+  background: rgba(255,255,255,0.045);
+  border-color: rgba(255,255,255,0.11);
+}
+
+.earningItem:active {
+  transform: scale(.985);
+}
+
+.earningIcon {
+  flex: 0 0 auto;
+  width: 43px;
+  height: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  font-size: 19px;
+  font-weight: 900;
+}
+
+.earningGold {
+  background: rgba(245,185,66,0.12);
+}
+
+.earningPurple {
+  background: rgba(139,92,246,0.13);
+}
+
+.earningBlue {
+  background: rgba(59,130,246,0.12);
+}
+
+.earningContent {
+  min-width: 0;
+  flex: 1;
+}
+
+.earningContent strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.earningContent span {
+  display: block;
+  overflow: hidden;
+  color: rgba(255,255,255,0.42);
+  font-size: 9px;
+  line-height: 1.6;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.earningArrow {
+  flex: 0 0 auto;
+  color: rgba(255,255,255,0.25);
+  font-size: 24px;
+  line-height: 1;
+}
+
+
+/* =========================================================
+   JOURNEY
+========================================================= */
+
+.journeyCard {
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.065);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.025);
+}
+
+.journeyRow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px;
+}
+
+.journeyIcon {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.045);
+  font-size: 17px;
+}
+
+.journeyText {
+  min-width: 0;
+  flex: 1;
+}
+
+.journeyText strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.journeyText span {
+  display: block;
+  color: rgba(255,255,255,0.38);
+  font-size: 9px;
+}
+
+.journeyValue {
+  flex: 0 0 auto;
+  color: #f5b942;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.journeyDivider {
+  height: 1px;
+  margin: 0 14px;
+  background: rgba(255,255,255,0.055);
+}
+
+
+/* =========================================================
+   HOME INFO
+========================================================= */
+
+.homeInfo {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-bottom: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.055);
+}
+
+.homeInfoIcon {
+  flex: 0 0 auto;
+  font-size: 18px;
+}
+
+.homeInfo strong {
+  display: block;
+  margin-bottom: 4px;
+  color: rgba(255,255,255,0.82);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.homeInfo p {
+  margin: 0;
+  color: rgba(255,255,255,0.38);
+  font-size: 9px;
+  line-height: 1.8;
+}
+
+.homeTerms {
+  display: block;
+  width: 100%;
+  margin: 2px 0 22px;
+  padding: 10px;
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,0.32);
+  font-size: 9px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.homeTerms:hover {
+  color: rgba(255,255,255,0.55);
+}
+
+
+/* =========================================================
+   HOME LOADING / SKELETON
+========================================================= */
+
+.homeLoading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.homeSkeletonHero {
+  height: 205px;
+  border-radius: 24px;
+}
+
+.homeSkeletonGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.homeSkeletonSmall {
+  height: 72px;
+  border-radius: 18px;
+}
+
+.homeSkeletonSection {
+  height: 220px;
+  border-radius: 20px;
+}
+
+
+/* =========================================================
+   REVEAL ANIMATION
+========================================================= */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity .45s ease,
+    transform .45s cubic-bezier(.22,1,.36,1);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+
+/* =========================================================
+   SMALL MOBILE
+========================================================= */
+
+@media (max-width: 360px) {
+
+  .homeHero {
+    padding: 19px 16px 17px;
+    border-radius: 21px;
+  }
+
+  .heroBalance {
+    font-size: 32px;
+  }
+
+  .heroCoin {
+    width: 51px;
+    height: 51px;
+  }
+
+  .homeStatCard {
+    padding: 11px;
+  }
+
+  .homeStatIcon {
+    width: 35px;
+    height: 35px;
+    border-radius: 11px;
+    font-size: 17px;
+  }
+
+  .homeStatInfo strong {
+    font-size: 15px;
+  }
+
+  .earningItem {
+    padding: 11px;
+    gap: 9px;
+  }
+
+  .earningIcon {
+    width: 39px;
+    height: 39px;
+    border-radius: 12px;
+  }
+
+  .earningContent strong {
+    font-size: 11px;
+  }
+
+  .earningContent span {
+    font-size: 8px;
+  }
+
+}
+
+
+/* =========================================================
+   REDUCED MOTION
+========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .levelTrackFill {
+    transition: none;
+  }
+
+  .homeStatCard,
+  .earningItem {
+    transition: none;
+  }
+
+}

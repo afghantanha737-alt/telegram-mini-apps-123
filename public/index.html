@@ -8,10 +8,10 @@
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
   >
 
-  <meta name="theme-color" content="#05060a">
+  <meta name="theme-color" content="#050609">
   <meta name="color-scheme" content="dark">
 
-  <title>Point Rewards</title>
+  <title>مینی اپ پوینت</title>
 
   <!-- Telegram Mini App -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -22,88 +22,58 @@
 
 <body>
 
-  <!-- Ambient background -->
-  <div class="ambient ambient-1"></div>
-  <div class="ambient ambient-2"></div>
-  <div class="ambient ambient-3"></div>
-
+  <!-- =========================================================
+       APP SHELL
+       ========================================================= -->
   <div id="app">
 
-    <!-- =========================================================
+    <!-- =======================================================
          PREMIUM HEADER
-         IMPORTANT:
-         IDs below are used by public/js/app.js
-         ========================================================= -->
-    <header class="appHeader">
+         ======================================================= -->
+    <header id="appHeader">
 
-      <div class="headerGlow"></div>
+      <div class="headerInner">
 
-      <div class="headerTop">
+        <!-- User identity -->
+        <div class="userIdentity">
 
-        <div class="brandBlock">
-          <div class="brandMark">
-            <span>✦</span>
+          <div
+            id="avatar"
+            class="avatar"
+            aria-label="پروفایل کاربر"
+          >
+            A
           </div>
 
-          <div class="brandText">
-            <strong>POINT</strong>
-            <span>REWARDS</span>
-          </div>
-        </div>
+          <div id="headerInfo" class="headerInfo">
 
-        <div class="onlineBadge">
-          <span class="onlineDot"></span>
-          LIVE
-        </div>
-
-      </div>
-
-      <div class="profileHero">
-
-        <div class="avatarShell">
-          <div id="avatar" class="profileAvatar">A</div>
-          <span class="avatarStatus"></span>
-        </div>
-
-        <div id="headerInfo" class="headerInfo">
-
-          <div class="headerGreeting">
-            <span class="headerLabel">WELCOME BACK</span>
-            <div id="greetName">سلام 👋</div>
-          </div>
-
-          <div class="headerBalance">
-
-            <div class="balanceIcon">
-              <span>✦</span>
+            <div
+              id="greetName"
+              class="greetName"
+            >
+              سلام 👋
             </div>
 
-            <div class="balanceContent">
-              <span class="balanceLabel">POINT BALANCE</span>
-              <div id="pointsDisplay">۰ پوینت</div>
+            <div
+              id="pointsDisplay"
+              class="pointsDisplay"
+            >
+              ۰ پوینت
             </div>
 
           </div>
 
         </div>
 
-        <div class="headerRewardOrb">
-          <div class="orbCore">◆</div>
-          <div class="orbRing orbRingOne"></div>
-          <div class="orbRing orbRingTwo"></div>
-        </div>
+        <!-- Header status -->
+        <div class="headerStatus">
 
-      </div>
+          <span class="statusDot"></span>
 
-      <div class="headerProgress">
+          <span class="statusText">
+            فعال
+          </span>
 
-        <div class="progressMeta">
-          <span>REWARD SYSTEM</span>
-          <span>ACTIVE</span>
-        </div>
-
-        <div class="miniProgress">
-          <span></span>
         </div>
 
       </div>
@@ -111,63 +81,192 @@
     </header>
 
 
-    <!-- =========================================================
+    <!-- =======================================================
          MAIN CONTENT
-         app.js dynamically renders all screens here
-         ========================================================= -->
-    <main id="content"></main>
+         app.js dynamically renders pages here.
+         ======================================================= -->
+    <main
+      id="content"
+      class="appContent"
+      aria-live="polite"
+    ></main>
 
 
-    <!-- =========================================================
+    <!-- =======================================================
          BOTTOM NAVIGATION
-         IMPORTANT:
-         data-tab values are used by app.js
-         ========================================================= -->
-    <nav id="tabbar" aria-label="Main navigation">
+         ======================================================= -->
+    <nav
+      id="tabbar"
+      class="bottomNav"
+      aria-label="منوی اصلی"
+    >
 
       <button
         type="button"
         data-tab="home"
-        aria-label="Home"
+        aria-label="خانه"
       >
-        <span class="tabIcon">⌂</span>
-        <span>Home</span>
+        <span
+          class="tabIcon"
+          aria-hidden="true"
+        >
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d="M3 10.8 12 3l9 7.8v8.7a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5v-8.7Z"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M9 21v-6h6v6"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+
+        <span class="tabLabel">
+          خانه
+        </span>
       </button>
+
 
       <button
         type="button"
         data-tab="tasks"
-        aria-label="Tasks"
+        aria-label="تسک‌ها"
       >
-        <span class="tabIcon">✓</span>
-        <span>Tasks</span>
+        <span
+          class="tabIcon"
+          aria-hidden="true"
+        >
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect
+              x="4"
+              y="3"
+              width="16"
+              height="18"
+              rx="2.5"
+              stroke="currentColor"
+              stroke-width="1.8"
+            />
+            <path
+              d="m8 9 1.7 1.7L13 7.5M8 14h8M8 17h5"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+
+        <span class="tabLabel">
+          تسک‌ها
+        </span>
       </button>
+
 
       <button
         type="button"
         data-tab="daily"
-        aria-label="Daily Check"
+        class="dailyTab"
+        aria-label="پاداش روزانه"
       >
-        <span class="tabIcon">◷</span>
-        <span>Daily Check</span>
+        <span
+          class="tabIcon"
+          aria-hidden="true"
+        >
+          <svg viewBox="0 0 24 24" fill="none">
+            <circle
+              cx="12"
+              cy="12"
+              r="8.5"
+              stroke="currentColor"
+              stroke-width="1.8"
+            />
+            <path
+              d="M12 7.5v4.8l3.2 1.9"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+
+        <span class="tabLabel">
+          روزانه
+        </span>
       </button>
+
 
       <button
         type="button"
         data-tab="wallet"
-        aria-label="Wallet"
+        aria-label="کیف پول"
       >
-        <span class="tabIcon">◇</span>
-        <span>Wallet</span>
+        <span
+          class="tabIcon"
+          aria-hidden="true"
+        >
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19v14H6.5A2.5 2.5 0 0 1 4 16.5v-9Z"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M4 8h14.5A1.5 1.5 0 0 1 20 9.5v5H16a2.5 2.5 0 1 1 0-5h4"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linejoin="round"
+            />
+            <circle
+              cx="16"
+              cy="12"
+              r=".8"
+              fill="currentColor"
+            />
+          </svg>
+        </span>
+
+        <span class="tabLabel">
+          کیف پول
+        </span>
       </button>
+
 
       <button
         type="button"
         data-tab="profile"
-        aria-label="Profile"
+        aria-label="پروفایل"
       >
-        <span class="tabIcon">●</span>
-        <span>Profile</span>
+        <span
+          class="tabIcon"
+          aria-hidden="true"
+        >
+          <svg viewBox="0 0 24 24" fill="none">
+            <circle
+              cx="12"
+              cy="8"
+              r="3.5"
+              stroke="currentColor"
+              stroke-width="1.8"
+            />
+            <path
+              d="M5 20c.8-3.3 3.2-5 7-5s6.2 1.7 7 5"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            />
+          </svg>
+        </span>
+
+        <span class="tabLabel">
+          پروفایل
+        </span>
       </button>
 
     </nav>
@@ -176,24 +275,31 @@
 
 
   <!-- =========================================================
-       TERMS MODAL
-       Existing app.js functions:
-       showTerms()
-       hideTerms()
+       TERMS OVERLAY
        ========================================================= -->
-  <div id="termsOverlay" style="display:none;">
+  <div
+    id="termsOverlay"
+    class="overlay"
+    style="display:none;"
+  >
 
-    <div class="termsBox">
+    <div
+      class="modalBox termsBox"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="termsTitle"
+    >
 
-      <div class="termsHeader">
+      <div class="modalHeader termsHeader">
 
-        <div class="modalTitle">
-          <span class="modalIcon">§</span>
+        <div>
+          <span class="modalEyebrow">
+            قوانین
+          </span>
 
-          <div>
-            <span class="modalEyebrow">LEGAL</span>
-            <h3>قوانین و شرایط استفاده</h3>
-          </div>
+          <h3 id="termsTitle">
+            قوانین و شرایط استفاده
+          </h3>
         </div>
 
         <button
@@ -256,45 +362,80 @@
 
 
   <!-- =========================================================
-       CAPTCHA MODAL
-       Existing app.js depends on these IDs
+       CAPTCHA OVERLAY
        ========================================================= -->
-  <div id="captchaOverlay" style="display:none;">
+  <div
+    id="captchaOverlay"
+    class="overlay"
+    style="display:none;"
+  >
 
-    <div class="captchaBox">
+    <div
+      class="modalBox captchaBox"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="captchaTitle"
+    >
 
-      <div class="captchaVisual">
-
-        <div class="captchaShield">
-          <span>✓</span>
-        </div>
-
-        <div class="captchaOrbit orbitA"></div>
-        <div class="captchaOrbit orbitB"></div>
-
+      <div class="captchaIcon">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect
+            x="4"
+            y="10"
+            width="16"
+            height="11"
+            rx="2.5"
+            stroke="currentColor"
+            stroke-width="1.8"
+          />
+          <path
+            d="M8 10V7a4 4 0 0 1 8 0v3"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+          <circle
+            cx="12"
+            cy="15.5"
+            r="1"
+            fill="currentColor"
+          />
+          <path
+            d="M12 16.5v2"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+        </svg>
       </div>
 
-      <span class="modalEyebrow">SECURITY CHECK</span>
+      <span class="modalEyebrow">
+        امنیت
+      </span>
 
-      <h3>
-        یه لحظه، فقط می‌خوایم مطمئن شیم ربات نیستی
+      <h3 id="captchaTitle">
+        یک لحظه...
       </h3>
 
-      <p id="captchaQuestion" class="captchaQ">...</p>
+      <p class="captchaDescription">
+        فقط می‌خوایم مطمئن بشیم ربات نیستی.
+      </p>
 
-      <div class="inputShell">
+      <p
+        id="captchaQuestion"
+        class="captchaQ"
+      >
+        ...
+      </p>
 
-        <span class="inputIcon">#</span>
-
-        <input
-          id="captchaAnswer"
-          type="number"
-          inputmode="numeric"
-          autocomplete="off"
-          placeholder="جواب رو اینجا بنویس"
-        >
-
-      </div>
+      <input
+        id="captchaAnswer"
+        type="number"
+        inputmode="numeric"
+        autocomplete="off"
+        placeholder="جواب را وارد کنید"
+        aria-label="پاسخ کپچا"
+      >
 
       <button
         type="button"
@@ -302,21 +443,32 @@
         onclick="submitCaptcha()"
       >
         تأیید و ادامه
-        <span>→</span>
       </button>
 
-      <p id="captchaError" class="captchaErr"></p>
+      <p
+        id="captchaError"
+        class="captchaErr"
+        role="alert"
+      ></p>
 
     </div>
 
   </div>
 
 
-  <!-- Toast -->
-  <div id="toast"></div>
+  <!-- =========================================================
+       GLOBAL TOAST
+       ========================================================= -->
+  <div
+    id="toast"
+    role="status"
+    aria-live="polite"
+  ></div>
 
 
-  <!-- Existing application logic -->
+  <!-- =========================================================
+       APP LOGIC
+       ========================================================= -->
   <script src="js/app.js"></script>
 
 </body>

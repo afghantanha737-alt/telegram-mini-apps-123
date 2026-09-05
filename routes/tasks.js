@@ -5,7 +5,8 @@ const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
 const User = require('../models/User');
 
-const verifyTelegramInitData = require('../utils/verifyTelegram');
+const verifyTelegramInitData =
+  require('../utils/verifyTelegram');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
@@ -18,6 +19,12 @@ function getInitData(req) {
   return req.body?.initData || req.query?.initData || '';
 }
 
+
+// ------------------------------------------------------------
+// Telegram authentication
+// Compatible with utils/verifyTelegram.js
+// ------------------------------------------------------------
+
 async function authenticateUser(req) {
   const initData = getInitData(req);
 
@@ -25,17 +32,58 @@ async function authenticateUser(req) {
     const error = new Error(
       'اطلاعات Telegram ارسال نشده است.'
     );
+
     error.status = 401;
     throw error;
   }
 
-  const telegramUser =
+  const verification =
     verifyTelegramInitData(initData);
 
-  if (!telegramUser || !telegramUser.id) {
+  if (
+    !verification ||
+    verification.valid !== true ||
+    !verification.data
+  ) {
     const error = new Error(
+      verification?.error ||
       'اطلاعات Telegram نامعتبر است.'
     );
+
+    error.status = 401;
+    throw error;
+  }
+
+  const userRaw =
+    verification.data.get('user');
+
+  if (!userRaw) {
+    const error = new Error(
+      'اطلاعات کاربر Telegram وجود ندارد.'
+    );
+
+    error.status = 401;
+    throw error;
+  }
+
+  let telegramUser;
+
+  try {
+    telegramUser = JSON.parse(userRaw);
+  } catch (parseError) {
+    const error = new Error(
+      'اطلاعات کاربر Telegram قابل پردازش نیست.'
+    );
+
+    error.status = 401;
+    throw error;
+  }
+
+  if (!telegramUser?.id) {
+    const error = new Error(
+      'شناسه کاربر Telegram نامعتبر است.'
+    );
+
     error.status = 401;
     throw error;
   }
@@ -48,18 +96,42 @@ async function authenticateUser(req) {
     const error = new Error(
       'کاربر پیدا نشد.'
     );
+
     error.status = 404;
     throw error;
   }
 
+  // آخرین فعالیت کاربر
+  User.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        lastSeenAt: new Date()
+      }
+    }
+  ).catch((error) => {
+    console.error(
+      'Failed to update lastSeenAt:',
+      error.message
+    );
+  });
+
   return {
     user,
-    telegramUser
+    telegramUser,
+    verification
   };
 }
 
 
-async function telegramRequest(method, payload) {
+// ------------------------------------------------------------
+// Telegram API
+// ------------------------------------------------------------
+
+async function telegramRequest(
+  method,
+  payload
+) {
   if (!BOT_TOKEN) {
     throw new Error(
       'BOT_TOKEN تنظیم نشده است.'
@@ -99,24 +171,23 @@ router.get('/', async (req, res) => {
     const { user } =
       await authenticateUser(req);
 
-    /*
-     * فقط Taskهای فعال به کاربر نمایش داده می‌شوند.
-     */
-
-    const tasks = await Task.find({
-      active: true
-    })
-      .sort({
-        order: 1,
-        createdAt: 1
+    const tasks =
+      await Task.find({
+        active: true
       })
-      .lean();
+        .sort({
+          order: 1,
+          createdAt: 1
+        })
+        .lean();
 
     const completions =
       await TaskCompletion.find({
         userId: user._id
       })
-        .select('taskId completedAt')
+        .select(
+          'taskId completedAt'
+        )
         .lean();
 
     const completedMap =
@@ -127,34 +198,40 @@ router.get('/', async (req, res) => {
         ])
       );
 
-    const result = tasks.map(task => {
-      const completion =
-        completedMap.get(
-          String(task._id)
-        );
+    const result =
+      tasks.map(task => {
+        const completion =
+          completedMap.get(
+            String(task._id)
+          );
 
-      return {
-        ...task,
+        return {
+          ...task,
 
-        id: task._id,
+          id: String(task._id),
 
-        completed: Boolean(completion),
+          completed:
+            Boolean(completion),
 
-        completedAt:
-          completion?.completedAt || null
-      };
-    });
+          completedAt:
+            completion?.completedAt ||
+            null
+        };
+      });
 
     res.json({
       success: true,
+
       tasks: result,
-      completions: completions.map(
-        item => ({
-          taskId: item.taskId,
+
+      completions:
+        completions.map(item => ({
+          taskId: String(item.taskId),
+
           completedAt:
-            item.completedAt || null
-        })
-      )
+            item.completedAt ||
+            null
+        }))
     });
 
   } catch (error) {
@@ -167,6 +244,7 @@ router.get('/', async (req, res) => {
       error.status || 500
     ).json({
       success: false,
+
       message:
         error.message ||
         'خطا در دریافت تسک‌ها.'
@@ -179,313 +257,327 @@ router.get('/', async (req, res) => {
 // POST /api/tasks/:id/complete
 // ============================================================
 
-router.post('/:id/complete', async (req, res) => {
-  try {
-    const taskId = req.params.id;
-
-    if (!taskId) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'شناسه تسک ارسال نشده است.'
-      });
-    }
-
-    const {
-      user,
-      telegramUser
-    } = await authenticateUser(req);
-
-    /*
-     * تسک باید فعال باشد.
-     */
-
-    const task = await Task.findOne({
-      _id: taskId,
-      active: true
-    });
-
-    if (!task) {
-      return res.status(404).json({
-        success: false,
-        message:
-          'این تسک وجود ندارد یا غیرفعال شده است.'
-      });
-    }
-
-    /*
-     * قبل از انجام عملیات، بررسی می‌کنیم
-     * که کاربر قبلاً این تسک را نگرفته باشد.
-     */
-
-    const alreadyCompleted =
-      await TaskCompletion.findOne({
-        userId: user._id,
-        taskId: task._id
-      });
-
-    if (alreadyCompleted) {
-      return res.status(409).json({
-        success: false,
-        alreadyCompleted: true,
-        message:
-          'این تسک را قبلاً انجام داده‌اید.'
-      });
-    }
-
-
-    // --------------------------------------------------------
-    // Channel membership verification
-    // --------------------------------------------------------
-
-    if (
-      task.type === 'channel' ||
-      task.requireMembership === true
-    ) {
-      const channel =
-        task.channelUsername ||
-        task.channelId ||
-        task.target;
-
-      if (!channel) {
-        return res.status(400).json({
-          success: false,
-          message:
-            'تنظیمات کانال این تسک کامل نیست.'
-        });
-      }
-
-      let member;
-
-      try {
-        member =
-          await telegramRequest(
-            'getChatMember',
-            {
-              chat_id: channel,
-              user_id: telegramUser.id
-            }
-          );
-
-      } catch (telegramError) {
-        console.error(
-          'Channel membership check failed:',
-          telegramError.message
-        );
-
-        return res.status(503).json({
-          success: false,
-          message:
-            'فعلاً امکان بررسی عضویت در کانال وجود ندارد. کمی بعد دوباره تلاش کنید.'
-        });
-      }
-
-      const validStatuses = [
-        'creator',
-        'administrator',
-        'member'
-      ];
-
-      /*
-       * اگر کاربر کانال را ترک کرده باشد
-       * status ممکن است left / kicked باشد.
-       */
-
-      if (
-        !member ||
-        !validStatuses.includes(
-          member.status
-        )
-      ) {
-        return res.status(403).json({
-          success: false,
-          message:
-            'برای دریافت پاداش، ابتدا باید در کانال عضو شوید.'
-        });
-      }
-    }
-
-
-    // --------------------------------------------------------
-    // Atomic completion creation
-    // --------------------------------------------------------
-
-    /*
-     * مهم:
-     * فقط check کردن کافی نیست.
-     *
-     * دو درخواست همزمان می‌توانند هر دو از
-     * check قبلی عبور کنند.
-     *
-     * بنابراین create را مستقیماً انجام می‌دهیم
-     * و unique index مدل TaskCompletion
-     * جلوی ثبت تکراری را می‌گیرد.
-     */
-
-    let completion;
+router.post(
+  '/:id/complete',
+  async (req, res) => {
+    let completion = null;
 
     try {
-      completion =
-        await TaskCompletion.create({
-          userId: user._id,
-          taskId: task._id,
-          completedAt: new Date()
+      const taskId =
+        String(req.params.id || '').trim();
+
+      if (!taskId) {
+        return res.status(400).json({
+          success: false,
+
+          message:
+            'شناسه تسک ارسال نشده است.'
+        });
+      }
+
+      const {
+        user,
+        telegramUser
+      } = await authenticateUser(req);
+
+      // ------------------------------------------------------
+      // Find active task
+      // ------------------------------------------------------
+
+      const task =
+        await Task.findOne({
+          _id: taskId,
+          active: true
         });
 
-    } catch (createError) {
+      if (!task) {
+        return res.status(404).json({
+          success: false,
 
-      /*
-       * duplicate key
-       */
+          message:
+            'این تسک وجود ندارد یا غیرفعال شده است.'
+        });
+      }
 
-      if (
-        createError?.code === 11000
-      ) {
+      // ------------------------------------------------------
+      // Fast duplicate check
+      // ------------------------------------------------------
+
+      const alreadyCompleted =
+        await TaskCompletion.findOne({
+          userId: user._id,
+          taskId: task._id
+        });
+
+      if (alreadyCompleted) {
         return res.status(409).json({
           success: false,
+
           alreadyCompleted: true,
+
           message:
             'این تسک را قبلاً انجام داده‌اید.'
         });
       }
 
-      throw createError;
-    }
 
+      // ------------------------------------------------------
+      // Channel membership verification
+      // ------------------------------------------------------
 
-    // --------------------------------------------------------
-    // Reward
-    // --------------------------------------------------------
+      if (
+        task.type === 'channel' ||
+        task.requireMembership === true
+      ) {
+        const channel =
+          task.channelUsername ||
+          task.channelId ||
+          task.target;
 
-    const reward =
-      Number(task.reward) || 0;
+        if (!channel) {
+          return res.status(400).json({
+            success: false,
 
-    if (reward <= 0) {
-      /*
-       * completion ثبت شده ولی reward نامعتبر است.
-       * در این حالت completion را پاک می‌کنیم تا
-       * تسک در وضعیت ناقص باقی بماند و داده خراب نشود.
-       */
-
-      await TaskCompletion.deleteOne({
-        _id: completion._id
-      });
-
-      return res.status(400).json({
-        success: false,
-        message:
-          'پاداش این تسک تنظیم نشده است.'
-      });
-    }
-
-
-    /*
-     * افزایش امتیاز atomic است.
-     */
-
-    const updatedUser =
-      await User.findOneAndUpdate(
-        {
-          _id: user._id
-        },
-        {
-          $inc: {
-            points: reward
-          }
-        },
-        {
-          new: true
+            message:
+              'تنظیمات کانال این تسک کامل نیست.'
+          });
         }
+
+        let member;
+
+        try {
+          member =
+            await telegramRequest(
+              'getChatMember',
+              {
+                chat_id: channel,
+
+                user_id:
+                  telegramUser.id
+              }
+            );
+
+        } catch (telegramError) {
+          console.error(
+            'Channel membership check failed:',
+            telegramError.message
+          );
+
+          return res.status(503).json({
+            success: false,
+
+            message:
+              'فعلاً امکان بررسی عضویت در کانال وجود ندارد. کمی بعد دوباره تلاش کنید.'
+          });
+        }
+
+        const validStatuses = [
+          'creator',
+          'administrator',
+          'member'
+        ];
+
+        if (
+          !member ||
+          !validStatuses.includes(
+            member.status
+          )
+        ) {
+          return res.status(403).json({
+            success: false,
+
+            message:
+              'برای دریافت پاداش، ابتدا باید در کانال عضو شوید.'
+          });
+        }
+      }
+
+
+      // ------------------------------------------------------
+      // Validate reward
+      // ------------------------------------------------------
+
+      const reward =
+        Number(task.reward) || 0;
+
+      if (reward <= 0) {
+        return res.status(400).json({
+          success: false,
+
+          message:
+            'پاداش این تسک تنظیم نشده است.'
+        });
+      }
+
+
+      // ------------------------------------------------------
+      // Create completion
+      // Unique index prevents duplicate completion.
+      // ------------------------------------------------------
+
+      try {
+        completion =
+          await TaskCompletion.create({
+            userId: user._id,
+
+            taskId: task._id,
+
+            completedAt: new Date()
+          });
+
+      } catch (createError) {
+        if (
+          createError?.code === 11000
+        ) {
+          return res.status(409).json({
+            success: false,
+
+            alreadyCompleted: true,
+
+            message:
+              'این تسک را قبلاً انجام داده‌اید.'
+          });
+        }
+
+        throw createError;
+      }
+
+
+      // ------------------------------------------------------
+      // Reward user
+      // ------------------------------------------------------
+
+      const updatedUser =
+        await User.findOneAndUpdate(
+          {
+            _id: user._id
+          },
+
+          {
+            $inc: {
+              points: reward
+            },
+
+            $set: {
+              lastSeenAt: new Date()
+            }
+          },
+
+          {
+            new: true
+          }
+        );
+
+      if (!updatedUser) {
+        await TaskCompletion.deleteOne({
+          _id: completion._id
+        });
+
+        completion = null;
+
+        return res.status(404).json({
+          success: false,
+
+          message:
+            'کاربر پیدا نشد.'
+        });
+      }
+
+
+      // ------------------------------------------------------
+      // Response
+      // ------------------------------------------------------
+
+      return res.json({
+        success: true,
+
+        message:
+          '🎉 تسک با موفقیت انجام شد و پاداش دریافت کردی.',
+
+        reward,
+
+        points:
+          Number(updatedUser.points) || 0,
+
+        taskId:
+          String(task._id),
+
+        completedAt:
+          completion.completedAt
+      });
+
+    } catch (error) {
+      console.error(
+        'POST /api/tasks/:id/complete:',
+        error
       );
 
-    if (!updatedUser) {
-
       /*
-       * اگر کاربر دیگر وجود نداشت،
-       * completion بی‌مصرف را حذف می‌کنیم.
+       * اگر completion ساخته شده ولی عملیات reward
+       * شکست خورده، تلاش می‌کنیم رکورد completion
+       * را حذف کنیم.
        */
+      if (completion?._id) {
+        try {
+          await TaskCompletion.deleteOne({
+            _id: completion._id
+          });
+        } catch (cleanupError) {
+          console.error(
+            'Task completion cleanup failed:',
+            cleanupError
+          );
+        }
+      }
 
-      await TaskCompletion.deleteOne({
-        _id: completion._id
-      });
+      if (
+        error?.name === 'CastError'
+      ) {
+        return res.status(400).json({
+          success: false,
 
-      return res.status(404).json({
+          message:
+            'شناسه تسک نامعتبر است.'
+        });
+      }
+
+      return res.status(
+        error.status || 500
+      ).json({
         success: false,
+
         message:
-          'کاربر پیدا نشد.'
+          error.message ||
+          'خطا در انجام تسک.'
       });
     }
-
-
-    // --------------------------------------------------------
-    // Response
-    // --------------------------------------------------------
-
-    res.json({
-      success: true,
-      message:
-        '🎉 تسک با موفقیت انجام شد و پاداش دریافت کردی.',
-      reward,
-      points:
-        Number(updatedUser.points) || 0,
-      taskId:
-        String(task._id),
-      completedAt:
-        completion.completedAt
-    });
-
-  } catch (error) {
-    console.error(
-      'POST /api/tasks/:id/complete:',
-      error
-    );
-
-    /*
-     * CastError برای ObjectId نامعتبر
-     */
-
-    if (
-      error?.name === 'CastError'
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'شناسه تسک نامعتبر است.'
-      });
-    }
-
-    res.status(
-      error.status || 500
-    ).json({
-      success: false,
-      message:
-        error.message ||
-        'خطا در انجام تسک.'
-    });
   }
-});
+);
 
 
 // ============================================================
 // Error Handler
 // ============================================================
 
-router.use((error, req, res, next) => {
-  console.error(
-    'Tasks router error:',
-    error
-  );
+router.use(
+  (error, req, res, next) => {
+    console.error(
+      'Tasks router error:',
+      error
+    );
 
-  if (res.headersSent) {
-    return next(error);
+    if (res.headersSent) {
+      return next(error);
+    }
+
+    res.status(500).json({
+      success: false,
+
+      message:
+        'خطای داخلی سرور.'
+    });
   }
-
-  res.status(500).json({
-    success: false,
-    message:
-      'خطای داخلی سرور.'
-  });
-});
+);
 
 
 module.exports = router;

@@ -1,40 +1,174 @@
-const Task = require('../models/Task');
-const TaskCompletion = require('../models/TaskCompletion');
 const User = require('../models/User');
 
-const REFERRAL_BONUS = 50; // پوینت هدیه ازای هر رفرال تایید‌شده - قابل تغییر
-const WAIT_MS = 24 * 60 * 60 * 1000; // ۲۴ ساعت
+/**
+ * ثبت و پردازش Referral
+ *
+ * این تابع فقط زمانی Referral را ثبت می‌کند که:
+ * - کاربر و معرف معتبر باشند
+ * - کاربر خودش معرف خودش نباشد
+ * - کاربر قبلاً معرف نداشته باشد
+ * - کد Referral واقعاً متعلق به یک کاربر باشد
+ *
+ * خروجی:
+ * {
+ *   success: true/false,
+ *   linked: true/false,
+ *   inviter: User|null,
+ *   reason: string
+ * }
+ */
+async function processReferral(user, referralCode) {
+  try {
+    if (!user || !referralCode) {
+      return {
+        success: false,
+        linked: false,
+        inviter: null,
+        reason: 'missing_data'
+      };
+    }
 
-// بررسی می‌کنه آیا شرایط پرداخت پاداش رفرال برای این کاربر برقرار شده یا نه:
-// ۱) همه‌ی تسک‌های فعال رو انجام داده باشه
-// ۲) حداقل ۲۴ ساعت از زمان عضویتش (دعوت شدنش) گذشته باشه
-// اگه شرایط برقرار بود، پاداش رو به دعوت‌کننده میده و دیگه دوباره تکرار نمیشه
-async function checkAndAwardReferral(user) {
-  if (!user.referredBy || user.referralBonusPaid) return;
+    const code = String(referralCode).trim();
 
-  // شرط اول: ۲۴ ساعت از عضویت گذشته باشه
-  if (Date.now() - user.createdAt.getTime() < WAIT_MS) return;
+    if (!code) {
+      return {
+        success: false,
+        linked: false,
+        inviter: null,
+        reason: 'empty_code'
+      };
+    }
 
-  // شرط دوم: همه‌ی تسک‌های فعلاً فعال رو انجام داده باشه
-  const activeTasks = await Task.find({ active: true }).select('_id');
-  if (activeTasks.length === 0) return; // اگه هیچ تسک فعالی نیست، نمیشه شرط رو سنجید
+    // اگر کاربر قبلاً معرف دارد، دوباره قابل تغییر نیست.
+    if (user.referredBy) {
+      return {
+        success: true,
+        linked: false,
+        inviter: null,
+        reason: 'already_referred'
+      };
+    }
 
-  const activeIds = activeTasks.map(t => t._id);
-  const completedCount = await TaskCompletion.countDocuments({
-    userId: user.telegramId,
-    taskId: { $in: activeIds }
-  });
+    // پیدا کردن صاحب Referral Code
+    const inviter = await User.findOne({
+      referralCode: code,
+      isBanned: { $ne: true }
+    });
 
-  if (completedCount < activeTasks.length) return; // هنوز همه‌ی تسک‌ها رو انجام نداده
+    if (!inviter) {
+      return {
+        success: false,
+        linked: false,
+        inviter: null,
+        reason: 'invalid_referral_code'
+      };
+    }
 
-  const inviter = await User.findOne({ referralCode: user.referredBy });
-  if (!inviter) return;
+    // جلوگیری از self-referral
+    if (
+      String(inviter._id) === String(user._id) ||
+      String(inviter.telegramId) === String(user.telegramId)
+    ) {
+      return {
+        success: false,
+        linked: false,
+        inviter: null,
+        reason: 'self_referral'
+      };
+    }
 
-  inviter.points += REFERRAL_BONUS;
-  await inviter.save();
+    /*
+     * اتصال کاربر به معرف.
+     *
+     * شرط referredBy:null/وجود نداشتن باعث می‌شود
+     * Referral بعد از اولین اتصال قابل تغییر نباشد.
+     */
+    const updatedUser = await User.findOneAndUpdate(
+      {
+        _id: user._id,
+        $or: [
+          { referredBy: { $exists: false } },
+          { referredBy: null },
+          { referredBy: '' }
+        ]
+      },
+      {
+        $set: {
+          referredBy: inviter._id
+        }
+      },
+      {
+        new: true
+      }
+    );
 
-  user.referralBonusPaid = true;
-  await user.save();
+    // اگر همزمان درخواست دیگری Referral را ثبت کرده باشد
+    if (!updatedUser) {
+      return {
+        success: true,
+        linked: false,
+        inviter: null,
+        reason: 'already_referred'
+      };
+    }
+
+    /*
+     * شمارنده دعوت‌ها را اتمیک افزایش می‌دهیم.
+     * این روش نسبت به read → modify → save در شرایط concurrent امن‌تر است.
+     */
+    await User.updateOne(
+      { _id: inviter._id },
+      {
+        $inc: {
+          invitedCount: 1
+        }
+      }
+    );
+
+    return {
+      success: true,
+      linked: true,
+      inviter,
+      reason: 'referral_linked'
+    };
+  } catch (error) {
+    console.error('Referral processing error:', error);
+
+    return {
+      success: false,
+      linked: false,
+      inviter: null,
+      reason: 'server_error'
+    };
+  }
 }
 
-module.exports = checkAndAwardReferral;
+/**
+ * فقط بررسی می‌کند Referral Code معتبر است یا خیر.
+ * هیچ تغییری در دیتابیس ایجاد نمی‌کند.
+ */
+async function validateReferralCode(referralCode) {
+  try {
+    if (!referralCode) return false;
+
+    const code = String(referralCode).trim();
+
+    if (!code) return false;
+
+    const user = await User.findOne({
+      referralCode: code,
+      isBanned: { $ne: true }
+    })
+      .select('_id telegramId referralCode')
+      .lean();
+
+    return !!user;
+  } catch (error) {
+    console.error('Referral validation error:', error);
+    return false;
+  }
+}
+
+module.exports = processReferral;
+module.exports.processReferral = processReferral;
+module.exports.validateReferralCode = validateReferralCode;

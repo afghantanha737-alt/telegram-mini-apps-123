@@ -1,259 +1,166 @@
 const crypto = require('crypto');
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
+/**
+ * Verify Telegram Mini App initData
+ *
+ * Telegram Mini Apps امضای initData را با HMAC-SHA256
+ * تولید می‌کنند.
+ *
+ * این تابع:
+ * 1. initData را parse می‌کند
+ * 2. hash را استخراج می‌کند
+ * 3. data-check-string را طبق استاندارد Telegram می‌سازد
+ * 4. secret key را از BOT_TOKEN تولید می‌کند
+ * 5. hash را با timingSafeEqual مقایسه می‌کند
+ * 6. auth_date را برای جلوگیری از استفاده از داده‌های بسیار قدیمی بررسی می‌کند
+ *
+ * خروجی:
+ * {
+ *   valid: true,
+ *   data: URLSearchParams
+ * }
+ *
+ * یا:
+ * {
+ *   valid: false,
+ *   error: '...'
+ * }
+ */
 
-
-// ============================================================
-// Telegram Mini App initData verification
-// ============================================================
+const MAX_AUTH_AGE_SECONDS = Number(
+  process.env.TELEGRAM_AUTH_MAX_AGE || 24 * 60 * 60
+);
 
 function verifyTelegramInitData(initData) {
   try {
-    if (
-      !initData ||
-      typeof initData !== 'string'
-    ) {
-      return null;
+    const botToken = process.env.BOT_TOKEN;
+
+    if (!botToken) {
+      console.error('BOT_TOKEN is not configured.');
+
+      return {
+        valid: false,
+        error: 'BOT_TOKEN is not configured'
+      };
     }
 
-    if (!BOT_TOKEN) {
-      console.error(
-        'BOT_TOKEN تنظیم نشده است.'
-      );
-
-      return null;
+    if (!initData || typeof initData !== 'string') {
+      return {
+        valid: false,
+        error: 'Missing initData'
+      };
     }
 
+    const params = new URLSearchParams(initData);
 
-    // --------------------------------------------------------
-    // Parse Telegram initData
-    // --------------------------------------------------------
-
-    const params =
-      new URLSearchParams(initData);
-
-    const receivedHash =
-      params.get('hash');
+    const receivedHash = params.get('hash');
 
     if (!receivedHash) {
-      return null;
+      return {
+        valid: false,
+        error: 'Missing Telegram hash'
+      };
     }
 
     /*
      * hash نباید وارد data-check-string شود.
      */
-
     params.delete('hash');
 
-
-    // --------------------------------------------------------
-    // Create data-check-string
-    // --------------------------------------------------------
-
-    const dataCheckString =
-      Array.from(params.entries())
-        .sort(([a], [b]) =>
-          a.localeCompare(b)
-        )
-        .map(
-          ([key, value]) =>
-            `${key}=${value}`
-        )
-        .join('\n');
-
-
-    // --------------------------------------------------------
-    // Telegram secret key
-    // --------------------------------------------------------
+    const dataCheckString = [...params.entries()]
+      .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n');
 
     /*
-     * برای Mini App:
+     * Telegram Mini App secret key:
      *
-     * secret_key =
-     * HMAC_SHA256("WebAppData", BOT_TOKEN)
+     * HMAC-SHA256(botToken, "WebAppData")
      */
+    const secretKey = crypto
+      .createHmac('sha256', 'WebAppData')
+      .update(botToken)
+      .digest();
 
-    const secretKey =
-      crypto
-        .createHmac(
-          'sha256',
-          'WebAppData'
-        )
-        .update(BOT_TOKEN)
-        .digest();
-
-
-    // --------------------------------------------------------
-    // Calculate expected hash
-    // --------------------------------------------------------
-
-    const calculatedHash =
-      crypto
-        .createHmac(
-          'sha256',
-          secretKey
-        )
-        .update(dataCheckString)
-        .digest('hex');
-
-
-    // --------------------------------------------------------
-    // Timing-safe comparison
-    // --------------------------------------------------------
-
-    const receivedBuffer =
-      Buffer.from(
-        receivedHash,
-        'hex'
-      );
-
-    const calculatedBuffer =
-      Buffer.from(
-        calculatedHash,
-        'hex'
-      );
+    const calculatedHash = crypto
+      .createHmac('sha256', secretKey)
+      .update(dataCheckString)
+      .digest('hex');
 
     /*
-     * اگر طول hashها برابر نباشد،
-     * timingSafeEqual خطا می‌دهد.
+     * جلوگیری از timing attack
      */
+    const receivedBuffer = Buffer.from(receivedHash, 'hex');
+    const calculatedBuffer = Buffer.from(calculatedHash, 'hex');
 
     if (
-      receivedBuffer.length !==
-      calculatedBuffer.length
+      receivedBuffer.length !== calculatedBuffer.length ||
+      !crypto.timingSafeEqual(receivedBuffer, calculatedBuffer)
     ) {
-      return null;
-    }
-
-    const isValid =
-      crypto.timingSafeEqual(
-        receivedBuffer,
-        calculatedBuffer
-      );
-
-    if (!isValid) {
-      return null;
-    }
-
-
-    // --------------------------------------------------------
-    // Validate auth_date
-    // --------------------------------------------------------
-
-    const authDate =
-      Number(
-        params.get('auth_date')
-      );
-
-    if (
-      !Number.isFinite(authDate) ||
-      authDate <= 0
-    ) {
-      return null;
+      return {
+        valid: false,
+        error: 'Invalid Telegram signature'
+      };
     }
 
     /*
-     * initData قدیمی نباید برای همیشه قابل استفاده باشد.
+     * بررسی auth_date
      *
-     * 24 ساعت را به عنوان حداکثر عمر قابل قبول
-     * در نظر می‌گیریم.
+     * این بررسی باعث می‌شود initData بسیار قدیمی قابل استفاده
+     * نباشد.
      */
+    const authDateRaw = params.get('auth_date');
+    const authDate = Number(authDateRaw);
 
-    const now =
-      Math.floor(
-        Date.now() / 1000
-      );
-
-    const MAX_AGE =
-      24 * 60 * 60;
-
-    if (
-      authDate > now + 60
-    ) {
-      /*
-       * auth_date نمی‌تواند بیش از یک دقیقه
-       * در آینده باشد.
-       */
-      return null;
+    if (!Number.isFinite(authDate) || authDate <= 0) {
+      return {
+        valid: false,
+        error: 'Invalid auth_date'
+      };
     }
 
-    if (
-      now - authDate >
-      MAX_AGE
-    ) {
-      return null;
+    const now = Math.floor(Date.now() / 1000);
+
+    /*
+     * کمی clock skew را تحمل می‌کنیم.
+     */
+    const clockSkew = 60;
+
+    if (authDate > now + clockSkew) {
+      return {
+        valid: false,
+        error: 'Telegram auth_date is from the future'
+      };
     }
 
-
-    // --------------------------------------------------------
-    // Parse user
-    // --------------------------------------------------------
-
-    const rawUser =
-      params.get('user');
-
-    if (!rawUser) {
-      return null;
+    if (now - authDate > MAX_AUTH_AGE_SECONDS) {
+      return {
+        valid: false,
+        error: 'Telegram initData has expired'
+      };
     }
-
-    let telegramUser;
-
-    try {
-      telegramUser =
-        JSON.parse(rawUser);
-    } catch (error) {
-      return null;
-    }
-
-    if (
-      !telegramUser ||
-      !telegramUser.id
-    ) {
-      return null;
-    }
-
-
-    // --------------------------------------------------------
-    // Normalize Telegram user
-    // --------------------------------------------------------
 
     return {
-      id: String(
-        telegramUser.id
-      ),
-
-      first_name:
-        telegramUser.first_name ||
-        '',
-
-      last_name:
-        telegramUser.last_name ||
-        '',
-
-      username:
-        telegramUser.username ||
-        '',
-
-      language_code:
-        telegramUser.language_code ||
-        '',
-
-      is_premium:
-        Boolean(
-          telegramUser.is_premium
-        )
+      valid: true,
+      data: params
     };
-
   } catch (error) {
-    console.error(
-      'Telegram initData verification error:',
-      error.message
-    );
+    console.error('Telegram initData verification error:', error);
 
-    return null;
+    return {
+      valid: false,
+      error: 'Invalid Telegram initData'
+    };
   }
 }
 
+/**
+ * نسخه ساده برای routeهایی که فقط true/false نیاز دارند.
+ */
+function isValidTelegramInitData(initData) {
+  return verifyTelegramInitData(initData).valid;
+}
 
-module.exports =
-  verifyTelegramInitData;
+module.exports = verifyTelegramInitData;
+module.exports.verifyTelegramInitData = verifyTelegramInitData;
+module.exports.isValidTelegramInitData = isValidTelegramInitData;

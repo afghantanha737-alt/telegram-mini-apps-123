@@ -1,13 +1,109 @@
 const mongoose = require('mongoose');
 
-const taskCompletionSchema = new mongoose.Schema({
-  userId: { type: String, required: true }, // telegramId
-  taskId: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', required: true },
-  pointsAwarded: { type: Number, required: true },
-  completedAt: { type: Date, default: Date.now }
+
+// ============================================================
+// Task Completion Schema
+// ============================================================
+
+const TaskCompletionSchema = new mongoose.Schema(
+  {
+    // --------------------------------------------------------
+    // User
+    // --------------------------------------------------------
+
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true
+    },
+
+
+    // --------------------------------------------------------
+    // Task
+    // --------------------------------------------------------
+
+    taskId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Task',
+      required: true,
+      index: true
+    },
+
+
+    // --------------------------------------------------------
+    // Completion
+    // --------------------------------------------------------
+
+    completedAt: {
+      type: Date,
+      default: Date.now,
+      required: true
+    }
+  },
+  {
+    timestamps: true,
+
+    strict: true
+  }
+);
+
+
+// ============================================================
+// Critical Anti-Duplicate Index
+// ============================================================
+
+/*
+ * یک کاربر نمی‌تواند یک Task مشخص را دوبار complete کند.
+ *
+ * این Index یکی از مهم‌ترین لایه‌های امنیتی سیستم Task است.
+ */
+
+TaskCompletionSchema.index(
+  {
+    userId: 1,
+    taskId: 1
+  },
+  {
+    unique: true
+  }
+);
+
+
+// ============================================================
+// Useful Query Index
+// ============================================================
+
+TaskCompletionSchema.index({
+  userId: 1,
+  completedAt: -1
 });
 
-// هر کاربر فقط یک بار می‌تواند یک تسک مشخص را تکمیل کند
-taskCompletionSchema.index({ userId: 1, taskId: 1 }, { unique: true });
 
-module.exports = mongoose.model('TaskCompletion', taskCompletionSchema);
+// ============================================================
+// Public Representation
+// ============================================================
+
+TaskCompletionSchema.methods.toPublicJSON =
+  function () {
+    return {
+      id: this._id,
+
+      taskId:
+        this.taskId,
+
+      completedAt:
+        this.completedAt
+    };
+  };
+
+
+// ============================================================
+// Model
+// ============================================================
+
+module.exports =
+  mongoose.model(
+    'TaskCompletion',
+    TaskCompletionSchema
+  );

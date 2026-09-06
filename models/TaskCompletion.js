@@ -10,7 +10,10 @@ const taskCompletionSchema = new mongoose.Schema(
       type: String,
       enum: ['approved', 'pending', 'rejected'],
       default: 'approved'
-    }
+    },
+    // file_id تلگرامی اسکرین‌شات ارسالی کاربر (برای تسک‌های manual)
+    proofFileId: { type: String, default: '' },
+    adminNote: { type: String, default: '' }
   },
   { timestamps: true }
 );

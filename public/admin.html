@@ -21,6 +21,7 @@
     background:var(--surface2);border:1px solid var(--line);color:var(--text);
     border-radius:10px;padding:10px 12px;font-size:13px;width:100%;margin-bottom:8px;font-family:inherit
   }
+  textarea{min-height:90px;resize:vertical}
   label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
   button{
     background:linear-gradient(135deg,var(--primary2),var(--primary));color:#fff;border:0;
@@ -34,7 +35,7 @@
   .tabs button{background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
   .tabs button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
   table{width:100%;border-collapse:collapse;font-size:12px}
-  th,td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--line)}
+  th,td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--line);vertical-align:middle}
   th{color:var(--muted);font-weight:700}
   .badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:700}
   .badge.pending{background:rgba(245,158,11,.15);color:var(--warning)}
@@ -49,6 +50,10 @@
   .flexBetween{display:flex;justify-content:space-between;align-items:center;gap:8px}
   .small{font-size:11px;color:var(--muted)}
   .hidden{display:none}
+  .proofThumb{width:52px;height:52px;border-radius:8px;object-fit:cover;cursor:pointer;border:1px solid var(--line)}
+  .imgModal{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:999;padding:20px}
+  .imgModal.show{display:flex}
+  .imgModal img{max-width:100%;max-height:90vh;border-radius:8px}
 </style>
 </head>
 <body>
@@ -68,15 +73,17 @@
     <div class="flexBetween">
       <div>
         <h1>پنل ادمین</h1>
-        <div class="sub">مدیریت تسک‌ها، برداشت‌ها، کاربران و تنظیمات</div>
+        <div class="sub">مدیریت تسک‌ها، بررسی‌ها، برداشت‌ها، کاربران و پیام همگانی</div>
       </div>
       <button class="secondary" onclick="logout()">خروج</button>
     </div>
 
     <div class="tabs">
       <button data-tab="tasks" onclick="switchTab('tasks')">تسک‌ها</button>
+      <button data-tab="reviews" onclick="switchTab('reviews')">بررسی اسکرین‌شات‌ها</button>
       <button data-tab="withdrawals" onclick="switchTab('withdrawals')">برداشت‌ها</button>
       <button data-tab="users" onclick="switchTab('users')">کاربران</button>
+      <button data-tab="broadcast" onclick="switchTab('broadcast')">پیام همگانی</button>
       <button data-tab="settings" onclick="switchTab('settings')">تنظیمات</button>
     </div>
 
@@ -91,27 +98,49 @@
         <input id="taskTitle" placeholder="مثلاً عضویت در کانال تلگرام">
         <label>توضیحات (اختیاری)</label>
         <input id="taskDesc" placeholder="توضیح کوتاه">
-        <label>نوع</label>
+        <label>نوع نمایشی</label>
         <select id="taskType">
           <option value="channel">عضویت کانال</option>
           <option value="group">عضویت گروه</option>
           <option value="link">بازدید لینک</option>
           <option value="custom">سفارشی</option>
         </select>
-        <label>لینک (اختیاری)</label>
+        <label>روش تأیید</label>
+        <select id="taskVerifyType" onchange="onVerifyTypeChange()">
+          <option value="telegram">خودکار (عضویت کانال/گروه تلگرام)</option>
+          <option value="manual" selected>دستی (کاربر اسکرین‌شات می‌فرستد)</option>
+        </select>
+        <div id="chatIdField" class="hidden">
+          <label>آیدی/یوزرنیم کانال یا گروه (chatId)</label>
+          <input id="taskChatId" placeholder="مثلاً @mychannel یا -1001234567890">
+          <p class="small">⚠️ ربات باید ادمین همین کانال/گروه باشد تا بتواند عضویت را بررسی کند.</p>
+        </div>
+        <label>لینک (اختیاری — دکمه «باز کردن» همین را باز می‌کند)</label>
         <input id="taskUrl" placeholder="https://t.me/...">
         <label>مقدار پاداش (پوینت)</label>
         <input id="taskReward" type="number" placeholder="مثلاً 100">
-        <label class="row" style="align-items:center">
-          <input type="checkbox" id="taskReview" style="width:auto;margin:0">
-          نیاز به بررسی دستی قبل از پرداخت پاداش
-        </label>
         <button onclick="addTask()">افزودن تسک</button>
       </div>
 
       <div class="card">
         <b>لیست تسک‌ها</b>
         <div id="tasksList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- REVIEWS (task screenshot submissions) -->
+    <div id="tab-reviews" class="tabContent hidden">
+      <div class="card">
+        <div class="flexBetween">
+          <b>بررسی اسکرین‌شات‌های تسک</b>
+          <select id="reviewFilter" onchange="loadReviews()" style="width:auto;margin:0">
+            <option value="pending" selected>در انتظار</option>
+            <option value="approved">تأیید شده</option>
+            <option value="rejected">رد شده</option>
+            <option value="all">همه</option>
+          </select>
+        </div>
+        <div id="reviewsList" style="margin-top:10px"></div>
       </div>
     </div>
 
@@ -140,12 +169,27 @@
       </div>
     </div>
 
+    <!-- BROADCAST -->
+    <div id="tab-broadcast" class="tabContent hidden">
+      <div class="card">
+        <b>ارسال پیام همگانی</b>
+        <p class="small">این پیام برای همه‌ی کاربران فعال (غیرمسدود) ربات ارسال می‌شود.</p>
+        <br>
+        <label>متن پیام</label>
+        <textarea id="broadcastText" placeholder="متن پیام همگانی..."></textarea>
+        <label>تصویر (اختیاری)</label>
+        <input id="broadcastImage" type="file" accept="image/*">
+        <button onclick="sendBroadcast()">ارسال به همه کاربران</button>
+        <div id="broadcastMsg" class="small" style="margin-top:8px"></div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div id="tab-settings" class="tabContent hidden">
       <div class="card">
         <b>تنظیمات کلی</b>
         <br><br>
-        <label>نرخ تبدیل (هر پوینت به ارز)</label>
+        <label>نرخ تبدیل (هر پوینت به GRAM)</label>
         <input id="setRate" type="number" step="0.000001">
         <label>حداقل پوینت برای برداشت</label>
         <input id="setMinWithdraw" type="number">
@@ -160,6 +204,10 @@
   </div>
 </div>
 
+<div class="imgModal" id="imgModal" onclick="this.classList.remove('show')">
+  <img id="imgModalSrc" src="" alt="">
+</div>
+
 <script>
 "use strict";
 
@@ -170,282 +218,3 @@ function showMsg(text, type) {
   el.textContent = text;
   el.className = type || "";
   setTimeout(() => { el.textContent = ""; }, 3500);
-}
-
-async function api(path, options = {}) {
-  const res = await fetch(path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      "x-admin-key": ADMIN_KEY,
-      ...(options.headers || {})
-    }
-  });
-  let data = {};
-  try { data = await res.json(); } catch {}
-  if (!res.ok) throw new Error(data.message || "خطا در ارتباط با سرور");
-  return data;
-}
-
-async function login() {
-  const key = document.getElementById("adminKeyInput").value.trim();
-  if (!key) return;
-  ADMIN_KEY = key;
-  try {
-    await api("/api/admin/settings");
-    localStorage.setItem("adminKey", key);
-    document.getElementById("loginBox").classList.add("hidden");
-    document.getElementById("panel").classList.remove("hidden");
-    switchTab("tasks");
-  } catch (error) {
-    document.getElementById("loginMsg").textContent = "کلید نادرست است یا سرور در دسترس نیست.";
-  }
-}
-
-function logout() {
-  localStorage.removeItem("adminKey");
-  ADMIN_KEY = "";
-  document.getElementById("panel").classList.add("hidden");
-  document.getElementById("loginBox").classList.remove("hidden");
-}
-
-function switchTab(tab) {
-  document.querySelectorAll(".tabContent").forEach(el => el.classList.add("hidden"));
-  document.querySelectorAll(".tabs button").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
-  document.getElementById("tab-" + tab).classList.remove("hidden");
-  if (tab === "tasks") loadTasks();
-  if (tab === "withdrawals") loadWithdrawals();
-  if (tab === "users") loadUsers();
-  if (tab === "settings") loadSettings();
-}
-
-/* ---------- TASKS ---------- */
-async function loadTasks() {
-  const container = document.getElementById("tasksList");
-  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
-  try {
-    const data = await api("/api/admin/tasks");
-    const tasks = data.tasks || [];
-    if (tasks.length === 0) {
-      container.innerHTML = '<div class="empty">هنوز تسکی ثبت نشده.</div>';
-      return;
-    }
-    container.innerHTML = `
-      <table>
-        <thead><tr><th>عنوان</th><th>نوع</th><th>پاداش</th><th>وضعیت</th><th>عملیات</th></tr></thead>
-        <tbody>
-          ${tasks.map(t => `
-            <tr>
-              <td>${escapeHtml(t.title)}</td>
-              <td>${escapeHtml(t.type)}</td>
-              <td>${t.reward}</td>
-              <td>${t.isActive ? "فعال" : "غیرفعال"}</td>
-              <td class="row">
-                <button class="secondary" onclick="toggleTask('${t._id}', ${!t.isActive})">${t.isActive ? "غیرفعال" : "فعال"}</button>
-                <button class="danger" onclick="deleteTask('${t._id}')">حذف</button>
-              </td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-  } catch (error) {
-    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
-  }
-}
-
-async function addTask() {
-  const title = document.getElementById("taskTitle").value.trim();
-  const description = document.getElementById("taskDesc").value.trim();
-  const type = document.getElementById("taskType").value;
-  const url = document.getElementById("taskUrl").value.trim();
-  const reward = Number(document.getElementById("taskReward").value);
-  const requiresReview = document.getElementById("taskReview").checked;
-
-  if (!title || !reward) {
-    showMsg("عنوان و مقدار پاداش الزامی است.", "error");
-    return;
-  }
-
-  try {
-    await api("/api/admin/tasks", {
-      method: "POST",
-      body: JSON.stringify({ title, description, type, url, reward, requiresReview })
-    });
-    showMsg("تسک با موفقیت اضافه شد.", "success");
-    document.getElementById("taskTitle").value = "";
-    document.getElementById("taskDesc").value = "";
-    document.getElementById("taskUrl").value = "";
-    document.getElementById("taskReward").value = "";
-    document.getElementById("taskReview").checked = false;
-    loadTasks();
-  } catch (error) {
-    showMsg(error.message, "error");
-  }
-}
-
-async function toggleTask(id, newState) {
-  try {
-    await api(`/api/admin/tasks/${id}`, { method: "PUT", body: JSON.stringify({ isActive: newState }) });
-    loadTasks();
-  } catch (error) {
-    showMsg(error.message, "error");
-  }
-}
-
-async function deleteTask(id) {
-  if (!confirm("این تسک حذف شود؟")) return;
-  try {
-    await api(`/api/admin/tasks/${id}`, { method: "DELETE" });
-    showMsg("تسک حذف شد.", "success");
-    loadTasks();
-  } catch (error) {
-    showMsg(error.message, "error");
-  }
-}
-
-/* ---------- WITHDRAWALS ---------- */
-const STATUS_FA = { pending: "در انتظار", approved: "تأیید شده", rejected: "رد شده", paid: "پرداخت شده" };
-
-async function loadWithdrawals() {
-  const container = document.getElementById("withdrawalsList");
-  const status = document.getElementById("withdrawFilter").value;
-  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
-  try {
-    const data = await api(`/api/admin/withdrawals${status ? "?status=" + status : ""}`);
-    const list = data.withdrawals || [];
-    if (list.length === 0) {
-      container.innerHTML = '<div class="empty">درخواستی یافت نشد.</div>';
-      return;
-    }
-    container.innerHTML = `
-      <table>
-        <thead><tr><th>کاربر</th><th>مقدار پوینت</th><th>آدرس</th><th>وضعیت</th><th>عملیات</th></tr></thead>
-        <tbody>
-          ${list.map(w => `
-            <tr>
-              <td>${escapeHtml(w.user?.firstName || w.user?.username || "—")}</td>
-              <td>${w.pointsSpent}</td>
-              <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(w.address)}">${escapeHtml(w.address)}</td>
-              <td><span class="badge ${w.status}">${STATUS_FA[w.status] || w.status}</span></td>
-              <td class="row">
-                ${w.status === "pending" ? `
-                  <button class="success" onclick="withdrawAction('${w._id}','approve')">تأیید</button>
-                  <button class="danger" onclick="withdrawAction('${w._id}','reject')">رد</button>
-                ` : '<span class="small">—</span>'}
-              </td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-  } catch (error) {
-    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
-  }
-}
-
-async function withdrawAction(id, action) {
-  try {
-    await api(`/api/admin/withdrawals/${id}/${action}`, { method: "POST", body: JSON.stringify({}) });
-    showMsg(action === "approve" ? "درخواست تأیید شد." : "درخواست رد شد.", "success");
-    loadWithdrawals();
-  } catch (error) {
-    showMsg(error.message, "error");
-  }
-}
-
-/* ---------- USERS ---------- */
-async function loadUsers() {
-  const container = document.getElementById("usersList");
-  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
-  try {
-    const data = await api("/api/admin/users");
-    const users = data.users || [];
-    if (users.length === 0) {
-      container.innerHTML = '<div class="empty">کاربری یافت نشد.</div>';
-      return;
-    }
-    container.innerHTML = `
-      <table>
-        <thead><tr><th>نام</th><th>پوینت</th><th>دعوت‌شده</th><th>وضعیت</th><th>عملیات</th></tr></thead>
-        <tbody>
-          ${users.map(u => `
-            <tr>
-              <td>${escapeHtml(u.firstName || u.username || "—")}</td>
-              <td>${u.points}</td>
-              <td>${u.invitedCount}</td>
-              <td>${u.isBanned ? '<span class="badge rejected">مسدود</span>' : '<span class="badge approved">فعال</span>'}</td>
-              <td>
-                ${u.isBanned
-                  ? `<button class="success" onclick="userAction('${u._id}','unban')">رفع مسدودی</button>`
-                  : `<button class="danger" onclick="userAction('${u._id}','ban')">مسدود کردن</button>`
-                }
-              </td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-  } catch (error) {
-    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
-  }
-}
-
-async function userAction(id, action) {
-  try {
-    await api(`/api/admin/users/${id}/${action}`, { method: "POST", body: JSON.stringify({}) });
-    loadUsers();
-  } catch (error) {
-    showMsg(error.message, "error");
-  }
-}
-
-/* ---------- SETTINGS ---------- */
-async function loadSettings() {
-  try {
-    const data = await api("/api/admin/settings");
-    const s = data.settings || {};
-    document.getElementById("setRate").value = s.rate ?? "";
-    document.getElementById("setMinWithdraw").value = s.minWithdrawPoints ?? "";
-    document.getElementById("setDaily").value = s.dailyCheckInPoints ?? "";
-    document.getElementById("setStreakBonus").value = s.streakBonusPoints ?? "";
-  } catch (error) {
-    showMsg(error.message, "error");
-  }
-}
-
-async function saveSettings() {
-  const body = {
-    rate: Number(document.getElementById("setRate").value),
-    minWithdrawPoints: Number(document.getElementById("setMinWithdraw").value),
-    dailyCheckInPoints: Number(document.getElementById("setDaily").value),
-    streakBonusPoints: Number(document.getElementById("setStreakBonus").value)
-  };
-  try {
-    await api("/api/admin/settings", { method: "PUT", body: JSON.stringify(body) });
-    showMsg("تنظیمات ذخیره شد.", "success");
-  } catch (error) {
-    showMsg(error.message, "error");
-  }
-}
-
-/* ---------- UTIL ---------- */
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, ch => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
-  }[ch]));
-}
-
-/* ---------- INIT ---------- */
-if (ADMIN_KEY) {
-  api("/api/admin/settings").then(() => {
-    document.getElementById("loginBox").classList.add("hidden");
-    document.getElementById("panel").classList.remove("hidden");
-    switchTab("tasks");
-  }).catch(() => {
-    localStorage.removeItem("adminKey");
-  });
-}
-</script>
-</body>
-</html>

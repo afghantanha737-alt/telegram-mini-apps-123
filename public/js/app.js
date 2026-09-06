@@ -1,6 +1,7 @@
 /* =========================================================
    POINTS REWARDS — PREMIUM TELEGRAM MINI APP
    File: public/js/app.js
+   (نیازمند i18n.js — باید قبل از این فایل لود شود)
 ========================================================= */
 "use strict";
 
@@ -23,6 +24,7 @@ if (tg) {
 /* ================= GLOBAL STATE ================= */
 const state = {
   activeTab: "home",
+  language: "fa",
   user: null,
   points: 0,
   estimatedCryptoValue: 0,
@@ -32,6 +34,7 @@ const state = {
   spinChances: 0,
   totalCheckins: 0,
   minWithdrawPoints: 1000,
+  nextResetAt: 0,
   referralCode: "",
   shareLink: "",
   invitedCount: 0,
@@ -40,11 +43,11 @@ const state = {
   completions: [],
   leaderboard: [],
   myRank: null,
-  loading: false,
   captchaA: 0,
   captchaB: 0,
   initialized: false
 };
+window.state = state;
 
 /* ================= DOM HELPERS ================= */
 const $ = (selector) => document.querySelector(selector);
@@ -82,7 +85,7 @@ function updateThemeUI() {
   const toggle = $("#themeToggle");
   const theme = getTheme();
   if (icon) icon.textContent = theme === "dark" ? "🌙" : "☀️";
-  if (label) label.textContent = theme === "dark" ? "حالت تاریک" : "حالت روشن";
+  if (label) label.textContent = theme === "dark" ? t("theme_dark") : t("theme_light");
   if (toggle) toggle.setAttribute("aria-checked", theme === "light" ? "true" : "false");
 }
 applyTheme(getTheme());
@@ -125,10 +128,10 @@ function escapeHTML(value) {
 
 /* ================= FORMATTERS ================= */
 function formatPoints(value) {
-  return new Intl.NumberFormat("fa-IR").format(Math.floor(Number(value) || 0));
+  return new Intl.NumberFormat("en-US").format(Math.floor(Number(value) || 0));
 }
 function formatNumber(value, decimals = 4) {
-  return new Intl.NumberFormat("fa-IR", { maximumFractionDigits: decimals }).format(Number(value) || 0);
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: decimals }).format(Number(value) || 0);
 }
 function getInitials(user) {
   const first = user?.first_name || user?.firstName || "";
@@ -140,14 +143,15 @@ function getInitials(user) {
 function timeAgo(dateString) {
   const date = new Date(dateString);
   const diffSeconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (diffSeconds < 60) return "همین الان";
+  if (diffSeconds < 60) return "•";
   const minutes = Math.floor(diffSeconds / 60);
-  if (minutes < 60) return `${formatPoints(minutes)} دقیقه پیش`;
+  if (minutes < 60) return `${formatPoints(minutes)}m`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${formatPoints(hours)} ساعت پیش`;
+  if (hours < 24) return `${formatPoints(hours)}h`;
   const days = Math.floor(hours / 24);
-  return `${formatPoints(days)} روز پیش`;
+  return `${formatPoints(days)}d`;
 }
+function pad2(n) { return String(n).padStart(2, "0"); }
 
 /* ================= API ================= */
 async function api(url, options = {}) {
@@ -166,7 +170,7 @@ async function api(url, options = {}) {
   try {
     response = await fetch(finalUrl, config);
   } catch (error) {
-    throw new Error("اتصال به سرور برقرار نشد.");
+    throw new Error(t("error_generic"));
   }
 
   let data = null;
@@ -177,7 +181,38 @@ async function api(url, options = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(data?.message || data?.error || "خطایی در سرور رخ داد.");
+    const err = new Error(data?.message || t("error_generic"));
+    err.code = data?.code || null;
+    throw err;
+  }
+  return data;
+}
+
+/**
+ * برای آپلود multipart (اسکرین‌شات تسک) — initData را به‌صورت query پاس می‌کند.
+ */
+async function apiUpload(url, formData) {
+  const separator = url.includes("?") ? "&" : "?";
+  const finalUrl = `${url}${separator}initData=${encodeURIComponent(getInitData())}`;
+
+  let response;
+  try {
+    response = await fetch(finalUrl, { method: "POST", body: formData });
+  } catch (error) {
+    throw new Error(t("error_generic"));
+  }
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    const err = new Error(data?.message || t("error_generic"));
+    err.code = data?.code || null;
+    throw err;
   }
   return data;
 }
@@ -193,11 +228,11 @@ function showLoading() {
   `;
 }
 
-/* ================= HEADER ================= */
+/* ================= HEADER + STATIC TEXT ================= */
 function updateHeader() {
   const telegramUser = getTelegramUser();
   const user = state.user || telegramUser || {};
-  const firstName = user.first_name || user.firstName || "دوست عزیز";
+  const firstName = user.first_name || user.firstName || "";
 
   const avatar = $("#avatar");
   const greet = $("#greetName");
@@ -207,11 +242,21 @@ function updateHeader() {
     avatar.textContent = getInitials(user);
     if (user.photo_url) avatar.innerHTML = `<img src="${escapeHTML(user.photo_url)}" alt="">`;
   }
-  if (greet) greet.textContent = `سلام ${escapeHTML(firstName)} 👋`;
-  if (points) points.textContent = `${formatPoints(state.points)} پوینت`;
+  if (greet) greet.textContent = t("greet_hello", { name: escapeHTML(firstName) });
+  if (points) points.textContent = `${formatPoints(state.points)} ${t("points_unit")}`;
+}
+
+function applyStaticTranslations() {
+  $$("#tabbar [data-tab]").forEach(button => {
+    const label = button.querySelector(".tabLabel");
+    if (label) label.textContent = t(`nav_${button.dataset.tab}`);
+  });
+  updateThemeUI();
+  updateHeader();
 }
 
 /* ================= NAVIGATION ================= */
+let countdownInterval = null;
 function setupNavigation() {
   $$("#tabbar [data-tab]").forEach(button => {
     button.addEventListener("click", () => {
@@ -230,6 +275,7 @@ function updateNavigation() {
 async function navigate(tab) {
   const validTabs = ["home", "tasks", "daily", "wallet", "profile"];
   if (!validTabs.includes(tab)) tab = "home";
+  clearInterval(countdownInterval);
   state.activeTab = tab;
   updateNavigation();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -248,9 +294,10 @@ function showTerms() {
 function hideTerms() {
   const overlay = $("#termsOverlay");
   if (overlay) overlay.style.display = "none";
-localStorage.setItem("termsAccepted", "1");
+  localStorage.setItem("termsAccepted", "1");
 }
 window.hideTerms = hideTerms;
+window.showTerms = showTerms;
 
 /* ================= CAPTCHA ================= */
 function captchaPassed() {
@@ -262,7 +309,7 @@ function createCaptcha() {
   const question = $("#captchaQuestion");
   const answer = $("#captchaAnswer");
   const error = $("#captchaError");
-  if (question) question.textContent = `${formatPoints(state.captchaA)} + ${formatPoints(state.captchaB)} = ؟`;
+  if (question) question.textContent = `${state.captchaA} + ${state.captchaB} = ?`;
   if (answer) { answer.value = ""; answer.focus(); }
   if (error) error.textContent = "";
 }
@@ -292,13 +339,57 @@ async function submitCaptcha() {
   localStorage.setItem("captchaPassed", "1");
   hideCaptcha();
   haptic("success");
-  toast("تأیید امنیتی با موفقیت انجام شد.", "success");
-  if (!termsAccepted()) showTerms();
   await boot();
 }
 window.submitCaptcha = submitCaptcha;
 
+/* ================= LANGUAGE ================= */
+function showLanguageOverlay() {
+  const overlay = $("#languageOverlay");
+  if (overlay) overlay.style.display = "flex";
+}
+window.showLanguageOverlay = showLanguageOverlay;
+
+function hideLanguageOverlay() {
+  const overlay = $("#languageOverlay");
+  if (overlay) overlay.style.display = "none";
+}
+window.hideLanguageOverlay = hideLanguageOverlay;
+
+async function selectLanguage(lang) {
+  if (!["fa", "ps", "en"].includes(lang)) return;
+  if (lang === state.language) { hideLanguageOverlay(); return; }
+
+  try {
+    await api("/api/auth/language", { method: "PATCH", body: { language: lang } });
+  } catch (error) {
+    console.warn("Failed to persist language:", error);
+  }
+
+  state.language = lang;
+  localStorage.setItem("appLanguage", lang);
+  hideLanguageOverlay();
+  applyStaticTranslations();
+  await renderCurrentTab();
+}
+window.selectLanguage = selectLanguage;
+
 /* ================= DATA LOADERS ================= */
+async function bootstrapAuth() {
+  const params = new URLSearchParams(location.search);
+  const ref = params.get("ref") || "";
+  const url = ref ? `/api/auth/me?ref=${encodeURIComponent(ref)}` : "/api/auth/me";
+
+  try {
+    const data = await api(url);
+    state.language = localStorage.getItem("appLanguage") || data.language || "fa";
+    if (data.firstName) state.user = { ...(state.user || {}), first_name: data.firstName };
+  } catch (error) {
+    console.warn("Bootstrap auth failed:", error);
+    state.language = localStorage.getItem("appLanguage") || "fa";
+  }
+}
+
 async function loadUserData() {
   const data = await api("/api/points/me");
   state.points = Number(data?.points) || 0;
@@ -309,6 +400,7 @@ async function loadUserData() {
   state.spinChances = Number(data?.spinChances) || 0;
   state.totalCheckins = Number(data?.totalCheckins) || 0;
   state.minWithdrawPoints = Number(data?.minWithdrawPoints) || 1000;
+  state.nextResetAt = Number(data?.nextResetAt) || 0;
   if (data?.firstName) state.user = { ...(state.user || {}), first_name: data.firstName };
   updateHeader();
 }
@@ -370,26 +462,26 @@ function renderHome() {
     <section class="hero">
       <div class="heroTop">
         <div>
-          <div class="heroEyebrow">PREMIUM REWARDS</div>
-          <h1 class="heroTitle">امتیاز جمع کن،<br>پاداش بگیر.</h1>
-          <p class="heroDescription">با انجام فعالیت‌های ساده، امتیاز بیشتری به دست بیاور.</p>
+          <div class="heroEyebrow">${t("hero_eyebrow")}</div>
+          <h1 class="heroTitle">${t("hero_title_line1")}<br>${t("hero_title_line2")}</h1>
+          <p class="heroDescription">${t("hero_desc")}</p>
         </div>
-        <div class="badge gold">LEVEL ${formatPoints(currentLevel)}</div>
+        <div class="badge gold">${t("level_label", { n: formatPoints(currentLevel) })}</div>
       </div>
       <div class="heroBalance">
-        <div class="balanceLabel">موجودی فعلی</div>
-        <div class="balanceValue">${formatPoints(state.points)} <span class="balanceUnit">POINT</span></div>
+        <div class="balanceLabel">${t("wallet_balance_title")}</div>
+        <div class="balanceValue">${formatPoints(state.points)} <span class="balanceUnit">${t("points_unit").toUpperCase()}</span></div>
       </div>
       <div class="progressWrap">
         <div class="progressMeta">
-          <span>پیشرفت سطح</span>
+          <span>${t("progress_label")}</span>
           <span>${formatPoints(state.points)} / ${formatPoints(nextLevel)}</span>
         </div>
         <div class="progressTrack"><div class="progressBar" style="width:${levelProgress}%"></div></div>
       </div>
       <div class="heroActions">
-        <button class="heroAction" type="button" onclick="navigate('tasks')">⚡ کسب امتیاز</button>
-        <button class="heroAction" type="button" onclick="navigate('wallet')">◇ کیف پول</button>
+        <button class="heroAction" type="button" onclick="navigate('tasks')">${t("hero_action_earn")}</button>
+        <button class="heroAction" type="button" onclick="navigate('wallet')">${t("hero_action_wallet")}</button>
       </div>
     </section>
 
@@ -397,133 +489,177 @@ function renderHome() {
       <div class="statCard">
         <div class="statIcon">🔥</div>
         <div class="statValue">${formatPoints(state.streak)}</div>
-        <div class="statLabel">استریک</div>
+        <div class="statLabel">${t("stat_streak")}</div>
       </div>
       <div class="statCard">
         <div class="statIcon">🎯</div>
         <div class="statValue">${formatPoints(state.totalCheckins)}</div>
-        <div class="statLabel">ورود روزانه</div>
+        <div class="statLabel">${t("stat_checkins")}</div>
       </div>
       <div class="statCard">
         <div class="statIcon">👥</div>
         <div class="statValue">${formatPoints(state.invitedCount)}</div>
-        <div class="statLabel">دعوت‌شده</div>
+        <div class="statLabel">${t("stat_invited")}</div>
       </div>
     </div>
 
     <div class="sectionHeader">
-      <h2 class="sectionTitle">سریع‌ترین راه‌های کسب امتیاز</h2>
-      <button class="sectionMore" type="button" onclick="navigate('tasks')">مشاهده همه</button>
+      <h2 class="sectionTitle">${t("section_quick_earn")}</h2>
+      <button class="sectionMore" type="button" onclick="navigate('tasks')">${t("section_view_all")}</button>
     </div>
 
     <div class="earningList">
       <div class="earningItem" onclick="navigate('daily')">
         <div class="earningIcon">◷</div>
         <div class="earningBody">
-          <div class="earningTitle">ورود روزانه</div>
-          <div class="earningSub">${state.canCheckIn ? "امروز هنوز ثبت نکرده‌ای" : "امروز قبلاً دریافت شد"}</div>
+          <div class="earningTitle">${t("earn_daily_title")}</div>
+          <div class="earningSub">${state.canCheckIn ? t("earn_daily_sub_available") : t("earn_daily_sub_done")}</div>
         </div>
-        <div class="earningReward">+ پوینت</div>
         <div class="earningArrow">‹</div>
       </div>
       <div class="earningItem" onclick="navigate('tasks')">
         <div class="earningIcon">✓</div>
         <div class="earningBody">
-          <div class="earningTitle">انجام تسک‌ها</div>
-          <div class="earningSub">${formatPoints(state.tasks.length)} تسک فعال</div>
+          <div class="earningTitle">${t("earn_tasks_title")}</div>
+          <div class="earningSub">${t("earn_tasks_sub", { n: formatPoints(state.tasks.length) })}</div>
         </div>
-        <div class="earningReward">متغیر</div>
         <div class="earningArrow">‹</div>
       </div>
       <div class="earningItem" onclick="navigate('profile')">
         <div class="earningIcon">👥</div>
         <div class="earningBody">
-          <div class="earningTitle">دعوت از دوستان</div>
-          <div class="earningSub">لینک اختصاصی خودت را به اشتراک بگذار</div>
+          <div class="earningTitle">${t("earn_referral_title")}</div>
+          <div class="earningSub">${t("earn_referral_sub")}</div>
         </div>
-        <div class="earningReward">+ پوینت</div>
         <div class="earningArrow">‹</div>
       </div>
       ${featuredTasks.map(task => {
         const status = completionStatus(task._id);
+        const subLabel = status === "approved" ? t("task_status_done") : status === "pending" ? t("task_status_pending") : t("task_status_todo");
         return `
         <div class="earningItem" onclick="navigate('tasks')">
           <div class="earningIcon">🎁</div>
           <div class="earningBody">
             <div class="earningTitle">${escapeHTML(task.title)}</div>
-            <div class="earningSub">${status === "approved" ? "انجام شده" : status === "pending" ? "در انتظار بررسی" : "هنوز انجام نشده"}</div>
+            <div class="earningSub">${subLabel}</div>
           </div>
           <div class="earningReward">+${formatPoints(task.reward)}</div>
           <div class="earningArrow">‹</div>
         </div>`;
       }).join("")}
-    </div>
+</div>
   `;
 }
 
 /* ================= TASKS ================= */
 const TASK_ICONS = { channel: "📢", group: "👥", link: "🔗", custom: "🎁" };
 
-async function claimTask(taskId) {
-  const button = document.querySelector(`[data-claim="${taskId}"]`);
-  if (button) button.disabled = true;
+function openTaskLinkOnly(url) {
+  if (!url) return;
+  if (tg?.openLink) tg.openLink(url);
+  else window.open(url, "_blank");
+}
+window.openTaskLinkOnly = openTaskLinkOnly;
+
+/** تسک‌های تلگرامی: بررسی خودکار عضویت با API ربات */
+async function verifyTelegramTask(taskId) {
+  const button = document.querySelector(`[data-verify="${taskId}"]`);
+  if (button) { button.disabled = true; button.textContent = t("task_action_verifying"); }
 
   try {
     const result = await api(`/api/tasks/${taskId}/claim`, { method: "POST" });
-    haptic(result.status === "approved" ? "success" : "warning");
-    toast(result.message, result.status === "approved" ? "success" : "warning");
+    haptic("success");
+    toast(result.message, "success");
     state.points = Number(result.points) || state.points;
     await loadTasks();
     updateHeader();
     renderTasks();
   } catch (error) {
     haptic("error");
-    toast(error.message, "error");
-    if (button) button.disabled = false;
+    if (error.code === "NOT_JOINED") {
+      toast(t("toast_verify_needs_join"), "warning");
+    } else {
+      toast(translateServerMessage(error.code, error.message), "error");
+    }
+    if (button) { button.disabled = false; button.textContent = t("task_action_verify"); }
   }
 }
-window.claimTask = claimTask;
+window.verifyTelegramTask = verifyTelegramTask;
 
-function openTaskLink(url, taskId) {
-  if (url) {
-    if (tg?.openLink) tg.openLink(url);
-    else window.open(url, "_blank");
-  }
-  setTimeout(() => claimTask(taskId), 600);
+/** تسک‌های دستی: انتخاب فایل -> آپلود خودکار اسکرین‌شات */
+function triggerProofUpload(taskId) {
+  const input = document.getElementById(`proofInput-${taskId}`);
+  if (input) input.click();
 }
-window.openTaskLink = openTaskLink;
+window.triggerProofUpload = triggerProofUpload;
+
+async function handleProofFileChange(taskId, inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+
+  const button = document.querySelector(`[data-upload="${taskId}"]`);
+  if (button) { button.disabled = true; button.textContent = t("task_action_uploading"); }
+
+  try {
+    const formData = new FormData();
+    formData.append("proof", file);
+    const result = await apiUpload(`/api/tasks/${taskId}/submit-proof`, formData);
+    haptic("success");
+    toast(t("toast_proof_sent"), "success");
+    await loadTasks();
+    renderTasks();
+  } catch (error) {
+    haptic("error");
+    toast(translateServerMessage(error.code, error.message), "error");
+    if (button) { button.disabled = false; button.textContent = t("task_action_upload"); }
+  } finally {
+    inputEl.value = "";
+  }
+}
+window.handleProofFileChange = handleProofFileChange;
 
 function renderTasks() {
   const content = $("#content");
 
   if (state.tasks.length === 0) {
     content.innerHTML = `
-<div class="sectionHeader"><h2 class="sectionTitle">تسک‌های امروز</h2></div>
+      <div class="sectionHeader"><h2 class="sectionTitle">${t("tasks_title")}</h2></div>
       <div class="card emptyState">
         <div class="emptyIcon">🗂️</div>
-        <div class="emptyTitle">فعلاً تسکی موجود نیست</div>
-        <div class="emptyDesc">به‌زودی تسک‌های جدید اضافه می‌شود.</div>
+        <div class="emptyTitle">${t("tasks_empty_title")}</div>
+        <div class="emptyDesc">${t("tasks_empty_desc")}</div>
       </div>
     `;
     return;
   }
 
   content.innerHTML = `
-    <div class="sectionHeader"><h2 class="sectionTitle">تسک‌های امروز</h2></div>
+    <div class="sectionHeader"><h2 class="sectionTitle">${t("tasks_title")}</h2></div>
     <div class="taskList">
       ${state.tasks.map(task => {
         const status = completionStatus(task._id);
         const icon = TASK_ICONS[task.type] || "🎁";
+        const safeUrl = (task.url || "").replaceAll("'", "\\'");
         let actionHtml;
 
         if (status === "approved") {
-          actionHtml = `<button class="taskAction done" disabled>انجام شد</button>`;
+          actionHtml = `<button class="taskAction done" disabled>${t("task_btn_done")}</button>`;
         } else if (status === "pending") {
-          actionHtml = `<button class="taskAction pending" disabled>در بررسی</button>`;
-        } else if (task.url) {
-          actionHtml = `<button class="taskAction" data-claim="${task._id}" onclick="openTaskLink('${task.url.replaceAll("'", "\\'")}','${task._id}')">انجام بده</button>`;
+          actionHtml = `<button class="taskAction pending" disabled>${t("task_btn_pending")}</button>`;
+        } else if (task.verifyType === "telegram") {
+          actionHtml = `
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
+              ${task.url ? `<button class="taskAction" style="background:var(--surface-3);color:var(--text)" onclick="openTaskLinkOnly('${safeUrl}')">${t("task_action_open")}</button>` : ""}
+              <button class="taskAction" data-verify="${task._id}" onclick="verifyTelegramTask('${task._id}')">${t("task_action_verify")}</button>
+            </div>`;
         } else {
-          actionHtml = `<button class="taskAction" data-claim="${task._id}" onclick="claimTask('${task._id}')">دریافت</button>`;
+          actionHtml = `
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
+              ${task.url ? `<button class="taskAction" style="background:var(--surface-3);color:var(--text)" onclick="openTaskLinkOnly('${safeUrl}')">${t("task_action_open")}</button>` : ""}
+              <input type="file" accept="image/*" capture="environment" id="proofInput-${task._id}" style="display:none"
+                onchange="handleProofFileChange('${task._id}', this)">
+              <button class="taskAction" data-upload="${task._id}" onclick="triggerProofUpload('${task._id}')">${t("task_action_upload")}</button>
+            </div>`;
         }
 
         return `
@@ -532,7 +668,7 @@ function renderTasks() {
           <div class="taskBody">
             <div class="taskTitle">${escapeHTML(task.title)}</div>
             ${task.description ? `<div class="taskDesc">${escapeHTML(task.description)}</div>` : ""}
-            <div class="taskReward">+${formatPoints(task.reward)} پوینت</div>
+            <div class="taskReward">+${formatPoints(task.reward)} ${t("points_unit")}</div>
           </div>
           ${actionHtml}
         </div>`;
@@ -541,7 +677,109 @@ function renderTasks() {
   `;
 }
 
-/* ================= DAILY ================= */
+/* ================= DAILY + SPIN WHEEL ================= */
+const SPIN_SEGMENTS_UI = [
+  { label: "2", color: "#8b5cf6" },
+  { label: "5", color: "#a78bfa" },
+  { label: "15", color: "#f5c451" },
+  { label: "20", color: "#22c55e" },
+  { label: "0", color: "#3a3f4d" },
+  { label: "🎡", color: "#38bdf8" }
+];
+
+let wheelRotation = 0;
+
+function buildWheelGradient() {
+  const step = 360 / SPIN_SEGMENTS_UI.length;
+  const stops = SPIN_SEGMENTS_UI.map((seg, i) => `${seg.color} ${i * step}deg ${(i + 1) * step}deg`);
+  return `conic-gradient(from 0deg, ${stops.join(", ")})`;
+}
+
+function buildWheelLabels() {
+  const step = 360 / SPIN_SEGMENTS_UI.length;
+  const radius = 78;
+  return SPIN_SEGMENTS_UI.map((seg, i) => {
+    const angleDeg = i * step + step / 2;
+    const angleRad = (angleDeg - 90) * (Math.PI / 180);
+    const x = 110 + radius * Math.cos(angleRad);
+    const y = 110 + radius * Math.sin(angleRad);
+    return `<span class="wheelLabel" style="left:${x}px;top:${y}px">${seg.label}</span>`;
+  }).join("");
+}
+
+function spinWheelTargetRotation(index) {
+  const step = 360 / SPIN_SEGMENTS_UI.length;
+  const segCenter = index * step + step / 2;
+  const currentMod = wheelRotation % 360;
+  const desiredMod = (360 - segCenter) % 360;
+  let delta = desiredMod - currentMod;
+  if (delta <= 0) delta += 360;
+  wheelRotation += delta + 360 * 4;
+  return wheelRotation;
+}
+
+async function doSpin() {
+  const button = $("#spinBtn");
+  if (state.spinChances <= 0) {
+    toast(t("spin_no_chances"), "warning");
+    return;
+  }
+  if (button) button.disabled = true;
+
+  try {
+    const result = await api("/api/points/spin", { method: "POST" });
+    const disc = $("#wheelDisc");
+    const rotation = spinWheelTargetRotation(result.segmentIndex);
+    if (disc) disc.style.transform = `rotate(${rotation}deg)`;
+
+    setTimeout(() => {
+      state.points = Number(result.points) || state.points;
+      state.spinChances = Number(result.spinChances) || 0;
+      updateHeader();
+
+      const chancesEl = $("#spinChancesValue");
+      if (chancesEl) chancesEl.textContent = formatPoints(state.spinChances);
+      if (button) button.disabled = state.spinChances <= 0;
+
+      if (result.type === "points") {
+        haptic("success");
+        toast(t("spin_result_points", { n: formatPoints(result.value) }), "success");
+      } else if (result.type === "spin") {
+        haptic("success");
+        toast(t("spin_result_extra"), "success");
+      } else {
+        haptic("warning");
+        toast(t("spin_result_empty"), "warning");
+      }
+    }, 3600);
+  } catch (error) {
+    haptic("error");
+    toast(translateServerMessage(error.code, error.message), "error");
+    if (button) button.disabled = false;
+  }
+}
+window.doSpin = doSpin;
+
+function startResetCountdown() {
+  clearInterval(countdownInterval);
+  const el = $("#resetCountdown");
+  if (!el || !state.nextResetAt) return;
+
+  function tick() {
+    const remaining = Math.max(0, state.nextResetAt - Date.now());
+    const h = Math.floor(remaining / 3600000);
+    const m = Math.floor((remaining % 3600000) / 60000);
+    const s = Math.floor((remaining % 60000) / 1000);
+    el.textContent = `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+    if (remaining <= 0) {
+      clearInterval(countdownInterval);
+      renderCurrentTab();
+    }
+  }
+  tick();
+  countdownInterval = setInterval(tick, 1000);
+}
+
 async function doCheckIn() {
   const button = $("#checkinBtn");
   if (button) button.disabled = true;
@@ -553,18 +791,19 @@ async function doCheckIn() {
     state.spinChances = Number(result.spinChances) || state.spinChances;
     state.canCheckIn = false;
     state.totalCheckins += 1;
+    state.nextResetAt = Number(result.nextResetAt) || state.nextResetAt;
 
     haptic("success");
-    toast(`${formatPoints(result.earned)} پوینت دریافت کردی! 🎉`, "success");
+    toast(`+${formatPoints(result.earned)} ${t("points_unit")} 🎉`, "success");
     if (result.gotSpin) {
-      setTimeout(() => toast("یک شانس چرخ‌گردون هم گرفتی! 🎡", "success"), 1200);
+      setTimeout(() => toast(t("spin_result_extra"), "success"), 1200);
     }
 
     updateHeader();
     renderDaily();
   } catch (error) {
     haptic("error");
-    toast(error.message, "error");
+    toast(translateServerMessage(error.code, error.message), "error");
     if (button) button.disabled = false;
   }
 }
@@ -581,24 +820,39 @@ function renderDaily() {
     return `
       <div class="dayCell ${isFilled ? "filled" : ""} ${isToday ? "today" : ""}">
         <span class="dayNum">${isFilled ? "✓" : dayNumber}</span>
-        <span>روز ${formatPoints(dayNumber)}</span>
+        <span>${t("day_label", { n: dayNumber })}</span>
       </div>`;
   }).join("");
 
   content.innerHTML = `
-    <div class="sectionHeader"><h2 class="sectionTitle">پاداش روزانه</h2></div>
+    <div class="sectionHeader"><h2 class="sectionTitle">${t("daily_title")}</h2></div>
+
+    <div class="card" style="text-align:center">
+      <div class="cardHeader" style="justify-content:center">
+        <div class="cardTitle">${t("spin_title")}</div>
+      </div>
+      <div class="wheelOuter">
+        <div class="wheelPointer">▼</div>
+        <div class="wheelDisc" id="wheelDisc" style="background:${buildWheelGradient()}"></div>
+        <div class="wheelLabels">${buildWheelLabels()}</div>
+      </div>
+      <p style="font-size:11px;margin:12px 0 4px">${t("spin_chances_label")}: <b id="spinChancesValue">${formatPoints(state.spinChances)}</b></p>
+      <button id="spinBtn" class="primaryBtn" type="button" style="margin-top:8px" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">
+        ${t("spin_button")}
+      </button>
+    </div>
 
     <div class="streakBox">
       <div class="streakFire">🔥</div>
       <div>
-        <div class="streakValue">${formatPoints(state.streak)} روز</div>
-        <div class="streakLabel">استریک فعلی — هر ۷ روز پیوسته یک شانس چرخ‌گردون هدیه می‌گیری</div>
+        <div class="streakValue">${formatPoints(state.streak)}</div>
+        <div class="streakLabel">${t("streak_label")}</div>
       </div>
     </div>
 
     <div class="card">
       <div class="cardHeader">
-        <div class="cardTitle">📅 تقویم هفتگی</div>
+        <div class="cardTitle">${t("daily_calendar_title")}</div>
       </div>
       <div class="dailyGrid">${dayCells}</div>
       <button
@@ -608,26 +862,23 @@ function renderDaily() {
         ${state.canCheckIn ? "" : "disabled"}
         onclick="doCheckIn()"
       >
-        ${state.canCheckIn ? "دریافت پاداش امروز" : "امروز قبلاً دریافت شد ✓"}
+        ${state.canCheckIn ? t("checkin_button") : t("checkin_done_button")}
       </button>
-    </div>
-
-    <div class="card">
-      <div class="cardHeader">
-        <div class="cardTitle">🎡 شانس چرخ‌گردون</div>
-        <div class="badge gold">${formatPoints(state.spinChances)}</div>
-      </div>
-      <p style="font-size:11px;margin-bottom:0">
-        با استریک ۷ روزه، ۱۴ روزه و همینطور بیشتر، شانس چرخ‌گردون هدیه دریافت می‌کنی.
-      </p>
+      ${!state.canCheckIn ? `
+        <div style="text-align:center;margin-top:10px">
+          <div class="small" style="color:var(--text-muted);font-size:10px">${t("reset_countdown_label")}</div>
+          <div id="resetCountdown" style="font-size:20px;font-weight:900;margin-top:4px;letter-spacing:1px">00:00:00</div>
+        </div>` : ""
+      }
     </div>
   `;
-}
 
+  startResetCountdown();
+}
 /* ================= WALLET ================= */
 function showWithdraw() {
   if (state.points < state.minWithdrawPoints) {
-    toast(`حداقل موجودی برای برداشت ${formatPoints(state.minWithdrawPoints)} پوینت است.`, "warning");
+    toast(t("wallet_min_withdraw_note", { n: formatPoints(state.minWithdrawPoints) }), "warning");
     return;
   }
   const overlay = $("#withdrawOverlay");
@@ -657,11 +908,11 @@ async function submitWithdraw() {
   const address = String(addressInput?.value || "").trim();
 
   if (!points || points <= 0) {
-    if (error) error.textContent = "مقدار پوینت را درست وارد کن.";
+    if (error) error.textContent = t("error_generic");
     return;
   }
   if (address.length < 6) {
-    if (error) error.textContent = "آدرس کیف پول را کامل وارد کن.";
+    if (error) error.textContent = t("error_generic");
     return;
   }
 
@@ -675,7 +926,7 @@ async function submitWithdraw() {
     updateHeader();
     renderWallet();
   } catch (err) {
-    if (error) error.textContent = err.message;
+    if (error) error.textContent = translateServerMessage(err.code, err.message);
     haptic("error");
   } finally {
     if (button) button.disabled = false;
@@ -694,41 +945,36 @@ async function loadWalletHistory() {
   }
 }
 
-const WITHDRAW_STATUS_FA = {
-  pending: { label: "در انتظار", cls: "warning" },
-  approved: { label: "تأیید شد", cls: "success" },
-  rejected: { label: "رد شد", cls: "danger" },
-  paid: { label: "پرداخت شد", cls: "success" }
+const WITHDRAW_STATUS_UI = {
+  pending: { cls: "warning" }, approved: { cls: "success" }, rejected: { cls: "danger" }, paid: { cls: "success" }
 };
 
 function renderWallet() {
   const content = $("#content");
 
   content.innerHTML = `
-    <div class="sectionHeader"><h2 class="sectionTitle">کیف پول</h2></div>
+    <div class="sectionHeader"><h2 class="sectionTitle">${t("wallet_title")}</h2></div>
 
     <section class="walletHero card">
-      <div class="balanceLabel">ارزش تخمینی</div>
+      <div class="balanceLabel">${t("wallet_estimated_value")}</div>
       <div class="walletCryptoValue">${formatNumber(state.estimatedCryptoValue)}</div>
-      <div class="walletRate">نرخ فعلی: هر پوینت ≈ ${formatNumber(state.rate, 6)}</div>
+      <div class="walletRate">${t("wallet_rate_label", { rate: formatNumber(state.rate, 6) })}</div>
       <div class="walletActions">
-        <button class="primaryBtn" type="button" onclick="showWithdraw()">برداشت</button>
-        <button class="secondaryBtn" type="button" onclick="navigate('tasks')">افزایش پوینت</button>
+        <button class="primaryBtn" type="button" onclick="showWithdraw()">${t("wallet_withdraw_button")}</button>
+        <button class="secondaryBtn" type="button" onclick="navigate('tasks')">${t("wallet_increase_button")}</button>
       </div>
     </section>
 
     <div class="card">
       <div class="cardHeader">
-        <div class="cardTitle">موجودی پوینت</div>
+        <div class="cardTitle">${t("wallet_balance_title")}</div>
         <div class="badge gold">${formatPoints(state.points)}</div>
       </div>
-      <p style="font-size:11px;margin-bottom:0">
-        حداقل مقدار برای ثبت درخواست برداشت: ${formatPoints(state.minWithdrawPoints)} پوینت.
-      </p>
+      <p style="font-size:11px;margin-bottom:0">${t("wallet_min_withdraw_note", { n: formatPoints(state.minWithdrawPoints) })}</p>
     </div>
 
     <div class="card" id="withdrawHistoryCard">
-      <div class="cardHeader"><div class="cardTitle">تاریخچه برداشت</div></div>
+      <div class="cardHeader"><div class="cardTitle">${t("wallet_history_title")}</div></div>
       <div id="withdrawHistoryList">
         <div class="loading" style="height:60px"></div>
       </div>
@@ -739,22 +985,23 @@ function renderWallet() {
     const list = $("#withdrawHistoryList");
     if (!list) return;
     if (walletHistory.length === 0) {
-      list.innerHTML = `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">هنوز درخواست برداشتی ثبت نشده است.</div></div>`;
+      list.innerHTML = `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("wallet_history_empty")}</div></div>`;
       return;
     }
     list.innerHTML = walletHistory.map(item => {
-      const statusInfo = WITHDRAW_STATUS_FA[item.status] || { label: item.status, cls: "" };
+      const statusInfo = WITHDRAW_STATUS_UI[item.status] || { cls: "" };
       return `
         <div class="historyItem">
           <div>
-            <div class="historyAmount">${formatPoints(item.pointsSpent)} پوینت</div>
+            <div class="historyAmount">${formatPoints(item.pointsSpent)} ${t("points_unit")}</div>
             <div class="historyMeta">${timeAgo(item.createdAt)}</div>
           </div>
-          <div class="badge ${statusInfo.cls}">${statusInfo.label}</div>
+          <div class="badge ${statusInfo.cls}">${item.status}</div>
         </div>`;
     }).join("");
   });
 }
+
 /* ================= PROFILE ================= */
 function copyReferralLink() {
   const link = state.shareLink || state.referralCode;
@@ -762,7 +1009,7 @@ function copyReferralLink() {
 
   const finish = () => {
     haptic("success");
-    toast("لینک دعوت کپی شد.", "success");
+    toast(t("toast_link_copied"), "success");
   };
 
   if (navigator.clipboard?.writeText) {
@@ -787,7 +1034,7 @@ function fallbackCopy(text, onDone) {
 function shareReferralLink() {
   const link = state.shareLink || state.referralCode;
   if (!link) return;
-  const text = "بیا با من به این ربات امتیاز و پاداش بپیوند! 🎁";
+  const text = "🎁";
   if (tg?.openTelegramLink) {
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
   } else if (navigator.share) {
@@ -809,8 +1056,9 @@ window.setProfileView = setProfileView;
 function renderProfileMenu() {
   const telegramUser = getTelegramUser();
   const user = state.user || telegramUser || {};
-  const firstName = user.first_name || user.firstName || "دوست عزیز";
+  const firstName = user.first_name || user.firstName || "";
   const theme = getTheme();
+  const langNames = { fa: t("language_fa"), ps: t("language_ps"), en: t("language_en") };
 
   return `
     <div class="card profileHeaderCard">
@@ -819,7 +1067,7 @@ function renderProfileMenu() {
       </div>
       <div>
         <div class="profileNameLg">${escapeHTML(firstName)}</div>
-        <div class="profileSubLg">${formatPoints(state.points)} پوینت • ${formatPoints(state.invitedCount)} دعوت</div>
+        <div class="profileSubLg">${formatPoints(state.points)} ${t("points_unit")} • ${formatPoints(state.invitedCount)}</div>
       </div>
     </div>
 
@@ -827,17 +1075,22 @@ function renderProfileMenu() {
       <div class="profileList">
         <div class="profileItem" onclick="setProfileView('referral')">
           <div class="profileIcon">👥</div>
-          <div class="profileText">دعوت دوستان</div>
-          <div class="profileChevron">‹</div>
+          <div class="profileText">${t("menu_referral")}</div>
+<div class="profileChevron">‹</div>
         </div>
         <div class="profileItem" onclick="setProfileView('leaderboard')">
           <div class="profileIcon">🏆</div>
-          <div class="profileText">جدول امتیازات برتر</div>
+          <div class="profileText">${t("menu_leaderboard")}</div>
           <div class="profileChevron">‹</div>
         </div>
         <div class="profileItem" onclick="showTerms()">
           <div class="profileIcon">📜</div>
-          <div class="profileText">قوانین و شرایط</div>
+          <div class="profileText">${t("menu_terms")}</div>
+          <div class="profileChevron">‹</div>
+        </div>
+        <div class="profileItem" onclick="showLanguageOverlay()">
+          <div class="profileIcon">🌐</div>
+          <div class="profileText">${t("menu_language")} — ${langNames[state.language]}</div>
           <div class="profileChevron">‹</div>
         </div>
       </div>
@@ -847,7 +1100,7 @@ function renderProfileMenu() {
       <div class="themeRow">
         <div style="display:flex;align-items:center;gap:10px">
           <span id="themeIcon">${theme === "dark" ? "🌙" : "☀️"}</span>
-          <span id="themeLabel" style="font-size:13px;font-weight:700">${theme === "dark" ? "حالت تاریک" : "حالت روشن"}</span>
+          <span id="themeLabel" style="font-size:13px;font-weight:700">${theme === "dark" ? t("theme_dark") : t("theme_light")}</span>
         </div>
         <div id="themeToggle" class="switchTrack" role="switch" aria-checked="${theme === "light"}" onclick="toggleTheme()">
           <div class="switchThumb"></div>
@@ -860,34 +1113,34 @@ function renderProfileMenu() {
 function renderProfileReferral() {
   return `
     <div class="sectionHeader">
-      <button class="sectionMore" type="button" onclick="setProfileView('menu')">‹ بازگشت</button>
-      <h2 class="sectionTitle">دعوت دوستان</h2>
+      <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
+      <h2 class="sectionTitle">${t("referral_title")}</h2>
       <span></span>
     </div>
 
     <div class="card">
       <div class="cardHeader">
-        <div class="cardTitle">🎁 کد اختصاصی تو</div>
-        <div class="badge success">+ پوینت به ازای هر نفر</div>
+        <div class="cardTitle">${t("referral_code_title")}</div>
+        <div class="badge success">${t("referral_code_bonus_badge")}</div>
       </div>
       <div class="referralCodeBox">
         <span class="referralCodeText">${escapeHTML(state.referralCode || "—")}</span>
-        <button class="copyBtn" type="button" onclick="copyReferralLink()">کپی لینک</button>
+        <button class="copyBtn" type="button" onclick="copyReferralLink()">${t("referral_copy_button")}</button>
       </div>
-      <button class="primaryBtn" type="button" onclick="shareReferralLink()">اشتراک‌گذاری لینک دعوت</button>
+      <button class="primaryBtn" type="button" onclick="shareReferralLink()">${t("referral_share_button")}</button>
     </div>
 
     <div class="card">
       <div class="cardHeader">
-        <div class="cardTitle">دوستان دعوت‌شده</div>
+        <div class="cardTitle">${t("referral_invited_title")}</div>
         <div class="badge gold">${formatPoints(state.invitedCount)}</div>
       </div>
       ${state.invited.length === 0
-        ? `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">هنوز کسی را دعوت نکرده‌ای.</div></div>`
+        ? `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("referral_invited_empty")}</div></div>`
         : state.invited.map(person => `
           <div class="historyItem">
             <div>
-              <div class="historyAmount">${escapeHTML(person.firstName || person.username || "کاربر")}</div>
+              <div class="historyAmount">${escapeHTML(person.firstName || person.username || "—")}</div>
               <div class="historyMeta">${timeAgo(person.createdAt)}</div>
             </div>
           </div>`).join("")
@@ -904,27 +1157,27 @@ function renderProfileLeaderboard() {
     return `
       <div class="leaderboardItem ${isMe ? "me" : ""}">
         <div class="rankBadge ${rankClass}">${formatPoints(rank)}</div>
-        <div class="leaderName">${escapeHTML(person.firstName || person.username || "کاربر")}</div>
+        <div class="leaderName">${escapeHTML(person.firstName || person.username || "—")}</div>
         <div class="leaderPoints">${formatPoints(person.points)}</div>
       </div>`;
   }).join("");
 
   return `
     <div class="sectionHeader">
-      <button class="sectionMore" type="button" onclick="setProfileView('menu')">‹ بازگشت</button>
-      <h2 class="sectionTitle">جدول امتیازات برتر</h2>
+      <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
+      <h2 class="sectionTitle">${t("leaderboard_title")}</h2>
       <span></span>
     </div>
 
     ${state.myRank ? `
       <div class="card" style="text-align:center">
-        <div class="cardSubtitle">رتبه فعلی تو</div>
+        <div class="cardSubtitle">${t("leaderboard_rank_label")}</div>
         <div style="font-size:24px;font-weight:900;margin-top:4px">#${formatPoints(state.myRank)}</div>
       </div>` : ""
     }
 
     ${state.leaderboard.length === 0
-      ? `<div class="card emptyState"><div class="emptyDesc">هنوز داده‌ای برای نمایش نیست.</div></div>`
+      ? `<div class="card emptyState"><div class="emptyDesc">${t("leaderboard_empty")}</div></div>`
       : rows
     }
   `;
@@ -971,9 +1224,9 @@ async function renderCurrentTab() {
     $("#content").innerHTML = `
       <div class="card emptyState">
         <div class="emptyIcon">⚠️</div>
-        <div class="emptyTitle">مشکلی پیش آمد</div>
-        <div class="emptyDesc">${escapeHTML(error.message || "لطفاً دوباره تلاش کن.")}</div>
-        <button class="secondaryBtn" style="margin-top:14px" onclick="renderCurrentTab()">تلاش دوباره</button>
+        <div class="emptyTitle">${t("error_title")}</div>
+        <div class="emptyDesc">${escapeHTML(error.message || t("error_generic"))}</div>
+        <button class="secondaryBtn" style="margin-top:14px" onclick="renderCurrentTab()">${t("retry_button")}</button>
       </div>
     `;
   }
@@ -988,12 +1241,16 @@ async function boot() {
 
   const telegramUser = getTelegramUser();
   if (telegramUser) state.user = telegramUser;
-  updateHeader();
 
   if (!captchaPassed()) {
+    updateHeader();
     showCaptcha();
     return;
   }
+
+  await bootstrapAuth();
+  applyStaticTranslations();
+
   if (!termsAccepted()) {
     showTerms();
   }

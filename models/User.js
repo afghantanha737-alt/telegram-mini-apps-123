@@ -20,6 +20,7 @@ const userSchema = new mongoose.Schema(
     invitedCount: { type: Number, default: 0, min: 0 },
 
     walletAddress: { type: String, default: '' },
+    language: { type: String, enum: ['fa', 'ps', 'en'], default: 'fa' },
     isBanned: { type: Boolean, default: false }
   },
   { timestamps: true }

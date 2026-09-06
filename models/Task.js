@@ -10,9 +10,18 @@ const taskSchema = new mongoose.Schema(
       enum: ['channel', 'group', 'link', 'custom'],
       default: 'link'
     },
+    // 'telegram' => بررسی خودکار عضویت با ربات (نیاز به chatId)
+    // 'manual'   => کاربر باید اسکرین‌شات بفرستد و ادمین تأیید کند
+    verifyType: {
+      type: String,
+      enum: ['telegram', 'manual'],
+      default: 'manual'
+    },
+    // آیدی عددی یا یوزرنیم کانال/گروه مقصد (فقط برای verifyType=telegram)
+    // مثال: "@mychannel" یا "-1001234567890"
+    chatId: { type: String, default: '' },
     url: { type: String, default: '' },
     reward: { type: Number, required: true, min: 0 },
-    requiresReview: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true }
   },
   { timestamps: true }

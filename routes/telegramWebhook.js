@@ -1,16 +1,14 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const TelegramBot = require('node-telegram-bot-api');
+const { bot } = require('../utils/bot');
 const User = require('../models/User');
 const { generateReferralCode } = require('../utils/telegramAuth');
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const APP_URL = process.env.APP_URL || '';
 
-const bot = BOT_TOKEN ? new TelegramBot(BOT_TOKEN) : null;
-
+// POST /api/telegram/webhook — دریافت آپدیت از تلگرام
 router.post('/webhook', async (req, res) => {
   if (WEBHOOK_SECRET) {
     const headerSecret = req.headers['x-telegram-bot-api-secret-token'];
@@ -62,8 +60,14 @@ router.post('/webhook', async (req, res) => {
         }
       }
 
-      const keyboard = APP_URL
-        ? { inline_keyboard: [[{ text: '🚀 باز کردن اپلیکیشن', web_app: { url: APP_URL } }]] }
+      // آدرس اپ را با ref=CODE می‌فرستیم تا اگر کاربر همان لحظه رفرال نشده،
+      // فرانت‌اند بتواند از طریق GET /api/auth/me?ref=CODE آن را اعمال کند.
+      const webAppUrl = APP_URL
+        ? (payload ? `${APP_URL}?ref=${encodeURIComponent(payload)}` : APP_URL)
+        : '';
+
+      const keyboard = webAppUrl
+        ? { inline_keyboard: [[{ text: '🚀 باز کردن اپلیکیشن', web_app: { url: webAppUrl } }]] }
         : undefined;
 
       await bot.sendMessage(
@@ -77,6 +81,7 @@ router.post('/webhook', async (req, res) => {
   }
 });
 
+// GET /api/telegram/set-webhook — یک‌بار برای تنظیم وبهوک صدا بزنید
 router.get('/set-webhook', async (req, res) => {
   if (!bot || !APP_URL) {
     return res.status(400).json({ success: false, message: 'BOT_TOKEN یا APP_URL تنظیم نشده است.' });

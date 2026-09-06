@@ -15,7 +15,9 @@ const upload = multer({
 });
 
 function requireAdmin(req, res, next) {
-  const key = req.headers['x-admin-key'];
+  // تگ <img> نمی‌تواند هدر سفارشی بفرستد، پس برای مسیر نمایش تصویر
+  // اجازه می‌دهیم کلید از query هم بیاید (؟key=...).
+  const key = req.headers['x-admin-key'] || req.query.key;
   if (!process.env.ADMIN_KEY || key !== process.env.ADMIN_KEY) {
     return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
   }

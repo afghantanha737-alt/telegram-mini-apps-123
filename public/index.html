@@ -113,12 +113,34 @@
       <button class="closeBtn" type="button" onclick="hideWithdraw()" aria-label="بستن">×</button>
     </div>
     <div class="withdrawBody">
-      <label class="fieldLabel">میقدار پوینت که میخواهین برداشت کنید را بنویسید</label>
-      <input id="withdrawPoints" type="number" inputmode="numeric" placeholder="مثلاً 100">
+      <label class="fieldLabel">مقدار پوینت</label>
+      <input id="withdrawPoints" type="number" inputmode="numeric" placeholder="مثلاً 1000">
       <label class="fieldLabel">آدرس کیف پول</label>
-      <input id="withdrawAddress" type="text" placeholder="آدرس کیف پول تون گیپر خود را وارد کن">
+      <input id="withdrawAddress" type="text" placeholder="آدرس کیف پول خود را وارد کن">
       <p id="withdrawError" class="captchaErr" role="alert"></p>
       <button type="button" class="primaryBtn" id="submitWithdraw" onclick="submitWithdraw()">ثبت درخواست</button>
+    </div>
+  </div>
+</div>
+
+<!-- LANGUAGE MODAL -->
+<div id="languageOverlay" class="overlay" style="display:none">
+  <div class="modalBox" role="dialog" aria-modal="true">
+    <div class="modalHeader">
+      <div>
+        <span class="modalEyebrow">Language</span>
+        <h3>زبان / ژبه / Language</h3>
+      </div>
+      <button class="closeBtn" type="button" onclick="hideLanguageOverlay()" aria-label="close">×</button>
+    </div>
+    <div class="langOption" onclick="selectLanguage('fa')">
+      <span>دری (Dari)</span><span>🇦🇫</span>
+    </div>
+    <div class="langOption" onclick="selectLanguage('ps')">
+      <span>پښتو (Pashto)</span><span>🇦🇫</span>
+    </div>
+    <div class="langOption" onclick="selectLanguage('en')">
+      <span>English</span><span>🇬🇧</span>
     </div>
   </div>
 </div>
@@ -126,6 +148,7 @@
 <!-- TOAST -->
 <div id="toast" role="status" aria-live="polite"></div>
 
+<script src="js/i18n.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

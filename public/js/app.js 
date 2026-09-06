@@ -1,4 +1,14 @@
+/* =========================================================
+   POINTS REWARDS — PREMIUM TELEGRAM MINI APP
+   File: public/js/app.js
+   (نیازمند i18n.js — باید قبل از این فایل لود شود)
+========================================================= */
+"use strict";
 
+/* ================= TELEGRAM WEB APP ================= */
+const tg = window.Telegram?.WebApp || null;
+
+if (tg) {
   try {
     tg.ready();
     tg.expand();

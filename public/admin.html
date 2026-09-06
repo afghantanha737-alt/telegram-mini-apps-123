@@ -218,3 +218,382 @@ function showMsg(text, type) {
   el.textContent = text;
   el.className = type || "";
   setTimeout(() => { el.textContent = ""; }, 3500);
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": ADMIN_KEY,
+      ...(options.headers || {})
+    }
+  });
+  let data = {};
+  try { data = await res.json(); } catch {}
+  if (!res.ok) throw new Error(data.message || "خطا در ارتباط با سرور");
+  return data;
+}
+
+async function apiUpload(path, formData) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "x-admin-key": ADMIN_KEY },
+    body: formData
+  });
+  let data = {};
+  try { data = await res.json(); } catch {}
+  if (!res.ok) throw new Error(data.message || "خطا در ارتباط با سرور");
+  return data;
+}
+
+async function login() {
+  const key = document.getElementById("adminKeyInput").value.trim();
+  if (!key) return;
+  ADMIN_KEY = key;
+  try {
+    await api("/api/admin/settings");
+    localStorage.setItem("adminKey", key);
+    document.getElementById("loginBox").classList.add("hidden");
+    document.getElementById("panel").classList.remove("hidden");
+    switchTab("tasks");
+  } catch (error) {
+    document.getElementById("loginMsg").textContent = "کلید نادرست است یا سرور در دسترس نیست.";
+  }
+}
+
+function logout() {
+  localStorage.removeItem("adminKey");
+  ADMIN_KEY = "";
+  document.getElementById("panel").classList.add("hidden");
+  document.getElementById("loginBox").classList.remove("hidden");
+}
+
+function switchTab(tab) {
+  document.querySelectorAll(".tabContent").forEach(el => el.classList.add("hidden"));
+  document.querySelectorAll(".tabs button").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
+  document.getElementById("tab-" + tab).classList.remove("hidden");
+  if (tab === "tasks") loadTasks();
+  if (tab === "reviews") loadReviews();
+  if (tab === "withdrawals") loadWithdrawals();
+  if (tab === "users") loadUsers();
+  if (tab === "settings") loadSettings();
+}
+
+function onVerifyTypeChange() {
+  const type = document.getElementById("taskVerifyType").value;
+  document.getElementById("chatIdField").classList.toggle("hidden", type !== "telegram");
+}
+
+function openImageModal(src) {
+  document.getElementById("imgModalSrc").src = src;
+  document.getElementById("imgModal").classList.add("show");
+}
+
+/* ---------- TASKS ---------- */
+async function loadTasks() {
+  const container = document.getElementById("tasksList");
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  try {
+    const data = await api("/api/admin/tasks");
+    const tasks = data.tasks || [];
+    if (tasks.length === 0) {
+      container.innerHTML = '<div class="empty">هنوز تسکی ثبت نشده.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <table>
+        <thead><tr><th>عنوان</th><th>روش تأیید</th><th>پاداش</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <tbody>
+          ${tasks.map(t => `
+            <tr>
+              <td>${escapeHtml(t.title)}</td>
+              <td>${t.verifyType === "telegram" ? "خودکار" : "دستی"}</td>
+              <td>${t.reward}</td>
+              <td>${t.isActive ? "فعال" : "غیرفعال"}</td>
+              <td class="row">
+                <button class="secondary" onclick="toggleTask('${t._id}', ${!t.isActive})">${t.isActive ? "غیرفعال" : "فعال"}</button>
+                <button class="danger" onclick="deleteTask('${t._id}')">حذف</button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function addTask() {
+  const title = document.getElementById("taskTitle").value.trim();
+  const description = document.getElementById("taskDesc").value.trim();
+  const type = document.getElementById("taskType").value;
+  const verifyType = document.getElementById("taskVerifyType").value;
+  const chatId = document.getElementById("taskChatId").value.trim();
+  const url = document.getElementById("taskUrl").value.trim();
+  const reward = Number(document.getElementById("taskReward").value);
+
+  if (!title || !reward) {
+    showMsg("عنوان و مقدار پاداش الزامی است.", "error");
+    return;
+  }
+  if (verifyType === "telegram" && !chatId) {
+    showMsg("برای روش خودکار، chatId الزامی است.", "error");
+    return;
+  }
+
+  try {
+    await api("/api/admin/tasks", {
+      method: "POST",
+      body: JSON.stringify({ title, description, type, url, reward, verifyType, chatId })
+    });
+    showMsg("تسک با موفقیت اضافه شد.", "success");
+    ["taskTitle","taskDesc","taskUrl","taskReward","taskChatId"].forEach(id => document.getElementById(id).value = "");
+    loadTasks();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+async function toggleTask(id, newState) {
+  try {
+    await api(`/api/admin/tasks/${id}`, { method: "PUT", body: JSON.stringify({ isActive: newState }) });
+    loadTasks();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+async function deleteTask(id) {
+  if (!confirm("این تسک حذف شود؟")) return;
+  try {
+    await api(`/api/admin/tasks/${id}`, { method: "DELETE" });
+    showMsg("تسک حذف شد.", "success");
+    loadTasks();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+/* ---------- REVIEWS (screenshot approvals) ---------- */
+async function loadReviews() {
+  const container = document.getElementById("reviewsList");
+  const status = document.getElementById("reviewFilter").value;
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  try {
+    const data = await api(`/api/admin/task-completions?status=${status}`);
+    const list = data.completions || [];
+    if (list.length === 0) {
+      container.innerHTML = '<div class="empty">موردی یافت نشد.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <table>
+        <thead><tr><th>تصویر</th><th>کاربر</th><th>تسک</th><th>پاداش</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <tbody>
+          ${list.map(c => `
+            <tr>
+              <td>${c.proofFileId
+                ? `<img class="proofThumb" src="/api/admin/task-completions/${c._id}/proof?key=${encodeURIComponent(ADMIN_KEY)}" onclick="openImageModal('/api/admin/task-completions/${c._id}/proof?key=${encodeURIComponent(ADMIN_KEY)}')">`
+                : '<span class="small">—</span>'}</td>
+              <td>${escapeHtml(c.user?.firstName || c.user?.username || "—")}</td>
+              <td>${escapeHtml(c.task?.title || "—")}</td>
+              <td>${c.reward}</td>
+              <td><span class="badge ${c.status}">${c.status === "pending" ? "در انتظار" : c.status === "approved" ? "تأیید" : "رد"}</span></td>
+              <td class="row">
+                ${c.status === "pending" ? `
+                  <button class="success" onclick="reviewAction('${c._id}','approve')">تأیید</button>
+                  <button class="danger" onclick="reviewAction('${c._id}','reject')">رد</button>
+                ` : '<span class="small">—</span>'}
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function reviewAction(id, action) {
+  try {
+    await api(`/api/admin/task-completions/${id}/${action}`, { method: "POST", body: JSON.stringify({}) });
+    showMsg(action === "approve" ? "تسک تأیید و پوینت اضافه شد." : "تسک رد شد.", "success");
+    loadReviews();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+/* ---------- WITHDRAWALS (نمایش بر اساس GRAM) ---------- */
+const STATUS_FA = { pending: "در انتظار", approved: "تأیید شده", rejected: "رد شده", paid: "پرداخت شده" };
+
+async function loadWithdrawals() {
+  const container = document.getElementById("withdrawalsList");
+  const status = document.getElementById("withdrawFilter").value;
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  try {
+    const data = await api(`/api/admin/withdrawals${status ? "?status=" + status : ""}`);
+    const list = data.withdrawals || [];
+    if (list.length === 0) {
+      container.innerHTML = '<div class="empty">درخواستی یافت نشد.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <table>
+        <thead><tr><th>کاربر</th><th>مقدار (GRAM)</th><th>آدرس</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <tbody>
+          ${list.map(w => `
+            <tr>
+              <td>${escapeHtml(w.user?.firstName || w.user?.username || "—")}</td>
+              <td>${w.cryptoAmount}</td>
+              <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(w.address)}">${escapeHtml(w.address)}</td>
+              <td><span class="badge ${w.status}">${STATUS_FA[w.status] || w.status}</span></td>
+              <td class="row">
+                ${w.status === "pending" ? `
+                  <button class="success" onclick="withdrawAction('${w._id}','approve')">تأیید</button>
+                  <button class="danger" onclick="withdrawAction('${w._id}','reject')">رد</button>
+                ` : '<span class="small">—</span>'}
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function withdrawAction(id, action) {
+  try {
+    await api(`/api/admin/withdrawals/${id}/${action}`, { method: "POST", body: JSON.stringify({}) });
+    showMsg(action === "approve" ? "درخواست تأیید شد." : "درخواست رد شد.", "success");
+    loadWithdrawals();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+/* ---------- USERS ---------- */
+async function loadUsers() {
+  const container = document.getElementById("usersList");
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  try {
+    const data = await api("/api/admin/users");
+    const users = data.users || [];
+    if (users.length === 0) {
+      container.innerHTML = '<div class="empty">کاربری یافت نشد.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <table>
+        <thead><tr><th>نام</th><th>پوینت</th><th>دعوت‌شده</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <tbody>
+          ${users.map(u => `
+            <tr>
+              <td>${escapeHtml(u.firstName || u.username || "—")}</td>
+              <td>${u.points}</td>
+              <td>${u.invitedCount}</td>
+              <td>${u.isBanned ? '<span class="badge rejected">مسدود</span>' : '<span class="badge approved">فعال</span>'}</td>
+              <td>
+                ${u.isBanned
+                  ? `<button class="success" onclick="userAction('${u._id}','unban')">رفع مسدودی</button>`
+                  : `<button class="danger" onclick="userAction('${u._id}','ban')">مسدود کردن</button>`
+                }
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function userAction(id, action) {
+  try {
+    await api(`/api/admin/users/${id}/${action}`, { method: "POST", body: JSON.stringify({}) });
+    loadUsers();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+/* ---------- BROADCAST ---------- */
+async function sendBroadcast() {
+  const text = document.getElementById("broadcastText").value.trim();
+  const fileInput = document.getElementById("broadcastImage");
+  const msgEl = document.getElementById("broadcastMsg");
+
+  if (!text) {
+    msgEl.textContent = "متن پیام الزامی است.";
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("text", text);
+  if (fileInput.files[0]) formData.append("image", fileInput.files[0]);
+
+  msgEl.textContent = "در حال ارسال...";
+  try {
+    const result = await apiUpload("/api/admin/broadcast", formData);
+    msgEl.textContent = result.message || "ارسال آغاز شد.";
+    document.getElementById("broadcastText").value = "";
+    fileInput.value = "";
+  } catch (error) {
+    msgEl.textContent = error.message;
+  }
+}
+
+/* ---------- SETTINGS ---------- */
+async function loadSettings() {
+  try {
+    const data = await api("/api/admin/settings");
+    const s = data.settings || {};
+    document.getElementById("setRate").value = s.rate ?? "";
+    document.getElementById("setMinWithdraw").value = s.minWithdrawPoints ?? "";
+    document.getElementById("setDaily").value = s.dailyCheckInPoints ?? "";
+    document.getElementById("setStreakBonus").value = s.streakBonusPoints ?? "";
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+async function saveSettings() {
+  const body = {
+    rate: Number(document.getElementById("setRate").value),
+    minWithdrawPoints: Number(document.getElementById("setMinWithdraw").value),
+    dailyCheckInPoints: Number(document.getElementById("setDaily").value),
+    streakBonusPoints: Number(document.getElementById("setStreakBonus").value)
+  };
+  try {
+    await api("/api/admin/settings", { method: "PUT", body: JSON.stringify(body) });
+    showMsg("تنظیمات ذخیره شد.", "success");
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+/* ---------- UTIL ---------- */
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+  }[ch]));
+}
+
+/* ---------- INIT ---------- */
+onVerifyTypeChange();
+if (ADMIN_KEY) {
+  api("/api/admin/settings").then(() => {
+    document.getElementById("loginBox").classList.add("hidden");
+    document.getElementById("panel").classList.remove("hidden");
+    switchTab("tasks");
+  }).catch(() => {
+    localStorage.removeItem("adminKey");
+  });
+}
+</script>
+</body>
+</html>

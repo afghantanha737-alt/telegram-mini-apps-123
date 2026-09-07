@@ -100,37 +100,21 @@ router.post('/:id/submit-proof', auth, upload.single('proof'), async (req, res) 
     return res.status(400).json({ success: false, message: 'این تسک قبلاً ثبت شده است.', code: 'ALREADY_DONE' });
   }
 
-  let proofFileId = '';
-  try {
-    if (bot && ADMIN_CHAT_ID) {
-      const caption =
-        `📥 تسک جدید برای بررسی\n` +
-        `تسک: ${task.title}\n` +
-        `کاربر: ${u.firstName || u.username || u.telegramId} (${u.telegramId})\n` +
-        `پاداش: ${task.reward} پوینت\n` +
-        `شناسه تکمیل: ${existing ? existing._id : 'در حال ثبت...'}`;
-
-      const sent = await bot.sendPhoto(ADMIN_CHAT_ID, req.file.buffer, { caption });
-      const photos = sent.photo || [];
-      proofFileId = photos.length > 0 ? photos[photos.length - 1].file_id : '';
-    }
-  } catch (error) {
-    console.error('Failed to forward proof to admin chat:', error.message);
-  }
-
+  // ابتدا رکورد را با وضعیت pending ذخیره می‌کنیم و فوراً به کاربر جواب می‌دهیم.
+  // ارسال عکس به چت ادمین در پس‌زمینه انجام می‌شود تا کندی/بی‌جوابی تلگرام
+  // باعث معطل ماندن کاربر (حالت «در حال ارسال...» بی‌پایان) نشود.
+  let completion;
   if (existing) {
     existing.status = 'pending';
     existing.reward = task.reward;
-    existing.proofFileId = proofFileId;
     existing.adminNote = '';
-    await existing.save();
+    completion = await existing.save();
   } else {
-    await TaskCompletion.create({
+    completion = await TaskCompletion.create({
       user: u._id,
       task: task._id,
       reward: task.reward,
-      status: 'pending',
-      proofFileId
+      status: 'pending'
     });
   }
 
@@ -139,6 +123,29 @@ router.post('/:id/submit-proof', auth, upload.single('proof'), async (req, res) 
     message: 'اسکرین‌شات ثبت شد و در انتظار بررسی ادمین است.',
     status: 'pending'
   });
+
+  // --- از این‌جا به بعد پاسخ کاربر قبلاً ارسال شده؛ فقط پس‌زمینه ---
+  if (bot && ADMIN_CHAT_ID) {
+    const caption =
+      `📥 تسک جدید برای بررسی\n` +
+      `تسک: ${task.title}\n` +
+      `کاربر: ${u.firstName || u.username || u.telegramId} (${u.telegramId})\n` +
+      `پاداش: ${task.reward} پوینت\n` +
+      `شناسه تکمیل: ${completion._id}`;
+
+    bot
+      .sendPhoto(ADMIN_CHAT_ID, req.file.buffer, { caption }, { filename: 'proof.jpg', contentType: 'image/jpeg' })
+      .then(async sent => {
+        const photos = sent.photo || [];
+        const proofFileId = photos.length > 0 ? photos[photos.length - 1].file_id : '';
+        if (proofFileId) {
+          await TaskCompletion.findByIdAndUpdate(completion._id, { proofFileId });
+        }
+      })
+      .catch(error => {
+        console.error('Failed to forward proof to admin chat:', error.message);
+      });
+  }
 });
 
 module.exports = router;

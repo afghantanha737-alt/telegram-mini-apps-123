@@ -166,11 +166,22 @@ async function api(url, options = {}) {
   const initData = getInitData();
   const finalUrl = `${url}${separator}initData=${encodeURIComponent(initData)}`;
 
+  // اگر سرور بیش از حد کند شد (مثلاً سرویس رایگان تازه بیدار شده)،
+  // درخواست بعد از ۲۰ ثانیه خودش قطع می‌شود تا دکمه هیچ‌وقت برای همیشه گیر نکند.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  config.signal = controller.signal;
+
   let response;
   try {
     response = await fetch(finalUrl, config);
   } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error(t("error_generic") + " (Timeout)");
+    }
     throw new Error(t("error_generic"));
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   let data = null;
@@ -586,6 +597,9 @@ async function verifyTelegramTask(taskId) {
     haptic("error");
     if (error.code === "NOT_JOINED") {
       toast(t("toast_verify_needs_join"), "warning");
+    } else if (error.code === "VERIFY_CONFIG_ERROR") {
+      // خطای واقعی تنظیمات (chatId اشتباه، ربات بدون دسترسی و ...) — پیام دقیق را نشان بده
+      toast(error.message, "error");
     } else {
       toast(translateServerMessage(error.code, error.message), "error");
     }

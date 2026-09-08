@@ -169,7 +169,7 @@ async function api(url, options = {}) {
   // اگر سرور بیش از حد کند شد (مثلاً سرویس رایگان تازه بیدار شده)،
   // درخواست بعد از ۲۰ ثانیه خودش قطع می‌شود تا دکمه هیچ‌وقت برای همیشه گیر نکند.
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  const timeoutId = setTimeout(() => controller.abort(), 40000);
   config.signal = controller.signal;
 
   let response;
@@ -608,38 +608,6 @@ async function verifyTelegramTask(taskId) {
 }
 window.verifyTelegramTask = verifyTelegramTask;
 
-/** تسک‌های دستی: انتخاب فایل -> آپلود خودکار اسکرین‌شات */
-function triggerProofUpload(taskId) {
-  const input = document.getElementById(`proofInput-${taskId}`);
-  if (input) input.click();
-}
-window.triggerProofUpload = triggerProofUpload;
-
-async function handleProofFileChange(taskId, inputEl) {
-  const file = inputEl.files && inputEl.files[0];
-  if (!file) return;
-
-  const button = document.querySelector(`[data-upload="${taskId}"]`);
-  if (button) { button.disabled = true; button.textContent = t("task_action_uploading"); }
-
-  try {
-    const formData = new FormData();
-    formData.append("proof", file);
-    const result = await apiUpload(`/api/tasks/${taskId}/submit-proof`, formData);
-    haptic("success");
-    toast(t("toast_proof_sent"), "success");
-    await loadTasks();
-    renderTasks();
-  } catch (error) {
-    haptic("error");
-    toast(translateServerMessage(error.code, error.message), "error");
-    if (button) { button.disabled = false; button.textContent = t("task_action_upload"); }
-  } finally {
-    inputEl.value = "";
-  }
-}
-window.handleProofFileChange = handleProofFileChange;
-
 function renderTasks() {
   const content = $("#content");
 
@@ -668,19 +636,11 @@ function renderTasks() {
           actionHtml = `<button class="taskAction done" disabled>${t("task_btn_done")}</button>`;
         } else if (status === "pending") {
           actionHtml = `<button class="taskAction pending" disabled>${t("task_btn_pending")}</button>`;
-        } else if (task.verifyType === "telegram") {
-          actionHtml = `
-            <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
-              ${task.url ? `<button class="taskAction" style="background:var(--surface-3);color:var(--text)" onclick="openTaskLinkOnly('${safeUrl}')">${t("task_action_open")}</button>` : ""}
-              <button class="taskAction" data-verify="${task._id}" onclick="verifyTelegramTask('${task._id}')">${t("task_action_verify")}</button>
-            </div>`;
         } else {
           actionHtml = `
             <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
               ${task.url ? `<button class="taskAction" style="background:var(--surface-3);color:var(--text)" onclick="openTaskLinkOnly('${safeUrl}')">${t("task_action_open")}</button>` : ""}
-              <input type="file" accept="image/*" capture="environment" id="proofInput-${task._id}" style="display:none"
-                onchange="handleProofFileChange('${task._id}', this)">
-              <button class="taskAction" data-upload="${task._id}" onclick="triggerProofUpload('${task._id}')">${t("task_action_upload")}</button>
+              <button class="taskAction" data-verify="${task._id}" onclick="verifyTelegramTask('${task._id}')">${t("task_action_verify")}</button>
             </div>`;
         }
 

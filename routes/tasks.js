@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { requireTelegramAuth } = require('../utils/telegramAuth');
-const { bot, isChatMember } = require('../utils/bot');
+const { bot, checkChatMembership } = require('../utils/bot');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
 
@@ -46,8 +46,19 @@ router.post('/:id/claim', auth, async (req, res) => {
     return res.status(400).json({ success: false, message: 'این تسک قبلاً انجام شده است.', code: 'ALREADY_DONE' });
   }
 
-  const joined = await isChatMember(task.chatId, u.telegramId);
-  if (!joined) {
+  const result = await checkChatMembership(task.chatId, u.telegramId);
+
+  if (result.configError) {
+    // این یعنی مشکل از خود تسک/ربات است، نه از کاربر — پیام دقیق را نشان می‌دهیم
+    return res.status(400).json({
+      success: false,
+      joined: false,
+      message: `⚠️ ${result.configError}`,
+      code: 'VERIFY_CONFIG_ERROR'
+    });
+  }
+
+  if (!result.joined) {
     return res.status(400).json({
       success: false,
       joined: false,

@@ -144,6 +144,12 @@ async function startServer() {
     await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 10000 });
     console.log('✅ MongoDB connected');
 
+    // پاک‌سازی ایندکس‌های قدیمی/ناسازگار که ممکن است از نسخه‌های قبلی
+    // پروژه در دیتابیس باقی مانده باشند (مثلاً ایندکس روی فیلدهای
+    // userId/taskId که در مدل فعلی وجود ندارند و باعث خطای duplicate
+    // key کاذب می‌شوند).
+    await cleanupStaleIndexes();
+
     const runReferralSweep = require('./utils/referralSweep');
     runReferralSweep().catch(error => console.error('Initial referral sweep failed:', error));
     setInterval(() => {
@@ -156,6 +162,29 @@ async function startServer() {
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
     process.exit(1);
+  }
+}
+
+async function cleanupStaleIndexes() {
+  try {
+    const collection = mongoose.connection.collection('taskcompletions');
+    const indexes = await collection.indexes();
+
+    // نام درست ایندکس فعلی که مدل باید داشته باشد
+    const validIndexName = 'user_1_task_1';
+
+    for (const index of indexes) {
+      const isPrimaryKey = index.name === '_id_';
+      const isValid = index.name === validIndexName;
+      if (!isPrimaryKey && !isValid) {
+        await collection.dropIndex(index.name);
+        console.log(`🧹 Dropped stale index "${index.name}" from taskcompletions`);
+      }
+    }
+  } catch (error) {
+    // این عملیات صرفاً پاک‌سازی است؛ اگر کالکشن هنوز وجود ندارد یا خطای
+    // بی‌ضرر دیگری رخ دهد، نباید جلوی بالا آمدن سرور را بگیرد.
+    console.warn('Index cleanup skipped (non-fatal):', error.message);
   }
 }
 

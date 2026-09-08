@@ -8,10 +8,15 @@ const bot = BOT_TOKEN ? new TelegramBot(BOT_TOKEN) : null;
 
 /**
  * یک Promise را با سقف زمانی مشخص اجرا می‌کند تا در صورت کندی/بی‌جوابی
- * API تلگرام (مثلاً وقتی سرویس رایگان تازه بیدار شده)، درخواست
+ * API تلگرام (مثلاً وقتی سرویس رایگان تازه از خواب بیدار شده)، درخواست
  * کاربر برای همیشه معطل نماند.
  */
 function withTimeout(promise, ms, fallbackValue) {
+  // اگر promise اصلی بعد از سررسید timeout هم رد شود (reject)، بدون این خط
+  // آن خطا "بی‌صاحب" (unhandled rejection) می‌ماند و می‌تواند در برخی محیط‌ها
+  // باعث بی‌ثباتی پردازش کل سرور شود؛ این خط آن را بی‌خطر می‌کند.
+  promise.catch(() => {});
+
   return Promise.race([
     promise,
     new Promise(resolve => setTimeout(() => resolve(fallbackValue), ms))
@@ -37,7 +42,7 @@ async function checkChatMembership(chatId, telegramUserId) {
   try {
     const member = await withTimeout(
       bot.getChatMember(chatId, telegramUserId),
-      12000,
+      25000,
       'TIMEOUT'
     );
 

@@ -50,10 +50,6 @@
   .flexBetween{display:flex;justify-content:space-between;align-items:center;gap:8px}
   .small{font-size:11px;color:var(--muted)}
   .hidden{display:none}
-  .proofThumb{width:52px;height:52px;border-radius:8px;object-fit:cover;cursor:pointer;border:1px solid var(--line)}
-  .imgModal{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:999;padding:20px}
-  .imgModal.show{display:flex}
-  .imgModal img{max-width:100%;max-height:90vh;border-radius:8px}
 </style>
 </head>
 <body>
@@ -73,14 +69,13 @@
     <div class="flexBetween">
       <div>
         <h1>پنل ادمین</h1>
-        <div class="sub">مدیریت تسک‌ها، بررسی‌ها، برداشت‌ها، کاربران و پیام همگانی</div>
+        <div class="sub">مدیریت تسک‌ها، برداشت‌ها، کاربران و پیام همگانی</div>
       </div>
       <button class="secondary" onclick="logout()">خروج</button>
     </div>
 
     <div class="tabs">
       <button data-tab="tasks" onclick="switchTab('tasks')">تسک‌ها</button>
-      <button data-tab="reviews" onclick="switchTab('reviews')">بررسی اسکرین‌شات‌ها</button>
       <button data-tab="withdrawals" onclick="switchTab('withdrawals')">برداشت‌ها</button>
       <button data-tab="users" onclick="switchTab('users')">کاربران</button>
       <button data-tab="broadcast" onclick="switchTab('broadcast')">پیام همگانی</button>
@@ -92,8 +87,8 @@
     <!-- TASKS -->
     <div id="tab-tasks" class="tabContent">
       <div class="card">
-        <div class="flexBetween"><b>افزودن تسک جدید</b></div>
-        <br>
+        <div class="flexBetween"><b>افزودن تسک تلگرامی جدید</b></div>
+        <p class="small">فقط تسک‌های عضویت در کانال/گروه تلگرام پشتیبانی می‌شود — عضویت به‌صورت خودکار توسط خود تلگرام بررسی می‌شود.</p>
         <label>عنوان</label>
         <input id="taskTitle" placeholder="مثلاً عضویت در کانال تلگرام">
         <label>توضیحات (اختیاری)</label>
@@ -102,20 +97,11 @@
         <select id="taskType">
           <option value="channel">عضویت کانال</option>
           <option value="group">عضویت گروه</option>
-          <option value="link">بازدید لینک</option>
-          <option value="custom">سفارشی</option>
         </select>
-        <label>روش تأیید</label>
-        <select id="taskVerifyType" onchange="onVerifyTypeChange()">
-          <option value="telegram">خودکار (عضویت کانال/گروه تلگرام)</option>
-          <option value="manual" selected>دستی (کاربر اسکرین‌شات می‌فرستد)</option>
-        </select>
-        <div id="chatIdField" class="hidden">
-          <label>آیدی/یوزرنیم کانال یا گروه (chatId)</label>
-          <input id="taskChatId" placeholder="مثلاً @mychannel یا -1001234567890">
-          <p class="small">⚠️ ربات باید ادمین همین کانال/گروه باشد تا بتواند عضویت را بررسی کند.</p>
-        </div>
-        <label>لینک (اختیاری — دکمه «باز کردن» همین را باز می‌کند)</label>
+        <label>آیدی/یوزرنیم کانال یا گروه (chatId)</label>
+        <input id="taskChatId" placeholder="مثلاً @mychannel یا -1001234567890">
+        <p class="small">⚠️ ربات باید ادمین همین کانال/گروه باشد تا بتواند عضویت را بررسی کند.</p>
+        <label>لینک عضویت (برای دکمه‌ی «باز کردن لینک»)</label>
         <input id="taskUrl" placeholder="https://t.me/...">
         <label>مقدار پاداش (پوینت)</label>
         <input id="taskReward" type="number" placeholder="مثلاً 100">
@@ -125,22 +111,6 @@
       <div class="card">
         <b>لیست تسک‌ها</b>
         <div id="tasksList" style="margin-top:10px"></div>
-      </div>
-    </div>
-
-    <!-- REVIEWS (task screenshot submissions) -->
-    <div id="tab-reviews" class="tabContent hidden">
-      <div class="card">
-        <div class="flexBetween">
-          <b>بررسی اسکرین‌شات‌های تسک</b>
-          <select id="reviewFilter" onchange="loadReviews()" style="width:auto;margin:0">
-            <option value="pending" selected>در انتظار</option>
-            <option value="approved">تأیید شده</option>
-            <option value="rejected">رد شده</option>
-            <option value="all">همه</option>
-          </select>
-        </div>
-        <div id="reviewsList" style="margin-top:10px"></div>
       </div>
     </div>
 
@@ -202,10 +172,6 @@
     </div>
 
   </div>
-</div>
-
-<div class="imgModal" id="imgModal" onclick="this.classList.remove('show')">
-  <img id="imgModalSrc" src="" alt="">
 </div>
 
 <script>
@@ -274,20 +240,9 @@ function switchTab(tab) {
   document.querySelectorAll(".tabs button").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
   document.getElementById("tab-" + tab).classList.remove("hidden");
   if (tab === "tasks") loadTasks();
-  if (tab === "reviews") loadReviews();
   if (tab === "withdrawals") loadWithdrawals();
   if (tab === "users") loadUsers();
   if (tab === "settings") loadSettings();
-}
-
-function onVerifyTypeChange() {
-  const type = document.getElementById("taskVerifyType").value;
-  document.getElementById("chatIdField").classList.toggle("hidden", type !== "telegram");
-}
-
-function openImageModal(src) {
-  document.getElementById("imgModalSrc").src = src;
-  document.getElementById("imgModal").classList.add("show");
 }
 
 /* ---------- TASKS ---------- */
@@ -303,12 +258,12 @@ async function loadTasks() {
     }
     container.innerHTML = `
       <table>
-        <thead><tr><th>عنوان</th><th>روش تأیید</th><th>پاداش</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <thead><tr><th>عنوان</th><th>chatId</th><th>پاداش</th><th>وضعیت</th><th>عملیات</th></tr></thead>
         <tbody>
           ${tasks.map(t => `
             <tr>
               <td>${escapeHtml(t.title)}</td>
-              <td>${t.verifyType === "telegram" ? "خودکار" : "دستی"}</td>
+              <td style="direction:ltr;text-align:left">${escapeHtml(t.chatId || "—")}</td>
               <td>${t.reward}</td>
               <td>${t.isActive ? "فعال" : "غیرفعال"}</td>
               <td class="row">
@@ -329,7 +284,6 @@ async function addTask() {
   const title = document.getElementById("taskTitle").value.trim();
   const description = document.getElementById("taskDesc").value.trim();
   const type = document.getElementById("taskType").value;
-  const verifyType = document.getElementById("taskVerifyType").value;
   const chatId = document.getElementById("taskChatId").value.trim();
   const url = document.getElementById("taskUrl").value.trim();
   const reward = Number(document.getElementById("taskReward").value);
@@ -338,15 +292,15 @@ async function addTask() {
     showMsg("عنوان و مقدار پاداش الزامی است.", "error");
     return;
   }
-  if (verifyType === "telegram" && !chatId) {
-    showMsg("برای روش خودکار، chatId الزامی است.", "error");
+  if (!chatId) {
+    showMsg("chatId الزامی است.", "error");
     return;
   }
 
   try {
     await api("/api/admin/tasks", {
       method: "POST",
-      body: JSON.stringify({ title, description, type, url, reward, verifyType, chatId })
+      body: JSON.stringify({ title, description, type, url, reward, chatId })
     });
     showMsg("تسک با موفقیت اضافه شد.", "success");
     ["taskTitle","taskDesc","taskUrl","taskReward","taskChatId"].forEach(id => document.getElementById(id).value = "");
@@ -371,57 +325,6 @@ async function deleteTask(id) {
     await api(`/api/admin/tasks/${id}`, { method: "DELETE" });
     showMsg("تسک حذف شد.", "success");
     loadTasks();
-  } catch (error) {
-    showMsg(error.message, "error");
-  }
-}
-
-/* ---------- REVIEWS (screenshot approvals) ---------- */
-async function loadReviews() {
-  const container = document.getElementById("reviewsList");
-  const status = document.getElementById("reviewFilter").value;
-  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
-  try {
-    const data = await api(`/api/admin/task-completions?status=${status}`);
-    const list = data.completions || [];
-    if (list.length === 0) {
-      container.innerHTML = '<div class="empty">موردی یافت نشد.</div>';
-      return;
-    }
-    container.innerHTML = `
-      <table>
-        <thead><tr><th>تصویر</th><th>کاربر</th><th>تسک</th><th>پاداش</th><th>وضعیت</th><th>عملیات</th></tr></thead>
-        <tbody>
-          ${list.map(c => `
-            <tr>
-              <td>${c.proofFileId
-                ? `<img class="proofThumb" src="/api/admin/task-completions/${c._id}/proof" onclick="openImageModal('/api/admin/task-completions/${c._id}/proof')">`
-                : '<span class="small">—</span>'}</td>
-              <td>${escapeHtml(c.user?.firstName || c.user?.username || "—")}</td>
-              <td>${escapeHtml(c.task?.title || "—")}</td>
-              <td>${c.reward}</td>
-              <td><span class="badge ${c.status}">${c.status === "pending" ? "در انتظار" : c.status === "approved" ? "تأیید" : "رد"}</span></td>
-              <td class="row">
-                ${c.status === "pending" ? `
-                  <button class="success" onclick="reviewAction('${c._id}','approve')">تأیید</button>
-                  <button class="danger" onclick="reviewAction('${c._id}','reject')">رد</button>
-                ` : '<span class="small">—</span>'}
-              </td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-  } catch (error) {
-    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
-  }
-}
-
-async function reviewAction(id, action) {
-  try {
-    await api(`/api/admin/task-completions/${id}/${action}`, { method: "POST", body: JSON.stringify({}) });
-    showMsg(action === "approve" ? "تسک تأیید و پوینت اضافه شد." : "تسک رد شد.", "success");
-    loadReviews();
   } catch (error) {
     showMsg(error.message, "error");
   }
@@ -586,7 +489,6 @@ function escapeHtml(value) {
 }
 
 /* ---------- INIT ---------- */
-onVerifyTypeChange();
 if (ADMIN_KEY) {
   api("/api/admin/settings").then(() => {
     document.getElementById("loginBox").classList.add("hidden");

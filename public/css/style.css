@@ -478,22 +478,59 @@ html[data-theme="light"] .walletHero {
   .heroTitle { font-size: 21px; }
 }
 
-/* SPIN WHEEL */
-.wheelOuter { position: relative; width: 220px; height: 220px; margin: 6px auto 4px; }
+/* SPIN WHEEL — حلقه‌ی نورانی + برچسب‌های چرخنده + هاب مرکزی */
+.wheelOuter { position: relative; width: 260px; height: 260px; margin: 14px auto 6px; }
+
+.wheelRingDots { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.wheelDot {
+  position: absolute; width: 9px; height: 9px; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 35% 30%, #fff, var(--primary-2) 60%, var(--primary) 100%);
+  box-shadow: 0 0 10px 2px rgba(167, 139, 250, .75);
+}
+
 .wheelDisc {
-  width: 100%; height: 100%; border-radius: 50%;
-  border: 4px solid var(--surface-3);
-  box-shadow: 0 10px 40px rgba(0,0,0,.4), inset 0 0 0 2px rgba(255,255,255,.06);
-  transition: transform 3.5s cubic-bezier(.17,.67,.16,1);
+  position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%;
+  border: 5px solid rgba(167, 139, 250, .55);
+  box-shadow:
+    0 0 0 3px rgba(139, 92, 246, .18),
+    0 0 45px rgba(139, 92, 246, .55),
+    inset 0 0 30px rgba(0, 0, 0, .45);
+  transition: transform 3.8s cubic-bezier(.12, .65, .15, 1);
+  overflow: hidden;
 }
+
 .wheelPointer {
-  position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
-  font-size: 22px; color: var(--gold); z-index: 3; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5));
+  position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+  font-size: 32px; color: var(--gold); z-index: 4;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .6)) drop-shadow(0 0 10px rgba(245, 196, 81, .6));
 }
-.wheelLabels { position: absolute; inset: 0; pointer-events: none; }
-.wheelLabel {
-  position: absolute; transform: translate(-50%, -50%);
-  font-size: 13px; font-weight: 900; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.5);
+
+.wheelLabel { position: absolute; z-index: 1; }
+.wheelLabelInner {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.wheelIcon { font-size: 21px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .6)); }
+.wheelValue {
+  font-size: 15px; font-weight: 900; color: #fff; line-height: 1;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .7);
+}
+
+.wheelHub {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 56px; height: 56px; border-radius: 50%; z-index: 3;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .35), transparent 60%),
+    linear-gradient(145deg, var(--primary-2), var(--primary));
+  border: 2px solid rgba(255, 255, 255, .35);
+  box-shadow: 0 0 22px rgba(139, 92, 246, .75), inset 0 0 12px rgba(255, 255, 255, .25);
+  font-size: 22px; color: #fff;
+}
+
+.wheelSpinBtn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 15px; margin-top: 6px;
 }
 
 /* LANGUAGE MODAL */

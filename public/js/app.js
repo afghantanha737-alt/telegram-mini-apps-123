@@ -27,13 +27,13 @@ const state = {
   language: "fa",
   user: null,
   points: 0,
-  estimatedCryptoValue: 0,
+  gramBalance: 0,
   rate: 0,
   streak: 0,
   canCheckIn: false,
   spinChances: 0,
   totalCheckins: 0,
-  minWithdrawPoints: 1000,
+  minWithdrawGram: 0,
   nextResetAt: 0,
   referralCode: "",
   shareLink: "",
@@ -412,13 +412,13 @@ async function bootstrapAuth() {
 async function loadUserData() {
   const data = await api("/api/points/me");
   state.points = Number(data?.points) || 0;
-  state.estimatedCryptoValue = Number(data?.estimatedCryptoValue) || 0;
+  state.gramBalance = Number(data?.gramBalance) || 0;
   state.rate = Number(data?.rate) || 0;
   state.streak = Number(data?.streak) || 0;
   state.canCheckIn = Boolean(data?.canCheckIn);
   state.spinChances = Number(data?.spinChances) || 0;
   state.totalCheckins = Number(data?.totalCheckins) || 0;
-  state.minWithdrawPoints = Number(data?.minWithdrawPoints) || 1000;
+  state.minWithdrawGram = Number(data?.minWithdrawGram) || 0;
   state.nextResetAt = Number(data?.nextResetAt) || 0;
   if (data?.firstName) state.user = { ...(state.user || {}), first_name: data.firstName };
   updateHeader();
@@ -891,8 +891,8 @@ function renderDaily() {
 
 /* ================= WALLET ================= */
 function showWithdraw() {
-  if (state.points < state.minWithdrawPoints) {
-    toast(t("wallet_min_withdraw_note", { n: formatPoints(state.minWithdrawPoints) }), "warning");
+  if (state.gramBalance < state.minWithdrawGram) {
+    toast(t("wallet_min_withdraw_note", { n: formatNumber(state.minWithdrawGram, 6) }), "warning");
     return;
   }
   const overlay = $("#withdrawOverlay");
@@ -913,15 +913,15 @@ function hideWithdraw() {
 window.hideWithdraw = hideWithdraw;
 
 async function submitWithdraw() {
-  const pointsInput = $("#withdrawPoints");
+  const gramInput = $("#withdrawPoints");
   const addressInput = $("#withdrawAddress");
   const error = $("#withdrawError");
   const button = $("#submitWithdraw");
 
-  const points = Number(pointsInput?.value);
+  const gram = Number(gramInput?.value);
   const address = String(addressInput?.value || "").trim();
 
-  if (!points || points <= 0) {
+  if (!gram || gram <= 0) {
     if (error) error.textContent = t("error_generic");
     return;
   }
@@ -932,8 +932,8 @@ async function submitWithdraw() {
 
   if (button) button.disabled = true;
   try {
-    const result = await api("/api/points/withdraw", { method: "POST", body: { points, address } });
-    state.points = Number(result.points) || state.points;
+    const result = await api("/api/points/withdraw", { method: "POST", body: { gram, address } });
+    state.gramBalance = Number(result.gramBalance) ?? state.gramBalance;
     haptic("success");
     toast(result.message, "success");
     hideWithdraw();
@@ -947,6 +947,87 @@ async function submitWithdraw() {
   }
 }
 window.submitWithdraw = submitWithdraw;
+
+/* ---- Exchange: Points -> GRAM ---- */
+function showExchange() {
+  if (state.points <= 0) {
+    toast(t("error_generic"), "warning");
+    return;
+  }
+  const overlay = $("#exchangeOverlay");
+  const input = $("#exchangePoints");
+  const error = $("#exchangeError");
+  if (input) input.value = "";
+  if (error) error.textContent = "";
+  updateExchangePreview();
+  if (overlay) overlay.style.display = "flex";
+}
+window.showExchange = showExchange;
+
+function hideExchange() {
+  const overlay = $("#exchangeOverlay");
+  if (overlay) overlay.style.display = "none";
+}
+window.hideExchange = hideExchange;
+
+function updateExchangePreview() {
+  const input = $("#exchangePoints");
+  const preview = $("#exchangePreview");
+  if (!input || !preview) return;
+  const points = Number(input.value) || 0;
+  const gram = points * state.rate;
+  preview.textContent = `${t("exchange_result_label")}: ${formatNumber(gram, 6)} GRAM`;
+}
+window.updateExchangePreview = updateExchangePreview;
+
+async function submitExchange() {
+  const input = $("#exchangePoints");
+  const error = $("#exchangeError");
+  const button = $("#submitExchange");
+
+  const points = Number(input?.value);
+  if (!points || points <= 0) {
+    if (error) error.textContent = t("error_generic");
+    return;
+  }
+  if (points > state.points) {
+    if (error) error.textContent = t("error_generic");
+    return;
+  }
+
+  if (button) button.disabled = true;
+  try {
+    const result = await api("/api/points/exchange", { method: "POST", body: { points } });
+    state.points = Number(result.points) ?? state.points;
+    state.gramBalance = Number(result.gramBalance) ?? state.gramBalance;
+    haptic("success");
+    toast(result.message, "success");
+    hideExchange();
+    updateHeader();
+    renderWallet();
+  } catch (err) {
+    if (error) error.textContent = translateServerMessage(err.code, err.message);
+    haptic("error");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+window.submitExchange = submitExchange;
+
+/* ---- Deposit: placeholder ---- */
+function showDeposit() {
+  const overlay = $("#depositOverlay");
+  const message = $("#depositMessage");
+  if (message) message.textContent = t("deposit_coming_soon");
+  if (overlay) overlay.style.display = "flex";
+}
+window.showDeposit = showDeposit;
+
+function hideDeposit() {
+  const overlay = $("#depositOverlay");
+  if (overlay) overlay.style.display = "none";
+}
+window.hideDeposit = hideDeposit;
 
 let walletHistory = [];
 async function loadWalletHistory() {
@@ -969,22 +1050,36 @@ function renderWallet() {
   content.innerHTML = `
     <div class="sectionHeader"><h2 class="sectionTitle">${t("wallet_title")}</h2></div>
 
-    <section class="walletHero card">
-      <div class="balanceLabel">${t("wallet_estimated_value")}</div>
-      <div class="walletCryptoValue">${formatNumber(state.estimatedCryptoValue)}</div>
-      <div class="walletRate">${t("wallet_rate_label", { rate: formatNumber(state.rate, 6) })}</div>
-      <div class="walletActions">
-        <button class="primaryBtn" type="button" onclick="showWithdraw()">${t("wallet_withdraw_button")}</button>
-        <button class="secondaryBtn" type="button" onclick="navigate('tasks')">${t("wallet_increase_button")}</button>
+    <div class="walletBalanceGrid">
+      <div class="walletBalanceCard gold">
+        <div class="walletBalanceIcon">🪙</div>
+        <div class="walletBalanceLabel">${t("wallet_points_card_title")}</div>
+        <div class="walletBalanceValue">${formatPoints(state.points)}</div>
       </div>
-    </section>
+      <div class="walletBalanceCard blue">
+        <div class="walletBalanceIcon">💎</div>
+        <div class="walletBalanceLabel">${t("wallet_gram_card_title")}</div>
+        <div class="walletBalanceValue">${formatNumber(state.gramBalance, 6)}</div>
+      </div>
+    </div>
+
+    <div class="walletActionsGrid">
+      <button class="walletActionBtn" type="button" onclick="showDeposit()">
+        <span class="walletActionIcon">＋</span>
+        <span>${t("wallet_deposit_button")}</span>
+      </button>
+      <button class="walletActionBtn" type="button" onclick="showExchange()">
+        <span class="walletActionIcon">⇄</span>
+        <span>${t("wallet_exchange_button")}</span>
+      </button>
+      <button class="walletActionBtn" type="button" onclick="showWithdraw()">
+        <span class="walletActionIcon">➤</span>
+        <span>${t("wallet_withdraw_button")}</span>
+      </button>
+    </div>
 
     <div class="card">
-      <div class="cardHeader">
-        <div class="cardTitle">${t("wallet_balance_title")}</div>
-        <div class="badge gold">${formatPoints(state.points)}</div>
-      </div>
-      <p style="font-size:11px;margin-bottom:0">${t("wallet_min_withdraw_note", { n: formatPoints(state.minWithdrawPoints) })}</p>
+      <p style="font-size:11px;margin-bottom:0">${t("wallet_rate_label", { rate: formatNumber(state.rate, 6) })} • ${t("wallet_min_withdraw_note", { n: formatNumber(state.minWithdrawGram, 6) })}</p>
     </div>
 
     <div class="card" id="withdrawHistoryCard">
@@ -1007,7 +1102,7 @@ function renderWallet() {
       return `
         <div class="historyItem">
           <div>
-            <div class="historyAmount">${formatPoints(item.pointsSpent)} ${t("points_unit")}</div>
+            <div class="historyAmount">${formatNumber(item.cryptoAmount, 6)} GRAM</div>
             <div class="historyMeta">${timeAgo(item.createdAt)}</div>
           </div>
           <div class="badge ${statusInfo.cls}">${item.status}</div>

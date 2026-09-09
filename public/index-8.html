@@ -1,1 +1,190 @@
-y
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#050609">
+<meta name="color-scheme" content="dark light">
+<meta name="description" content="پلتفرم امتیاز و پاداش داخل تلگرام">
+<title>Points • Rewards</title>
+
+<!-- Telegram Mini App -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Vazirmatn:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<!-- App CSS -->
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- HEADER -->
+  <header id="appHeader">
+    <div class="headerInner">
+      <div class="userIdentity">
+        <div id="avatar" class="avatar" aria-label="تصویر پروفایل">A</div>
+        <div id="headerInfo" class="headerInfo">
+          <div id="greetName" class="greetName">سلام 👋</div>
+          <div id="pointsDisplay" class="pointsDisplay">۰ پوینت</div>
+        </div>
+      </div>
+      <div class="headerStatus">
+        <span class="statusDot"></span>
+        <span>فعال</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT (JS renders all screens here) -->
+  <main id="content" class="appContent" aria-live="polite"></main>
+
+  <!-- BOTTOM NAVIGATION -->
+  <nav id="tabbar" class="bottomNav" aria-label="منوی اصلی">
+    <button type="button" data-tab="home" aria-label="خانه">
+      <span class="tabIcon" aria-hidden="true">⌂</span>
+      <span class="tabLabel">خانه</span>
+    </button>
+    <button type="button" data-tab="tasks" aria-label="تسک‌ها">
+      <span class="tabIcon" aria-hidden="true">✓</span>
+      <span class="tabLabel">تسک‌ها</span>
+    </button>
+    <button type="button" data-tab="daily" aria-label="پاداش روزانه">
+      <span class="tabIcon" aria-hidden="true">◷</span>
+      <span class="tabLabel">روزانه</span>
+    </button>
+    <button type="button" data-tab="wallet" aria-label="کیف پول">
+      <span class="tabIcon" aria-hidden="true">◇</span>
+      <span class="tabLabel">کیف پول</span>
+    </button>
+    <button type="button" data-tab="profile" aria-label="پروفایل">
+      <span class="tabIcon" aria-hidden="true">○</span>
+      <span class="tabLabel">پروفایل</span>
+    </button>
+  </nav>
+</div>
+
+<!-- TERMS & CONDITIONS MODAL -->
+<div id="termsOverlay" class="overlay" style="display:none">
+  <div class="modalBox termsBox" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
+    <div class="modalHeader">
+      <div>
+        <span class="modalEyebrow">قوانین</span>
+        <h3 id="termsTitle">قوانین و شرایط استفاده</h3>
+      </div>
+      <button class="closeBtn" type="button" onclick="hideTerms()" aria-label="بستن">×</button>
+    </div>
+    <div id="termsBody" class="termsBody">
+      <p><b>۱. پوینت و نرخ تبدیل</b><br>پوینت‌ها از طریق تسک‌ها، دعوت دوستان و پاداش روزانه به دست می‌آیند. نرخ تبدیل ممکن است توسط مدیریت تغییر کند.</p>
+      <p><b>۲. تسک‌ها</b><br>تسک‌ها باید واقعی و طبق دستورالعمل انجام شوند. تقلب یا اتوماسیون می‌تواند باعث محدودیت حساب شود.</p>
+      <p><b>۳. رفرال</b><br>سیستم رفرال برای جلوگیری از سوءاستفاده بررسی می‌شود و پاداش‌ها ممکن است مشروط به فعالیت واقعی دعوت‌شده باشند.</p>
+      <p><b>۴. برداشت</b><br>درخواست‌های برداشت به‌صورت دستی بررسی می‌شوند و ممکن است مدتی زمان ببرند.</p>
+      <p><b>۵. امنیت</b><br>در صورت شناسایی فعالیت غیرعادی، امکان بررسی یا محدودکردن حساب وجود دارد.</p>
+    </div>
+  </div>
+</div>
+
+<!-- CAPTCHA / SECURITY MODAL -->
+<div id="captchaOverlay" class="overlay" style="display:none">
+  <div class="modalBox captchaBox" role="dialog" aria-modal="true" aria-labelledby="captchaTitle">
+    <div class="captchaIcon" aria-hidden="true">🔐</div>
+    <span class="modalEyebrow">امنیت</span>
+    <h3 id="captchaTitle">یک لحظه...</h3>
+    <p class="captchaDescription">فقط می‌خواهیم مطمئن شویم کاربر واقعی هستی.</p>
+    <p id="captchaQuestion" class="captchaQ">...</p>
+    <input id="captchaAnswer" type="number" inputmode="numeric" autocomplete="off" placeholder="جواب را وارد کن" aria-label="پاسخ کپچا">
+    <button type="button" class="primaryBtn" id="submitCaptcha" onclick="submitCaptcha()">تأیید و ادامه</button>
+    <p id="captchaError" class="captchaErr" role="alert"></p>
+  </div>
+</div>
+
+<!-- WITHDRAW MODAL -->
+<div id="withdrawOverlay" class="overlay" style="display:none">
+  <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="withdrawTitle">
+    <div class="modalHeader">
+      <div>
+        <span class="modalEyebrow">برداشت</span>
+        <h3 id="withdrawTitle">درخواست برداشت</h3>
+      </div>
+      <button class="closeBtn" type="button" onclick="hideWithdraw()" aria-label="بستن">×</button>
+    </div>
+    <div class="withdrawBody">
+      <label class="fieldLabel">مقدار GRAM</label>
+      <input id="withdrawPoints" type="number" inputmode="decimal" step="0.000001" placeholder="مثلاً 0.5">
+      <label class="fieldLabel">آدرس کیف پول</label>
+      <input id="withdrawAddress" type="text" placeholder="آدرس کیف پول خود را وارد کن">
+      <p id="withdrawError" class="captchaErr" role="alert"></p>
+      <button type="button" class="primaryBtn" id="submitWithdraw" onclick="submitWithdraw()">ثبت درخواست</button>
+    </div>
+  </div>
+</div>
+
+<!-- LANGUAGE MODAL -->
+<div id="languageOverlay" class="overlay" style="display:none">
+  <div class="modalBox" role="dialog" aria-modal="true">
+    <div class="modalHeader">
+      <div>
+        <span class="modalEyebrow">Language</span>
+        <h3>زبان / ژبه / Language</h3>
+      </div>
+      <button class="closeBtn" type="button" onclick="hideLanguageOverlay()" aria-label="close">×</button>
+    </div>
+    <div class="langOption" onclick="selectLanguage('fa')">
+      <span>دری (Dari)</span><span>🇦🇫</span>
+    </div>
+    <div class="langOption" onclick="selectLanguage('ps')">
+      <span>پښتو (Pashto)</span><span>🇦🇫</span>
+    </div>
+    <div class="langOption" onclick="selectLanguage('en')">
+      <span>English</span><span>🇬🇧</span>
+    </div>
+  </div>
+</div>
+
+<!-- EXCHANGE MODAL (points -> GRAM) -->
+<div id="exchangeOverlay" class="overlay" style="display:none">
+  <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="exchangeTitle">
+    <div class="modalHeader">
+      <div>
+        <span class="modalEyebrow">Exchange</span>
+        <h3 id="exchangeTitle">تبدیل پوینت به GRAM</h3>
+      </div>
+      <button class="closeBtn" type="button" onclick="hideExchange()" aria-label="بستن">×</button>
+    </div>
+    <div class="withdrawBody">
+      <label class="fieldLabel">مقدار پوینت</label>
+      <input id="exchangePoints" type="number" inputmode="numeric" placeholder="مثلاً 1000" oninput="updateExchangePreview()">
+      <p id="exchangePreview" style="font-size:12px;color:var(--text-muted);margin:-4px 0 12px">معادل GRAM دریافتی: 0</p>
+      <p id="exchangeError" class="captchaErr" role="alert"></p>
+      <button type="button" class="primaryBtn" id="submitExchange" onclick="submitExchange()">تبدیل کن</button>
+    </div>
+  </div>
+</div>
+
+<!-- DEPOSIT MODAL (placeholder) -->
+<div id="depositOverlay" class="overlay" style="display:none">
+  <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="depositTitle" style="text-align:center">
+    <div class="modalHeader">
+      <div>
+        <span class="modalEyebrow">Deposit</span>
+        <h3 id="depositTitle">واریز</h3>
+      </div>
+      <button class="closeBtn" type="button" onclick="hideDeposit()" aria-label="بستن">×</button>
+    </div>
+    <div class="captchaIcon" aria-hidden="true">🚧</div>
+    <p id="depositMessage" style="font-size:13px;color:var(--text-soft)">قابلیت واریز به‌زودی فعال می‌شود.</p>
+    <button type="button" class="secondaryBtn" onclick="hideDeposit()">باشه</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/i18n.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

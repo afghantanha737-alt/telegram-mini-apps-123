@@ -660,33 +660,61 @@ function renderTasks() {
 }
 
 /* ================= DAILY + SPIN WHEEL ================= */
+const WHEEL_SIZE = 260;
+const WHEEL_CENTER = WHEEL_SIZE / 2;
+
 const SPIN_SEGMENTS_UI = [
-  { label: "2", color: "#8b5cf6" },
-  { label: "5", color: "#a78bfa" },
-  { label: "15", color: "#f5c451" },
-  { label: "20", color: "#22c55e" },
-  { label: "0", color: "#3a3f4d" },
-  { label: "🎡", color: "#38bdf8" }
+  { icon: "🪙", value: "2", color1: "#8b5cf6", color2: "#6d28d9" },
+  { icon: "🪙", value: "5", color1: "#a78bfa", color2: "#7c3aed" },
+  { icon: "💎", value: "15", color1: "#f5c451", color2: "#c98a12" },
+  { icon: "🏆", value: "20", color1: "#22c55e", color2: "#15803d" },
+  { icon: "💨", value: "0", color1: "#3a3f4d", color2: "#1e2028" },
+  { icon: "🎡", value: "+1", color1: "#38bdf8", color2: "#0284c7" }
 ];
 
 let wheelRotation = 0;
 
 function buildWheelGradient() {
   const step = 360 / SPIN_SEGMENTS_UI.length;
-  const stops = SPIN_SEGMENTS_UI.map((seg, i) => `${seg.color} ${i * step}deg ${(i + 1) * step}deg`);
+  const stops = SPIN_SEGMENTS_UI.map((seg, i) => {
+    const mid = i * step + step / 2;
+    return `${seg.color1} ${i * step}deg ${mid}deg, ${seg.color2} ${mid}deg ${(i + 1) * step}deg`;
+  });
   return `conic-gradient(from 0deg, ${stops.join(", ")})`;
 }
 
+/** برچسب‌ها داخل خودِ دیسک قرار می‌گیرند تا هنگام چرخش، همراه رنگ‌ها بچرخند */
 function buildWheelLabels() {
   const step = 360 / SPIN_SEGMENTS_UI.length;
-  const radius = 78;
+  const radius = WHEEL_CENTER - 46;
   return SPIN_SEGMENTS_UI.map((seg, i) => {
     const angleDeg = i * step + step / 2;
     const angleRad = (angleDeg - 90) * (Math.PI / 180);
-    const x = 110 + radius * Math.cos(angleRad);
-    const y = 110 + radius * Math.sin(angleRad);
-    return `<span class="wheelLabel" style="left:${x}px;top:${y}px">${seg.label}</span>`;
+    const x = WHEEL_CENTER + radius * Math.cos(angleRad);
+    const y = WHEEL_CENTER + radius * Math.sin(angleRad);
+    const isSpin = seg.value === "+1";
+    return `
+      <span class="wheelLabel" style="left:${x}px;top:${y}px;transform:translate(-50%,-50%) rotate(${angleDeg}deg)">
+        <span class="wheelLabelInner" style="transform:rotate(${-angleDeg}deg)">
+          <span class="wheelIcon">${seg.icon}</span>
+          <span class="wheelValue">${seg.value}${isSpin ? "" : ""}</span>
+        </span>
+      </span>`;
   }).join("");
+}
+
+/** نقطه‌های تزئینی نورانی دور کادر گردونه (ثابت، نمی‌چرخند) */
+function buildWheelRingDots() {
+  const count = 12;
+  const radius = WHEEL_CENTER + 6;
+  let dots = "";
+  for (let i = 0; i < count; i++) {
+    const angleRad = (i * (360 / count)) * (Math.PI / 180);
+    const x = WHEEL_CENTER + radius * Math.cos(angleRad);
+    const y = WHEEL_CENTER + radius * Math.sin(angleRad);
+    dots += `<span class="wheelDot" style="left:${x}px;top:${y}px"></span>`;
+  }
+  return dots;
 }
 
 function spinWheelTargetRotation(index) {
@@ -814,13 +842,16 @@ function renderDaily() {
         <div class="cardTitle">${t("spin_title")}</div>
       </div>
       <div class="wheelOuter">
+        <div class="wheelRingDots">${buildWheelRingDots()}</div>
         <div class="wheelPointer">▼</div>
-        <div class="wheelDisc" id="wheelDisc" style="background:${buildWheelGradient()}"></div>
-        <div class="wheelLabels">${buildWheelLabels()}</div>
+        <div class="wheelDisc" id="wheelDisc" style="background:${buildWheelGradient()}">
+          ${buildWheelLabels()}
+        </div>
+        <div class="wheelHub"><span>✦</span></div>
       </div>
-      <p style="font-size:11px;margin:12px 0 4px">${t("spin_chances_label")}: <b id="spinChancesValue">${formatPoints(state.spinChances)}</b></p>
-      <button id="spinBtn" class="primaryBtn" type="button" style="margin-top:8px" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">
-        ${t("spin_button")}
+      <p style="font-size:11px;margin:14px 0 4px">${t("spin_chances_label")}: <b id="spinChancesValue">${formatPoints(state.spinChances)}</b></p>
+      <button id="spinBtn" class="primaryBtn wheelSpinBtn" type="button" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">
+        🎡 ${t("spin_button")}
       </button>
     </div>
 

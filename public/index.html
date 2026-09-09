@@ -113,8 +113,8 @@
       <button class="closeBtn" type="button" onclick="hideWithdraw()" aria-label="بستن">×</button>
     </div>
     <div class="withdrawBody">
-      <label class="fieldLabel">مقدار پوینت</label>
-      <input id="withdrawPoints" type="number" inputmode="numeric" placeholder="مثلاً 1000">
+      <label class="fieldLabel">مقدار GRAM</label>
+      <input id="withdrawPoints" type="number" inputmode="decimal" step="0.000001" placeholder="مثلاً 0.5">
       <label class="fieldLabel">آدرس کیف پول</label>
       <input id="withdrawAddress" type="text" placeholder="آدرس کیف پول خود را وارد کن">
       <p id="withdrawError" class="captchaErr" role="alert"></p>
@@ -156,8 +156,8 @@
       <button class="closeBtn" type="button" onclick="hideExchange()" aria-label="بستن">×</button>
     </div>
     <div class="withdrawBody">
-      <label class="fieldLabel">مقدار GRAM</label>
-<input id="withdrawPoints" type="number" inputmode="decimal" step="0.000001" placeholder="مثلاً 0.5"> oninput="updateExchangePreview()">
+      <label class="fieldLabel">مقدار پوینت</label>
+      <input id="exchangePoints" type="number" inputmode="numeric" placeholder="مثلاً 1000" oninput="updateExchangePreview()">
       <p id="exchangePreview" style="font-size:12px;color:var(--text-muted);margin:-4px 0 12px">معادل GRAM دریافتی: 0</p>
       <p id="exchangeError" class="captchaErr" role="alert"></p>
       <button type="button" class="primaryBtn" id="submitExchange" onclick="submitExchange()">تبدیل کن</button>

@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema(
     photoUrl: { type: String, default: '' },
 
     points: { type: Number, default: 0, min: 0 },
+    gramBalance: { type: Number, default: 0, min: 0 },
     streak: { type: Number, default: 0, min: 0 },
     totalCheckins: { type: Number, default: 0, min: 0 },
     lastCheckIn: { type: Date, default: null },

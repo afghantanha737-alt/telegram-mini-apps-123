@@ -40,18 +40,19 @@ router.get('/me', auth, async (req, res) => {
   const settings = await Settings.getGlobal();
 
   const canCheckIn = !u.lastCheckIn || utcDayKey(u.lastCheckIn) < utcDayKey(new Date());
+  const minWithdrawGram = Number((settings.minWithdrawPoints * settings.rate).toFixed(6));
 
   res.json({
     success: true,
     points: u.points,
-    estimatedCryptoValue: Number((u.points * settings.rate).toFixed(6)),
+    gramBalance: u.gramBalance,
     rate: settings.rate,
     streak: u.streak,
     canCheckIn,
     spinChances: u.spinChances,
     totalCheckins: u.totalCheckins,
     firstName: u.firstName,
-    minWithdrawPoints: settings.minWithdrawPoints,
+    minWithdrawGram,
     nextResetAt: nextResetTimestamp(),
     language: u.language
   });
@@ -127,45 +128,77 @@ router.post('/spin', auth, async (req, res) => {
   });
 });
 
-// POST /api/points/withdraw
+/**
+ * POST /api/points/exchange — تبدیل پوینت به موجودی GRAM
+ * (بر اساس نرخ فعلی؛ این مبلغ بعداً از طریق «برداشت» قابل خارج شدن است)
+ */
+router.post('/exchange', auth, async (req, res) => {
+  const u = req.dbUser;
+  const settings = await Settings.getGlobal();
+  const points = Math.floor(Number((req.body && req.body.points) || 0));
+
+  if (!points || points <= 0) {
+    return res.status(400).json({ success: false, message: 'مقدار پوینت نامعتبر است.', code: 'INVALID_AMOUNT' });
+  }
+  if (points > u.points) {
+    return res.status(400).json({ success: false, message: 'موجودی پوینت کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
+  }
+
+  const gramGained = Number((points * settings.rate).toFixed(6));
+
+  u.points -= points;
+  u.gramBalance = Number((u.gramBalance + gramGained).toFixed(6));
+  await u.save();
+
+  res.json({
+    success: true,
+    message: `${points} پوینت به ${gramGained} GRAM تبدیل شد.`,
+    points: u.points,
+    gramBalance: u.gramBalance,
+    gramGained
+  });
+});
+
+// POST /api/points/withdraw — برداشت از موجودی GRAM (نه مستقیم از پوینت)
 router.post('/withdraw', auth, async (req, res) => {
   const u = req.dbUser;
   const settings = await Settings.getGlobal();
-  const { points, address } = req.body || {};
-  const amount = Math.floor(Number(points));
+  const { gram, address } = req.body || {};
+  const amount = Number(gram);
+  const minWithdrawGram = Number((settings.minWithdrawPoints * settings.rate).toFixed(6));
 
   if (!amount || amount <= 0) {
-    return res.status(400).json({ success: false, message: 'مقدار پوینت نامعتبر است.', code: 'INVALID_AMOUNT' });
+    return res.status(400).json({ success: false, message: 'مقدار GRAM نامعتبر است.', code: 'INVALID_AMOUNT' });
   }
   if (!address || String(address).trim().length < 6) {
     return res.status(400).json({ success: false, message: 'آدرس کیف پول نامعتبر است.', code: 'INVALID_ADDRESS' });
   }
-  if (amount < settings.minWithdrawPoints) {
+  if (amount < minWithdrawGram) {
     return res.status(400).json({
       success: false,
-      message: `حداقل مقدار برداشت ${settings.minWithdrawPoints} پوینت است.`,
+      message: `حداقل مقدار برداشت ${minWithdrawGram} GRAM است.`,
       code: 'BELOW_MIN_WITHDRAW'
     });
   }
-  if (amount > u.points) {
-    return res.status(400).json({ success: false, message: 'موجودی کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
+  if (amount > u.gramBalance) {
+    return res.status(400).json({ success: false, message: 'موجودی GRAM کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
   }
 
-  u.points -= amount;
+  u.gramBalance = Number((u.gramBalance - amount).toFixed(6));
   u.walletAddress = String(address).trim();
   await u.save();
 
   const withdrawal = await Withdrawal.create({
     user: u._id,
-    pointsSpent: amount,
-    cryptoAmount: Number((amount * settings.rate).toFixed(6)),
+    pointsSpent: settings.rate > 0 ? Math.round(amount / settings.rate) : 0,
+    cryptoAmount: amount,
     address: u.walletAddress
   });
 
   res.json({
     success: true,
     message: 'درخواست برداشت ثبت شد و به‌زودی بررسی می‌شود.',
-    points: u.points,
+    gramBalance: u.gramBalance,
     withdrawalId: withdrawal._id
   });
 });

@@ -341,20 +341,41 @@ html[data-theme="light"] .progressTrack { background: rgba(20,22,28,.08); }
 .streakValue { font-size: 20px; font-weight: 900; }
 .streakLabel { font-size: 10px; color: var(--text-muted); }
 
-/* WALLET */
-.walletHero {
-  padding: 22px 19px; margin-bottom: 14px; border-radius: var(--radius-xl);
-  border: 1px solid rgba(245,196,81,.18);
-  background:
-    radial-gradient(circle at 85% 10%, rgba(245,196,81,.2), transparent 40%),
-    linear-gradient(145deg, #201a10, #0b0c12 68%);
+/* WALLET — کارت‌های موجودی + دکمه‌های واریز/تبدیل/برداشت */
+.walletBalanceGrid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;
 }
-html[data-theme="light"] .walletHero {
-  background: radial-gradient(circle at 85% 10%, rgba(245,196,81,.18), transparent 40%), linear-gradient(145deg, #ffffff, #faf3e2);
+.walletBalanceCard {
+  padding: 18px 14px; border-radius: var(--radius-lg); text-align: center;
+  border: 1px solid var(--line); position: relative; overflow: hidden;
 }
-.walletCryptoValue { font-size: 26px; font-weight: 900; color: var(--gold); margin-top: 4px; }
-.walletRate { margin-top: 6px; font-size: 10px; color: var(--text-muted); }
-.walletActions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+.walletBalanceCard.gold {
+  border-color: rgba(245, 196, 81, .3);
+  background: radial-gradient(circle at 80% 0%, rgba(245, 196, 81, .18), transparent 55%), var(--surface);
+}
+.walletBalanceCard.blue {
+  border-color: rgba(56, 189, 248, .3);
+  background: radial-gradient(circle at 80% 0%, rgba(56, 189, 248, .18), transparent 55%), var(--surface);
+}
+.walletBalanceIcon { font-size: 26px; margin-bottom: 8px; }
+.walletBalanceLabel { font-size: 11px; color: var(--text-muted); font-weight: 700; }
+.walletBalanceValue { margin-top: 4px; font-size: 19px; font-weight: 900; }
+.walletBalanceCard.gold .walletBalanceValue { color: var(--gold); }
+.walletBalanceCard.blue .walletBalanceValue { color: #38bdf8; }
+
+.walletActionsGrid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px;
+}
+.walletActionBtn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 14px 6px; border-radius: var(--radius-md); border: 1px solid var(--line);
+  background: var(--surface); color: var(--text); font-size: 11px; font-weight: 700;
+}
+.walletActionBtn:active { transform: scale(.96); }
+.walletActionIcon {
+  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--primary-soft); color: var(--primary-2); font-size: 16px;
+}
 
 .historyItem {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;

@@ -100,7 +100,9 @@
         </select>
         <label>آیدی/یوزرنیم کانال یا گروه (chatId)</label>
         <input id="taskChatId" placeholder="مثلاً @mychannel یا -1001234567890">
-        <p class="small">⚠️ ربات باید ادمین همین کانال/گروه باشد تا بتواند عضویت را بررسی کند.</p>
+        <p class="small">⚠️ ربات باید ادمین همین کانال/گروه باشد. برای سوپرگروه/کانال با آیدی عددی، حتماً باید با <b>-100</b> شروع بشه (مثلاً -1001234567890)، وگرنه تلگرام خطای «chat not found» می‌ده.</p>
+        <button type="button" class="secondary" onclick="testChatId()" style="margin-bottom:10px">🔍 تست chatId</button>
+        <div id="chatIdTestResult" class="small" style="margin-bottom:10px"></div>
         <label>لینک عضویت (برای دکمه‌ی «باز کردن لینک»)</label>
         <input id="taskUrl" placeholder="https://t.me/...">
         <label>مقدار پاداش (پوینت)</label>
@@ -267,6 +269,7 @@ async function loadTasks() {
               <td>${t.reward}</td>
               <td>${t.isActive ? "فعال" : "غیرفعال"}</td>
               <td class="row">
+                <button class="secondary" onclick="testExistingChatId('${(t.chatId || '').replaceAll("'", "\\'")}',this)">تست</button>
                 <button class="secondary" onclick="toggleTask('${t._id}', ${!t.isActive})">${t.isActive ? "غیرفعال" : "فعال"}</button>
                 <button class="danger" onclick="deleteTask('${t._id}')">حذف</button>
               </td>
@@ -277,6 +280,55 @@ async function loadTasks() {
     `;
   } catch (error) {
     container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function testChatId() {
+  const chatId = document.getElementById("taskChatId").value.trim();
+  const resultEl = document.getElementById("chatIdTestResult");
+  if (!chatId) {
+    resultEl.textContent = "اول chatId رو وارد کن.";
+    resultEl.style.color = "var(--danger)";
+    return;
+  }
+  await runChatIdCheck(chatId, resultEl);
+}
+
+async function testExistingChatId(chatId, buttonEl) {
+  if (!chatId) {
+    alert("این تسک chatId ندارد.");
+    return;
+  }
+  const original = buttonEl.textContent;
+  buttonEl.textContent = "...";
+  buttonEl.disabled = true;
+  try {
+    const result = await api("/api/admin/verify-chat", {
+      method: "POST",
+      body: JSON.stringify({ chatId })
+    });
+    alert(result.message);
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    buttonEl.textContent = original;
+    buttonEl.disabled = false;
+  }
+}
+
+async function runChatIdCheck(chatId, resultEl) {
+  resultEl.textContent = "در حال بررسی...";
+  resultEl.style.color = "var(--muted)";
+  try {
+    const result = await api("/api/admin/verify-chat", {
+      method: "POST",
+      body: JSON.stringify({ chatId })
+    });
+    resultEl.textContent = result.message;
+    resultEl.style.color = result.botIsAdmin ? "var(--success)" : "var(--warning)";
+  } catch (error) {
+    resultEl.textContent = error.message;
+    resultEl.style.color = "var(--danger)";
   }
 }
 
@@ -304,6 +356,7 @@ async function addTask() {
     });
     showMsg("تسک با موفقیت اضافه شد.", "success");
     ["taskTitle","taskDesc","taskUrl","taskReward","taskChatId"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("chatIdTestResult").textContent = "";
     loadTasks();
   } catch (error) {
     showMsg(error.message, "error");

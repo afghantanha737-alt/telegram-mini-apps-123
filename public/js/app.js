@@ -39,6 +39,7 @@ const state = {
   shareLink: "",
   invitedCount: 0,
   invited: [],
+  referralMinTasks: 2,
   tasks: [],
   completions: [],
   leaderboard: [],
@@ -431,6 +432,7 @@ async function loadReferralData() {
     state.shareLink = data?.shareLink || "";
     state.invitedCount = Number(data?.invitedCount) || 0;
     state.invited = Array.isArray(data?.invited) ? data.invited : [];
+    state.referralMinTasks = Number(data?.referralMinTasks) || 2;
   } catch (error) {
     console.warn("Referral data failed:", error);
   }
@@ -1246,13 +1248,19 @@ function renderProfileReferral() {
       </div>
       ${state.invited.length === 0
         ? `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("referral_invited_empty")}</div></div>`
-        : state.invited.map(person => `
-          <div class="historyItem">
-            <div>
-              <div class="historyAmount">${escapeHTML(person.firstName || person.username || "—")}</div>
-              <div class="historyMeta">${timeAgo(person.createdAt)}</div>
-            </div>
-          </div>`).join("")
+        : state.invited.map(person => {
+            const statusHtml = person.bonusAwarded
+              ? `<span class="badge success" style="margin-top:4px">${t("team_status_awarded")}</span>`
+              : `<span class="badge warning" style="margin-top:4px">${t("team_status_pending", { n: person.tasksRemaining })}</span>`;
+            return `
+            <div class="historyItem" style="align-items:flex-start">
+              <div>
+                <div class="historyAmount">${escapeHTML(person.firstName || person.username || "—")}</div>
+                <div class="historyMeta">${timeAgo(person.createdAt)} • ID ${escapeHTML(person.telegramId)}</div>
+              </div>
+              ${statusHtml}
+            </div>`;
+          }).join("")
       }
     </div>
   `;

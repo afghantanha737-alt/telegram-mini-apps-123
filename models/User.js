@@ -19,6 +19,8 @@ const userSchema = new mongoose.Schema(
     referralCode: { type: String, required: true, unique: true, index: true },
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     invitedCount: { type: Number, default: 0, min: 0 },
+    // پاداش رفرال فقط یک‌بار و فقط بعد از تکمیل حداقل تعداد تسک لازم داده می‌شود
+    referralBonusAwarded: { type: Boolean, default: false },
 
     walletAddress: { type: String, default: '' },
     language: { type: String, enum: ['fa', 'ps', 'en'], default: 'fa' },

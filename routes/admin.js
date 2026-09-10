@@ -25,6 +25,50 @@ function requireAdmin(req, res, next) {
 
 router.use(requireAdmin);
 
+/**
+ * POST /api/admin/verify-chat — قبل از ساختن تسک، بررسی می‌کند آیا
+ * chatId وارد‌شده واقعاً معتبر است و ربات در آن ادمین هست یا نه.
+ * جلوی دقیقاً همان مشکلی را می‌گیرد که باعث شد تسک‌ها بی‌صدا شکست بخورند
+ * (chatId اشتباه که فقط موقع تلاش واقعی کاربر مشخص می‌شد).
+ */
+router.post('/verify-chat', async (req, res) => {
+  const chatId = String((req.body && req.body.chatId) || '').trim();
+  if (!chatId) {
+    return res.status(400).json({ success: false, message: 'chatId خالی است.' });
+  }
+  if (!bot) {
+    return res.status(500).json({ success: false, message: 'ربات پیکربندی نشده (BOT_TOKEN).' });
+  }
+
+  try {
+    const chat = await bot.getChat(chatId);
+    const me = await bot.getMe();
+
+    let botIsAdmin = false;
+    try {
+      const member = await bot.getChatMember(chatId, me.id);
+      botIsAdmin = ['administrator', 'creator'].includes(member.status);
+    } catch {
+      botIsAdmin = false;
+    }
+
+    const title = chat.title || chat.username || chatId;
+
+    return res.json({
+      success: true,
+      botIsAdmin,
+      message: botIsAdmin
+        ? `✅ معتبر است — «${title}». ربات ادمین این چت است.`
+        : `⚠️ چت پیدا شد («${title}») ولی ربات ادمین این چت نیست — اول ربات رو از تنظیمات کانال/گروه، ادمین کن.`
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: `❌ chatId نامعتبر است: ${error.message}`
+    });
+  }
+});
+
 /* -------------------- TASKS -------------------- */
 router.get('/tasks', async (req, res) => {
   const tasks = await Task.find().sort({ createdAt: -1 });
@@ -133,8 +177,6 @@ router.post('/broadcast', upload.single('image'), async (req, res) => {
   let sent = 0;
   let failed = 0;
 
-  // برای جلوگیری از برخورد با محدودیت نرخ تلگرام (~۳۰ پیام در ثانیه)،
-  // ارسال را به‌صورت دسته‌ای و با تأخیر کوتاه انجام می‌دهیم.
   const BATCH_SIZE = 20;
   const DELAY_MS = 1100;
 

@@ -5,8 +5,36 @@ const { requireTelegramAuth } = require('../utils/telegramAuth');
 const { checkChatMembership } = require('../utils/bot');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
+const User = require('../models/User');
 
 const auth = requireTelegramAuth(process.env.BOT_TOKEN);
+
+// حداقل تعداد تسک معتبری که کاربر دعوت‌شده باید تکمیل کند تا دعوت‌کننده‌اش پاداش بگیرد
+const REFERRAL_MIN_TASKS = Number(process.env.REFERRAL_MIN_TASKS || 2);
+const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
+
+/**
+ * اگر کاربر دعوت‌شده به آستانه‌ی لازم رسیده باشد، دقیقاً یک‌بار به
+ * دعوت‌کننده‌اش پاداش می‌دهد. با findOneAndUpdate و شرط
+ * referralBonusAwarded:false این عملیات atomic است — یعنی حتی اگر دو
+ * درخواست هم‌زمان بیایند (مثلاً از دو تب یا رفرش سریع)، فقط یکی از آن‌ها
+ * موفق به آپدیت می‌شود و پاداش هرگز دوبار پرداخت نمی‌شود.
+ */
+async function maybeAwardReferralBonus(userId) {
+  const user = await User.findById(userId).select('referredBy referralBonusAwarded');
+  if (!user || !user.referredBy || user.referralBonusAwarded) return;
+
+  const approvedCount = await TaskCompletion.countDocuments({ user: userId, status: 'approved' });
+  if (approvedCount < REFERRAL_MIN_TASKS) return;
+
+  const locked = await User.findOneAndUpdate(
+    { _id: userId, referralBonusAwarded: false },
+    { $set: { referralBonusAwarded: true } }
+  );
+  if (!locked) return; // یک درخواست دیگر همین الان این را پردازش کرد
+
+  await User.findByIdAndUpdate(user.referredBy, { $inc: { points: REFERRAL_BONUS_POINTS } });
+}
 
 // GET /api/tasks
 router.get('/', auth, async (req, res) => {
@@ -25,7 +53,8 @@ router.get('/', auth, async (req, res) => {
 /**
  * POST /api/tasks/:id/claim
  * عضویت کاربر در کانال/گروه تلگرامی را با API خود تلگرام بررسی می‌کند.
- * اگر عضو باشد، پاداش بلافاصله داده می‌شود.
+ * اگر عضو باشد، پاداش بلافاصله داده می‌شود؛ سپس بررسی می‌شود که آیا با
+ * این تکمیل، شرط پاداش رفرال دعوت‌کننده‌اش (در صورت وجود) برآورده شده.
  *
  * توجه: کل بدنه در try/catch پیچیده شده — در Express 4، اگر یک خطای
  * غیرمنتظره داخل async handler رخ دهد و catch نشود، درخواست کاربر
@@ -77,6 +106,12 @@ router.post('/:id/claim', auth, async (req, res) => {
 
     u.points += task.reward;
     await u.save();
+
+    // بعد از ثبت موفق تسک، بررسی می‌کنیم آیا پاداش رفرال دعوت‌کننده
+    // (در صورت وجود) باید همین حالا آزاد شود.
+    maybeAwardReferralBonus(u._id).catch(error =>
+      console.error('Referral bonus check failed:', error)
+    );
 
     res.json({
       success: true,

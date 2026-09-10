@@ -82,11 +82,12 @@ async function getOrCreateUser(tgUser, startParam) {
       referredBy
     });
 
+    // نکته مهم: اینجا هیچ پوینتی به دعوت‌کننده داده نمی‌شود.
+    // فقط شمارنده‌ی «تعداد دعوت‌شده‌ها» را برای نمایش در تیم به‌روزرسانی می‌کنیم.
+    // پرداخت ۵۰ پوینت واقعی فقط بعد از اینکه همین کاربر جدید حداقل تعداد
+    // تسک لازم را با موفقیت تکمیل کند اتفاق می‌افتد (routes/tasks.js).
     if (referredBy) {
-      const REFERRAL_BONUS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
-      await User.findByIdAndUpdate(referredBy, {
-        $inc: { points: REFERRAL_BONUS, invitedCount: 1 }
-      });
+      await User.findByIdAndUpdate(referredBy, { $inc: { invitedCount: 1 } });
     }
   } else {
     let changed = false;

@@ -28,10 +28,10 @@ function nextResetTimestamp() {
 const SPIN_SEGMENTS = [
   { type: 'points', value: 10 },
   { type: 'points', value: 20 },
-  { type: 'points', value: 5 },
+  { type: 'points', value: 50 },
   { type: 'points', value: 30 },
   { type: 'empty', value: 0 },
-  { type: 'spin', value: 50 }
+  { type: 'spin', value: 2 }
 ];
 
 // GET /api/points/me

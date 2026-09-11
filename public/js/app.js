@@ -666,10 +666,10 @@ const WHEEL_SIZE = 260;
 const WHEEL_CENTER = WHEEL_SIZE / 2;
 
 const SPIN_SEGMENTS_UI = [
-  { icon: "🪙", value: "2", color1: "#8b5cf6", color2: "#6d28d9" },
-  { icon: "🪙", value: "5", color1: "#a78bfa", color2: "#7c3aed" },
-  { icon: "💎", value: "15", color1: "#f5c451", color2: "#c98a12" },
-  { icon: "🏆", value: "20", color1: "#22c55e", color2: "#15803d" },
+  { icon: "🪙", value: "10", color1: "#8b5cf6", color2: "#6d28d9" },
+  { icon: "🪙", value: "20", color1: "#a78bfa", color2: "#7c3aed" },
+  { icon: "💎", value: "50", color1: "#f5c451", color2: "#c98a12" },
+  { icon: "🏆", value: "30", color1: "#22c55e", color2: "#15803d" },
   { icon: "💨", value: "0", color1: "#3a3f4d", color2: "#1e2028" },
   { icon: "🎡", value: "+1", color1: "#38bdf8", color2: "#0284c7" }
 ];

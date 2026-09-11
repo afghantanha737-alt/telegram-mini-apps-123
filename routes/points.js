@@ -26,12 +26,12 @@ function nextResetTimestamp() {
 
 // چرخ‌گردون: ۶ خانه
 const SPIN_SEGMENTS = [
-  { type: 'points', value: 2 },
-  { type: 'points', value: 5 },
-  { type: 'points', value: 15 },
+  { type: 'points', value: 10 },
   { type: 'points', value: 20 },
+  { type: 'points', value: 5 },
+  { type: 'points', value: 30 },
   { type: 'empty', value: 0 },
-  { type: 'spin', value: 1 }
+  { type: 'spin', value: 50 }
 ];
 
 // GET /api/points/me

@@ -480,29 +480,75 @@ function renderHome() {
 
   const content = $("#content");
   content.innerHTML = `
-    <section class="hero">
-      <div class="heroTop">
-        <div>
-          <div class="heroEyebrow">${t("hero_eyebrow")}</div>
+    <section class="hero heroPremium">
+      <div class="levelBadge">⭐ ${t("level_label", { n: formatPoints(currentLevel) })}</div>
+
+      <div class="heroMainRow">
+        <div class="heroChestWrap">
+          <svg viewBox="0 0 120 100" class="heroChestSvg" aria-hidden="true">
+            <defs>
+              <linearGradient id="chestBody" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#4a3418"/>
+                <stop offset="1" stop-color="#1c1408"/>
+              </linearGradient>
+              <linearGradient id="chestLid" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#f8d878"/>
+                <stop offset="1" stop-color="#c98a12"/>
+              </linearGradient>
+              <radialGradient id="coinGrad" cx="35%" cy="30%">
+                <stop offset="0" stop-color="#fff3cf"/>
+                <stop offset="55%" stop-color="#f5c451"/>
+                <stop offset="100%" stop-color="#c98a12"/>
+              </radialGradient>
+            </defs>
+            <ellipse cx="60" cy="92" rx="46" ry="6" fill="#000" opacity="0.25"/>
+            <circle cx="27" cy="86" r="11" fill="url(#coinGrad)"/>
+            <circle cx="50" cy="91" r="9" fill="url(#coinGrad)"/>
+            <circle cx="93" cy="88" r="10" fill="url(#coinGrad)"/>
+            <circle cx="74" cy="93" r="7" fill="url(#coinGrad)"/>
+            <rect x="12" y="48" width="96" height="38" rx="9" fill="url(#chestBody)"/>
+            <rect x="12" y="48" width="96" height="9" fill="#000" opacity="0.2"/>
+            <path d="M12,48 Q12,16 60,16 Q108,16 108,48 Z" fill="url(#chestLid)"/>
+            <path d="M12,48 Q12,16 60,16 Q108,16 108,48" fill="none" stroke="#8a5a10" stroke-width="2" opacity="0.5"/>
+            <rect x="50" y="40" width="20" height="18" rx="4" fill="#f5c451" stroke="#8a5a10" stroke-width="2"/>
+            <circle cx="60" cy="47" r="3" fill="#8a5a10"/>
+            <text x="20" y="30" font-size="14" opacity="0.85">✦</text>
+            <text x="98" y="26" font-size="10" opacity="0.7">✦</text>
+          </svg>
+        </div>
+        <div class="heroTextCol">
           <h1 class="heroTitle">${t("hero_title_line1")}<br>${t("hero_title_line2")}</h1>
           <p class="heroDescription">${t("hero_desc")}</p>
         </div>
-        <div class="badge gold">${t("level_label", { n: formatPoints(currentLevel) })}</div>
       </div>
-      <div class="heroBalance">
-        <div class="balanceLabel">${t("wallet_balance_title")}</div>
-        <div class="balanceValue">${formatPoints(state.points)} <span class="balanceUnit">${t("points_unit").toUpperCase()}</span></div>
+
+      <div class="heroBalanceRow">
+        <span class="balanceLabel">${t("wallet_balance_title")}</span>
+        <div class="balanceValuePremium">
+          <span class="coinIconSmall">🪙</span>
+          <span>${formatPoints(state.points)}</span>
+          <span class="balanceUnit">${t("points_unit").toUpperCase()}</span>
+        </div>
       </div>
+
       <div class="progressWrap">
         <div class="progressMeta">
           <span>${t("progress_label")}</span>
           <span>${formatPoints(state.points)} / ${formatPoints(nextLevel)}</span>
         </div>
-        <div class="progressTrack"><div class="progressBar" style="width:${levelProgress}%"></div></div>
+        <div class="progressTrackRow">
+          <div class="progressTrack"><div class="progressBar" style="width:${levelProgress}%"></div></div>
+          <span class="progressPercent">${Math.round(levelProgress)}%</span>
+        </div>
       </div>
-      <div class="heroActions">
-        <button class="heroAction" type="button" onclick="navigate('tasks')">${t("hero_action_earn")}</button>
-        <button class="heroAction" type="button" onclick="navigate('wallet')">${t("hero_action_wallet")}</button>
+
+      <div class="heroActions heroActionsPremium">
+        <button class="heroActionPurple" type="button" onclick="navigate('wallet')">
+          <span>◇ ${t("hero_action_wallet")}</span><span class="heroActionArrow">‹</span>
+        </button>
+        <button class="heroActionGold" type="button" onclick="navigate('tasks')">
+          <span>⚡ ${t("hero_action_earn")}</span><span class="heroActionArrow">‹</span>
+        </button>
       </div>
     </section>
 
@@ -666,10 +712,10 @@ const WHEEL_SIZE = 260;
 const WHEEL_CENTER = WHEEL_SIZE / 2;
 
 const SPIN_SEGMENTS_UI = [
-  { icon: "🪙", value: "10", color1: "#8b5cf6", color2: "#6d28d9" },
-  { icon: "🪙", value: "20", color1: "#a78bfa", color2: "#7c3aed" },
-  { icon: "💎", value: "50", color1: "#f5c451", color2: "#c98a12" },
-  { icon: "🏆", value: "30", color1: "#22c55e", color2: "#15803d" },
+  { icon: "🪙", value: "2", color1: "#8b5cf6", color2: "#6d28d9" },
+  { icon: "🪙", value: "5", color1: "#a78bfa", color2: "#7c3aed" },
+  { icon: "💎", value: "15", color1: "#f5c451", color2: "#c98a12" },
+  { icon: "🏆", value: "20", color1: "#22c55e", color2: "#15803d" },
   { icon: "💨", value: "0", color1: "#3a3f4d", color2: "#1e2028" },
   { icon: "🎡", value: "+1", color1: "#38bdf8", color2: "#0284c7" }
 ];

@@ -413,27 +413,26 @@ async function loadWithdrawals() {
       container.innerHTML = '<div class="empty">درخواستی یافت نشد.</div>';
       return;
     }
-    container.innerHTML = `
-      <table>
-        <thead><tr><th>کاربر</th><th>مقدار (GRAM)</th><th>آدرس</th><th>وضعیت</th><th>عملیات</th></tr></thead>
-        <tbody>
-          ${list.map(w => `
-            <tr>
-              <td>${escapeHtml(w.user?.firstName || w.user?.username || "—")}</td>
-              <td>${w.cryptoAmount}</td>
-              <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(w.address)}">${escapeHtml(w.address)}</td>
-              <td><span class="badge ${w.status}">${STATUS_FA[w.status] || w.status}</span></td>
-              <td class="row">
-                ${w.status === "pending" ? `
-                  <button class="success" onclick="withdrawAction('${w._id}','approve')">تأیید</button>
-                  <button class="danger" onclick="withdrawAction('${w._id}','reject')">رد</button>
-                ` : '<span class="small">—</span>'}
-              </td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
+    container.innerHTML = list.map(w => `
+      <div class="card" style="margin-bottom:10px">
+        <div class="flexBetween" style="margin-bottom:8px">
+          <b>${escapeHtml(w.user?.firstName || w.user?.username || "—")}</b>
+          <span class="badge ${w.status}">${STATUS_FA[w.status] || w.status}</span>
+        </div>
+        <div class="small" style="margin-bottom:6px">مقدار: <b style="color:var(--text)">${w.cryptoAmount} GRAM</b></div>
+        <label class="small" style="margin-bottom:4px">آدرس کامل کیف پول</label>
+        <div style="display:flex;gap:6px;align-items:stretch;margin-bottom:8px">
+          <input type="text" readonly value="${escapeHtml(w.address)}" style="margin:0;direction:ltr;font-family:monospace;font-size:11px" onclick="this.select()">
+          <button class="secondary" style="white-space:nowrap" onclick="copyAddress('${escapeHtml(w.address).replaceAll("'", "\\'")}', this)">کپی</button>
+        </div>
+        ${w.status === "pending" ? `
+          <div class="row">
+            <button class="success" onclick="withdrawAction('${w._id}','approve')">تأیید</button>
+            <button class="danger" onclick="withdrawAction('${w._id}','reject')">رد</button>
+          </div>
+        ` : ""}
+      </div>
+    `).join("");
   } catch (error) {
     container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }
@@ -551,6 +550,30 @@ async function saveSettings() {
 }
 
 /* ---------- UTIL ---------- */
+function copyAddress(address, buttonEl) {
+  const finish = () => {
+    const original = buttonEl.textContent;
+    buttonEl.textContent = "کپی شد ✓";
+    setTimeout(() => { buttonEl.textContent = original; }, 1500);
+  };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(address).then(finish).catch(() => fallbackCopyAddress(address, finish));
+  } else {
+    fallbackCopyAddress(address, finish);
+  }
+}
+
+function fallbackCopyAddress(text, onDone) {
+  const temp = document.createElement("textarea");
+  temp.value = text;
+  temp.style.position = "fixed";
+  temp.style.opacity = "0";
+  document.body.appendChild(temp);
+  temp.select();
+  try { document.execCommand("copy"); onDone?.(); } catch {}
+  document.body.removeChild(temp);
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, ch => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"

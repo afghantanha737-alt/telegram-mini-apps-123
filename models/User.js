@@ -16,6 +16,14 @@ const userSchema = new mongoose.Schema(
     lastCheckIn: { type: Date, default: null },
     spinChances: { type: Number, default: 0, min: 0 },
 
+    dailyAds: {
+      dayKey: { type: Number, default: null },
+      watched: { type: Number, default: 0, min: 0 },
+      reward5Awarded: { type: Boolean, default: false },
+      reward15Awarded: { type: Boolean, default: false },
+      reward30Awarded: { type: Boolean, default: false }
+    },
+
     referralCode: { type: String, required: true, unique: true, index: true },
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     invitedCount: { type: Number, default: 0, min: 0 },

@@ -16,6 +16,7 @@ if (!MONGO_URI) {
   console.error('❌ MONGO_URI is not configured.');
   process.exit(1);
 }
+
 if (!process.env.BOT_TOKEN) {
   console.error('❌ BOT_TOKEN is not configured.');
   process.exit(1);
@@ -47,7 +48,7 @@ app.use(express.json({ limit: '150kb' }));
 app.use(express.urlencoded({ extended: false, limit: '150kb' }));
 
 /* =========================================================
-   BASIC RATE LIMIT (بدون وابستگی خارجی)
+   BASIC RATE LIMIT
 ========================================================= */
 const rateBuckets = new Map();
 const RATE_WINDOW_MS = 60 * 1000;
@@ -56,32 +57,48 @@ const RATE_MAX_REQUESTS = 120;
 app.use('/api', (req, res, next) => {
   const key = req.ip || 'unknown';
   const now = Date.now();
-  const bucket = rateBuckets.get(key) || { count: 0, resetAt: now + RATE_WINDOW_MS };
+
+  const bucket = rateBuckets.get(key) || {
+    count: 0,
+    resetAt: now + RATE_WINDOW_MS
+  };
 
   if (now > bucket.resetAt) {
     bucket.count = 0;
     bucket.resetAt = now + RATE_WINDOW_MS;
   }
+
   bucket.count += 1;
   rateBuckets.set(key, bucket);
 
   if (bucket.count > RATE_MAX_REQUESTS) {
-    return res.status(429).json({ success: false, message: 'درخواست‌های شما بیش از حد مجاز است. کمی صبر کنید.' });
+    return res.status(429).json({
+      success: false,
+      message: 'درخواست‌های شما بیش از حد مجاز است. کمی صبر کنید.'
+    });
   }
+
   next();
 });
 
 setInterval(() => {
   const now = Date.now();
+
   for (const [key, bucket] of rateBuckets.entries()) {
-    if (now > bucket.resetAt + RATE_WINDOW_MS) rateBuckets.delete(key);
+    if (now > bucket.resetAt + RATE_WINDOW_MS) {
+      rateBuckets.delete(key);
+    }
   }
 }, 5 * 60 * 1000);
 
 /* =========================================================
    STATIC FRONTEND
 ========================================================= */
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
+app.use(
+  express.static(path.join(__dirname, 'public'), {
+    maxAge: '1h'
+  })
+);
 
 /* =========================================================
    API ROUTES
@@ -89,6 +106,7 @@ app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/points', require('./routes/points'));
+app.use('/api/ads', require('./routes/ads'));
 app.use('/api/referral', require('./routes/referral'));
 app.use('/api/leaderboard', require('./routes/leaderboard'));
 app.use('/api/admin', require('./routes/admin'));
@@ -96,7 +114,14 @@ app.use('/api/telegram', require('./routes/telegramWebhook'));
 
 app.get('/api/health', (req, res) => {
   const mongoState = mongoose.connection.readyState;
-  const mongoStatus = mongoState === 1 ? 'connected' : mongoState === 2 ? 'connecting' : 'disconnected';
+
+  const mongoStatus =
+    mongoState === 1
+      ? 'connected'
+      : mongoState === 2
+        ? 'connecting'
+        : 'disconnected';
+
   res.json({
     success: true,
     status: 'ok',
@@ -108,7 +133,10 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api', (req, res) => {
-  res.status(404).json({ success: false, message: 'API endpoint not found' });
+  res.status(404).json({
+    success: false,
+    message: 'API endpoint not found'
+  });
 });
 
 /* =========================================================
@@ -123,15 +151,29 @@ app.get('*', (req, res) => {
 ========================================================= */
 app.use((err, req, res, next) => {
   console.error('Unhandled server error:', err);
-  if (res.headersSent) return next(err);
+
+  if (res.headersSent) {
+    return next(err);
+  }
 
   if (err.message === 'CORS origin not allowed') {
-    return res.status(403).json({ success: false, message: 'Origin not allowed' });
+    return res.status(403).json({
+      success: false,
+      message: 'Origin not allowed'
+    });
   }
+
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    return res.status(400).json({ success: false, message: 'Invalid JSON payload' });
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid JSON payload'
+    });
   }
-  return res.status(500).json({ success: false, message: 'Internal server error' });
+
+  return res.status(500).json({
+    success: false,
+    message: 'Internal server error'
+  });
 });
 
 /* =========================================================
@@ -141,19 +183,24 @@ let server;
 
 async function startServer() {
   try {
-    await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 10000 });
+    await mongoose.connect(MONGO_URI, {
+      serverSelectionTimeoutMS: 10000
+    });
+
     console.log('✅ MongoDB connected');
 
-    // پاک‌سازی ایندکس‌های قدیمی/ناسازگار که ممکن است از نسخه‌های قبلی
-    // پروژه در دیتابیس باقی مانده باشند (مثلاً ایندکس روی فیلدهای
-    // userId/taskId که در مدل فعلی وجود ندارند و باعث خطای duplicate
-    // key کاذب می‌شوند).
     await cleanupStaleIndexes();
 
     const runReferralSweep = require('./utils/referralSweep');
-    runReferralSweep().catch(error => console.error('Initial referral sweep failed:', error));
+
+    runReferralSweep().catch(error => {
+      console.error('Initial referral sweep failed:', error);
+    });
+
     setInterval(() => {
-      runReferralSweep().catch(error => console.error('Scheduled referral sweep failed:', error));
+      runReferralSweep().catch(error => {
+        console.error('Scheduled referral sweep failed:', error);
+      });
     }, 15 * 60 * 1000);
 
     server = app.listen(PORT, () => {
@@ -170,21 +217,24 @@ async function cleanupStaleIndexes() {
     const collection = mongoose.connection.collection('taskcompletions');
     const indexes = await collection.indexes();
 
-    // نام درست ایندکس فعلی که مدل باید داشته باشد
     const validIndexName = 'user_1_task_1';
 
     for (const index of indexes) {
       const isPrimaryKey = index.name === '_id_';
       const isValid = index.name === validIndexName;
+
       if (!isPrimaryKey && !isValid) {
         await collection.dropIndex(index.name);
-        console.log(`🧹 Dropped stale index "${index.name}" from taskcompletions`);
+        console.log(
+          `🧹 Dropped stale index "${index.name}" from taskcompletions`
+        );
       }
     }
   } catch (error) {
-    // این عملیات صرفاً پاک‌سازی است؛ اگر کالکشن هنوز وجود ندارد یا خطای
-    // بی‌ضرر دیگری رخ دهد، نباید جلوی بالا آمدن سرور را بگیرد.
-    console.warn('Index cleanup skipped (non-fatal):', error.message);
+    console.warn(
+      'Index cleanup skipped (non-fatal):',
+      error.message
+    );
   }
 }
 
@@ -193,9 +243,14 @@ async function cleanupStaleIndexes() {
 ========================================================= */
 async function shutdown(signal) {
   console.log(`\n${signal} received. Shutting down...`);
+
   try {
-    if (server) await new Promise(resolve => server.close(resolve));
+    if (server) {
+      await new Promise(resolve => server.close(resolve));
+    }
+
     await mongoose.connection.close(false);
+
     console.log('✅ Server shutdown completed');
     process.exit(0);
   } catch (error) {
@@ -206,7 +261,11 @@ async function shutdown(signal) {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('unhandledRejection', error => console.error('Unhandled Promise Rejection:', error));
+
+process.on('unhandledRejection', error => {
+  console.error('Unhandled Promise Rejection:', error);
+});
+
 process.on('uncaughtException', error => {
   console.error('Uncaught Exception:', error);
   shutdown('uncaughtException').catch(() => process.exit(1));

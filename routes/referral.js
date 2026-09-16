@@ -11,9 +11,10 @@ const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
 
 // GET /api/referral/me — کد رفرال، لینک اشتراک‌گذاری، و لیست «تیم» با وضعیت پاداش هرکدام
 router.get('/me', auth, async (req, res) => {
-  const u = req.dbUser;
-  const botUsername = process.env.BOT_USERNAME || '';
-  const shortName = process.env.MINI_APP_SHORT_NAME || '';
+  try {
+    const u = req.dbUser;
+    const botUsername = process.env.BOT_USERNAME || '';
+    const shortName = process.env.MINI_APP_SHORT_NAME || '';
 
   let shareLink = '';
   if (botUsername) {
@@ -24,10 +25,13 @@ router.get('/me', auth, async (req, res) => {
       : `https://t.me/${botUsername}?start=${u.referralCode}`;
   }
 
-  const invitedUsers = await User.find({ referredBy: u._id })
+    const [invitedUsers, invitedCount] = await Promise.all([
+      User.find({ referredBy: u._id })
     .select('telegramId firstName username createdAt referralBonusAwarded')
     .sort({ createdAt: -1 })
-    .limit(100);
+        .limit(100),
+      User.countDocuments({ referredBy: u._id })
+    ]);
 
   // تعداد تسک تکمیل‌شده‌ی هر عضو تیم را یک‌جا (با aggregate) می‌گیریم
   // تا به‌جای N کوئری جدا، فقط یک کوئری اضافه بزنیم.
@@ -51,16 +55,20 @@ router.get('/me', auth, async (req, res) => {
     };
   });
 
-  res.json({
-    success: true,
-    referralCode: u.referralCode,
-    invitedCount: u.invitedCount,
-    shareLink,
-    botUsernameConfigured: Boolean(botUsername),
-    referralMinTasks: REFERRAL_MIN_TASKS,
-    referralBonusPoints: REFERRAL_BONUS_POINTS,
-    invited
-  });
+    res.json({
+      success: true,
+      referralCode: u.referralCode,
+      invitedCount,
+      shareLink,
+      botUsernameConfigured: Boolean(botUsername),
+      referralMinTasks: REFERRAL_MIN_TASKS,
+      referralBonusPoints: REFERRAL_BONUS_POINTS,
+      invited
+    });
+  } catch (error) {
+    console.error('GET /api/referral/me failed:', error);
+    res.status(500).json({ success: false, code: 'SERVER_ERROR', message: 'اطلاعات رفرال بارگذاری نشد.' });
+  }
 });
 
 module.exports = router;

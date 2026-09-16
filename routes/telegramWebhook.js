@@ -10,11 +10,9 @@ const APP_URL = process.env.APP_URL || '';
 
 // POST /api/telegram/webhook — دریافت آپدیت از تلگرام
 router.post('/webhook', async (req, res) => {
-  if (WEBHOOK_SECRET) {
-    const headerSecret = req.headers['x-telegram-bot-api-secret-token'];
-    if (headerSecret !== WEBHOOK_SECRET) {
-      return res.sendStatus(401);
-    }
+  const headerSecret = req.headers['x-telegram-bot-api-secret-token'];
+  if (!WEBHOOK_SECRET || headerSecret !== WEBHOOK_SECRET) {
+    return res.sendStatus(401);
   }
 
   res.sendStatus(200);
@@ -82,12 +80,16 @@ router.post('/webhook', async (req, res) => {
 
 // GET /api/telegram/set-webhook — یک‌بار برای تنظیم وبهوک صدا بزنید
 router.get('/set-webhook', async (req, res) => {
+  const adminKey = req.headers['x-admin-key'] || req.query.key;
+  if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
+  }
   if (!bot || !APP_URL) {
     return res.status(400).json({ success: false, message: 'BOT_TOKEN یا APP_URL تنظیم نشده است.' });
   }
   try {
     const url = `${APP_URL}/api/telegram/webhook`;
-    const options = WEBHOOK_SECRET ? { secret_token: WEBHOOK_SECRET } : {};
+    const options = { secret_token: WEBHOOK_SECRET };
     await bot.setWebHook(url, options);
     res.json({ success: true, message: `Webhook تنظیم شد: ${url}` });
   } catch (error) {

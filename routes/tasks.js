@@ -1,42 +1,93 @@
 'use strict';
+
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const { requireTelegramAuth } = require('../utils/telegramAuth');
 const { checkChatMembership } = require('../utils/bot');
+const { applyPointsChange, operationError } = require('../utils/pointsLedger');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
 const User = require('../models/User');
+const PointsLedger = require('../models/PointsLedger');
 
 const auth = requireTelegramAuth(process.env.BOT_TOKEN);
+const REFERRAL_MIN_TASKS = Math.max(1, Math.floor(Number(process.env.REFERRAL_MIN_TASKS || 2)));
+const REFERRAL_BONUS_POINTS = Math.max(0, Math.floor(Number(process.env.REFERRAL_BONUS_POINTS || 50)));
+const REFERRAL_MIN_ACCOUNT_AGE_HOURS = Math.max(
+  0,
+  Number(process.env.REFERRAL_MIN_ACCOUNT_AGE_HOURS || 0)
+);
+const REFERRAL_MAX_DAILY_BONUSES = Math.max(
+  1,
+  Math.floor(Number(process.env.REFERRAL_MAX_DAILY_BONUSES || 50))
+);
 
-// حداقل تعداد تسک معتبری که کاربر دعوت‌شده باید تکمیل کند تا دعوت‌کننده‌اش پاداش بگیرد
-const REFERRAL_MIN_TASKS = Number(process.env.REFERRAL_MIN_TASKS || 2);
-const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
+function sendRouteError(res, error, fallback = 'خطای سرور رخ داد.') {
+  console.error('Tasks route failed:', error);
+  return res.status(error.statusCode || 500).json({
+    success: false,
+    code: error.code || 'SERVER_ERROR',
+    message: error.statusCode ? error.message : fallback
+  });
+}
+
+function utcDayStart() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
 
 /**
- * اگر کاربر دعوت‌شده به آستانه‌ی لازم رسیده باشد، دقیقاً یک‌بار به
- * دعوت‌کننده‌اش پاداش می‌دهد. با findOneAndUpdate و شرط
- * referralBonusAwarded:false این عملیات atomic است — یعنی حتی اگر دو
- * درخواست هم‌زمان بیایند (مثلاً از دو تب یا رفرش سریع)، فقط یکی از آن‌ها
- * موفق به آپدیت می‌شود و پاداش هرگز دوبار پرداخت نمی‌شود.
+ * The invited account must complete distinct verified tasks and remain old
+ * enough before the inviter receives a ledger entry.
  */
-async function maybeAwardReferralBonus(userId) {
-  const user = await User.findById(userId).select('referredBy referralBonusAwarded');
-  if (!user || !user.referredBy || user.referralBonusAwarded) return;
+async function maybeAwardReferralBonus(userId, session) {
+  const user = await User.findById(userId)
+    .select('referredBy referralBonusAwarded referralRiskFlags createdAt isBanned')
+    .session(session);
+  if (!user || user.isBanned || !user.referredBy || user.referralBonusAwarded) return;
 
-  const approvedCount = await TaskCompletion.countDocuments({ user: userId, status: 'approved' });
+  const accountAgeMs = Date.now() - new Date(user.createdAt).getTime();
+  if (accountAgeMs < REFERRAL_MIN_ACCOUNT_AGE_HOURS * 60 * 60 * 1000) return;
+  if (user.referralRiskFlags?.includes('same_signup_ip')) return;
+
+  const approvedCount = await TaskCompletion.countDocuments({
+    user: userId,
+    status: 'approved'
+  }).session(session);
   if (approvedCount < REFERRAL_MIN_TASKS) return;
+
+  const referrer = await User.findById(user.referredBy)
+    .select('telegramId isBanned')
+    .session(session);
+  if (!referrer || referrer.isBanned) return;
+
+  const dailyBonusCount = await PointsLedger.countDocuments({
+    user: referrer._id,
+    type: 'referral_bonus',
+    createdAt: { $gte: utcDayStart() }
+  }).session(session);
+  if (dailyBonusCount >= REFERRAL_MAX_DAILY_BONUSES) return;
 
   const locked = await User.findOneAndUpdate(
     { _id: userId, referralBonusAwarded: false },
-    { $set: { referralBonusAwarded: true } }
+    { $set: { referralBonusAwarded: true, referralBonusAwardedAt: new Date() } },
+    { new: true, session }
   );
-  if (!locked) return; // یک درخواست دیگر همین الان این را پردازش کرد
+  if (!locked) return;
 
-  await User.findByIdAndUpdate(user.referredBy, { $inc: { points: REFERRAL_BONUS_POINTS } });
+  await applyPointsChange({
+    userId: referrer._id,
+    delta: REFERRAL_BONUS_POINTS,
+    type: 'referral_bonus',
+    referenceType: 'referred_user',
+    referenceId: userId,
+    idempotencyKey: `referral:${userId}`,
+    metadata: { approvedTasks: approvedCount },
+    session
+  });
 }
 
-// GET /api/tasks
 router.get('/', auth, async (req, res) => {
   try {
     const [tasks, completions] = await Promise.all([
@@ -45,131 +96,113 @@ router.get('/', auth, async (req, res) => {
     ]);
     res.json({ success: true, tasks, completions });
   } catch (error) {
-    console.error('GET /api/tasks failed:', error);
-    res.status(500).json({ success: false, message: 'خطایی در بارگذاری تسک‌ها رخ داد.', code: 'SERVER_ERROR' });
+    sendRouteError(res, error, 'خطایی در بارگذاری تسک‌ها رخ داد.');
   }
 });
 
-/**
- * POST /api/tasks/:id/claim
- * عضویت کاربر در کانال/گروه تلگرامی را با API خود تلگرام بررسی می‌کند.
- * اگر عضو باشد، پاداش بلافاصله داده می‌شود؛ سپس بررسی می‌شود که آیا با
- * این تکمیل، شرط پاداش رفرال دعوت‌کننده‌اش (در صورت وجود) برآورده شده.
- *
- * توجه: کل بدنه در try/catch پیچیده شده — در Express 4، اگر یک خطای
- * غیرمنتظره داخل async handler رخ دهد و catch نشود، درخواست کاربر
- * بی‌پاسخ می‌ماند (نه یک خطای JSON مرتب) و در مرورگر شبیه "قطع شدن
- * ارتباط" دیده می‌شود. این تغییر تضمین می‌کند همیشه یک پاسخ JSON
- * برگردد، هرچه که خطا باشد.
- */
 router.post('/:id/claim', auth, async (req, res) => {
   try {
-    const u = req.dbUser;
-    const task = await Task.findById(req.params.id);
-
-    if (!task || !task.isActive) {
+    const taskForCheck = await Task.findById(req.params.id).select('chatId verifyType isActive');
+    if (!taskForCheck || !taskForCheck.isActive) {
       return res.status(404).json({ success: false, message: 'تسک پیدا نشد.', code: 'TASK_NOT_FOUND' });
     }
 
-    const existing = await TaskCompletion.findOne({ user: u._id, task: task._id });
-    if (existing && existing.status !== 'rejected') {
-      return res.status(400).json({ success: false, message: 'این تسک قبلاً انجام شده است.', code: 'ALREADY_DONE' });
-    }
-
-    const result = await checkChatMembership(task.chatId, u.telegramId);
-
-    if (result.configError) {
-      return res.status(400).json({
-        success: false,
-        joined: false,
-        message: `⚠️ ${result.configError}`,
-        code: 'VERIFY_CONFIG_ERROR'
-      });
-    }
-
-    if (!result.joined) {
-      return res.status(400).json({
-        success: false,
-        joined: false,
-        message: 'هنوز عضویت شما تأیید نشد. ابتدا در کانال/گروه عضو شوید، سپس دوباره روی «بررسی» بزنید.',
-        code: 'NOT_JOINED'
-      });
-    }
-
-    // رزرو اتمی ظرفیت (چه تکمیل تازه، چه تلاش دوباره بعد از رد‌شدن قبلی):
-    // این آپدیت فقط وقتی موفق می‌شود که تسک هنوز فعال باشد و (بدون محدودیت
-    // ظرفیت باشد یا هنوز جا داشته باشد). چون این عملیات در سطح دیتابیس
-    // atomic است، حتی با صدها درخواست هم‌زمان، هرگز بیشتر از ظرفیت
-    // تعیین‌شده رزرو نمی‌شود.
-    const reserved = await Task.findOneAndUpdate(
-      {
-        _id: task._id,
-        isActive: true,
-        $or: [
-          { maxCompletions: null },
-          { $expr: { $lt: ['$completedCount', '$maxCompletions'] } }
-        ]
-      },
-      { $inc: { completedCount: 1 } },
-      { new: true }
-    );
-
-    if (!reserved) {
-      return res.status(400).json({
-        success: false,
-        message: 'ظرفیت این تسک تکمیل شده یا غیرفعال شده است.',
-        code: 'TASK_FULL'
-      });
-    }
-
-    // اگر با همین تکمیل، ظرفیت پر شد، تسک را برای همیشه غیرفعال کن
-    // تا در لیست تسک‌های بقیه‌ی کاربران نمایش داده نشود.
-    let weJustFilledCapacity = false;
-    if (reserved.maxCompletions != null && reserved.completedCount >= reserved.maxCompletions) {
-      await Task.findByIdAndUpdate(reserved._id, { isActive: false });
-      weJustFilledCapacity = true;
-    }
-
-    try {
-      if (existing) {
-        existing.status = 'approved';
-        existing.reward = task.reward;
-        await existing.save();
-      } else {
-        await TaskCompletion.create({ user: u._id, task: task._id, reward: task.reward, status: 'approved' });
+    if (taskForCheck.verifyType === 'telegram') {
+      const result = await checkChatMembership(taskForCheck.chatId, req.dbUser.telegramId);
+      if (result.configError) {
+        return res.status(400).json({
+          success: false,
+          joined: false,
+          message: `⚠️ ${result.configError}`,
+          code: 'VERIFY_CONFIG_ERROR'
+        });
       }
-    } catch (createError) {
-      // اگر ثبت تکمیل به هر دلیلی شکست خورد، ظرفیتی که رزرو کرده بودیم
-      // را برمی‌گردانیم تا از دست نرود.
-      const rollback = { $inc: { completedCount: -1 } };
-      if (weJustFilledCapacity) rollback.$set = { isActive: true };
-      await Task.findByIdAndUpdate(task._id, rollback);
-      throw createError;
+      if (!result.joined) {
+        return res.status(400).json({
+          success: false,
+          joined: false,
+          message: 'هنوز عضویت شما تأیید نشد. ابتدا در کانال/گروه عضو شوید، سپس دوباره بررسی کنید.',
+          code: 'NOT_JOINED'
+        });
+      }
     }
 
-    u.points += task.reward;
-    await u.save();
+    const session = await mongoose.startSession();
+    try {
+      let response;
+      await session.withTransaction(async () => {
+        const u = await User.findById(req.dbUser._id).session(session);
+        const task = await Task.findById(req.params.id).session(session);
+        if (!u || u.isBanned) throw operationError('USER_NOT_FOUND', 'کاربر پیدا نشد.');
+        if (!task || !task.isActive) throw operationError('TASK_NOT_FOUND', 'تسک پیدا نشد.');
+        if (!Number.isInteger(task.reward) || task.reward <= 0) {
+          throw operationError('INVALID_TASK_REWARD', 'پاداش این تسک معتبر نیست.');
+        }
 
-    // بعد از ثبت موفق تسک، بررسی می‌کنیم آیا پاداش رفرال دعوت‌کننده
-    // (در صورت وجود) باید همین حالا آزاد شود.
-    maybeAwardReferralBonus(u._id).catch(error =>
-      console.error('Referral bonus check failed:', error)
-    );
+        const existing = await TaskCompletion.findOne({ user: u._id, task: task._id }).session(session);
+        if (existing && existing.status !== 'rejected') {
+          throw operationError('ALREADY_DONE', 'این تسک قبلاً انجام شده است.');
+        }
 
-    res.json({
-      success: true,
-      joined: true,
-      message: `${task.reward} پوینت به حساب شما اضافه شد.`,
-      points: u.points,
-      status: 'approved'
-    });
+        const reserved = await Task.findOneAndUpdate(
+          {
+            _id: task._id,
+            isActive: true,
+            $or: [
+              { maxCompletions: null },
+              { $expr: { $lt: ['$completedCount', '$maxCompletions'] } }
+            ]
+          },
+          { $inc: { completedCount: 1 } },
+          { new: true, session }
+        );
+        if (!reserved) throw operationError('TASK_FULL', 'ظرفیت این تسک تکمیل شده یا غیرفعال شده است.');
+
+        if (reserved.maxCompletions != null && reserved.completedCount >= reserved.maxCompletions) {
+          await Task.updateOne({ _id: reserved._id }, { $set: { isActive: false } }, { session });
+        }
+
+        let completion;
+        if (existing) {
+          existing.status = 'approved';
+          existing.reward = task.reward;
+          await existing.save({ session });
+          completion = existing;
+        } else {
+          [completion] = await TaskCompletion.create([{
+            user: u._id,
+            task: task._id,
+            reward: task.reward,
+            status: 'approved'
+          }], { session });
+        }
+
+        const updated = await applyPointsChange({
+          userId: u._id,
+          delta: task.reward,
+          type: 'task_reward',
+          referenceType: 'task_completion',
+          referenceId: completion._id,
+          idempotencyKey: `task:${u._id}:${task._id}`,
+          metadata: { taskId: task._id, taskTitle: task.title },
+          session
+        });
+
+        await maybeAwardReferralBonus(u._id, session);
+        response = {
+          success: true,
+          joined: true,
+          message: `${task.reward} پوینت به حساب شما اضافه شد.`,
+          points: updated.user.points,
+          status: 'approved'
+        };
+      });
+      return res.json(response);
+    } finally {
+      await session.endSession();
+    }
   } catch (error) {
-    console.error(`POST /api/tasks/${req.params.id}/claim failed:`, error);
-    res.status(500).json({
-      success: false,
-      message: `خطای سرور: ${error.message}`,
-      code: 'SERVER_ERROR'
-    });
+    return sendRouteError(res, error, 'تکمیل تسک انجام نشد.');
   }
 });
 

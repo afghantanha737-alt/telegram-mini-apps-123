@@ -1,5 +1,7 @@
 'use strict';
+const crypto = require('crypto');
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const multer = require('multer');
 const Task = require('../models/Task');
@@ -7,6 +9,8 @@ const Withdrawal = require('../models/Withdrawal');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
 const { bot } = require('../utils/bot');
+const { applyPointsChange } = require('../utils/pointsLedger');
+const { createRateLimiter, clientAddress } = require('../utils/rateLimit');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -17,12 +21,23 @@ function requireAdmin(req, res, next) {
   // تگ <img> نمی‌تواند هدر سفارشی بفرستد، پس برای مسیر نمایش تصویر
   // اجازه می‌دهیم کلید از query هم بیاید (؟key=...).
   const key = req.headers['x-admin-key'] || req.query.key;
-  if (!process.env.ADMIN_KEY || key !== process.env.ADMIN_KEY) {
+  const expected = Buffer.from(String(process.env.ADMIN_KEY || ''));
+  const received = Buffer.from(String(key || ''));
+  if (
+    !expected.length ||
+    expected.length !== received.length ||
+    !crypto.timingSafeEqual(expected, received)
+  ) {
     return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
   }
   next();
 }
 
+router.use(createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyGenerator: req => `admin:${clientAddress(req)}`
+}));
 router.use(requireAdmin);
 
 /**
@@ -77,7 +92,7 @@ router.get('/tasks', async (req, res) => {
 
 router.post('/tasks', async (req, res) => {
   const { title, description, type, url, reward, chatId, maxCompletions } = req.body || {};
-  if (!title || !reward) {
+  if (!title || !Number.isInteger(Number(reward)) || Number(reward) <= 0) {
     return res.status(400).json({ success: false, message: 'عنوان و مقدار پاداش الزامی است.' });
   }
   if (!chatId) {
@@ -98,7 +113,18 @@ router.post('/tasks', async (req, res) => {
 });
 
 router.put('/tasks/:id', async (req, res) => {
-  const task = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  const allowed = ['title', 'description', 'type', 'url', 'chatId', 'isActive', 'maxCompletions'];
+  const update = {};
+  for (const field of allowed) {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, field)) update[field] = req.body[field];
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'reward')) {
+    if (!Number.isInteger(Number(req.body.reward)) || Number(req.body.reward) <= 0) {
+      return res.status(400).json({ success: false, message: 'مقدار پاداش نامعتبر است.' });
+    }
+    update.reward = Number(req.body.reward);
+  }
+  const task = await Task.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
   if (!task) return res.status(404).json({ success: false, message: 'تسک پیدا نشد.' });
   res.json({ success: true, task });
 });
@@ -120,28 +146,65 @@ router.get('/withdrawals', async (req, res) => {
 });
 
 router.post('/withdrawals/:id/approve', async (req, res) => {
-  const w = await Withdrawal.findByIdAndUpdate(
-    req.params.id,
+  const w = await Withdrawal.findOneAndUpdate(
+    { _id: req.params.id, status: 'pending' },
     { status: 'approved', adminNote: (req.body && req.body.note) || '' },
     { new: true }
   );
-  if (!w) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
+  if (!w) return res.status(409).json({ success: false, message: 'برداشت پیدا نشد یا قبلاً پردازش شده است.' });
   res.json({ success: true, withdrawal: w });
 });
 
 router.post('/withdrawals/:id/reject', async (req, res) => {
-  const withdrawal = await Withdrawal.findById(req.params.id);
-  if (!withdrawal) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
+  const session = await mongoose.startSession();
+  try {
+    let withdrawal;
+    await session.withTransaction(async () => {
+      withdrawal = await Withdrawal.findOne({ _id: req.params.id, status: 'pending' }).session(session);
+      if (!withdrawal) {
+        const error = new Error('برداشت پیدا نشد یا قبلاً پردازش شده است.');
+        error.statusCode = 409;
+        throw error;
+      }
 
-  if (withdrawal.status === 'pending') {
-    await User.findByIdAndUpdate(withdrawal.user, { $inc: { points: withdrawal.pointsSpent } });
+      const user = await User.findByIdAndUpdate(
+        withdrawal.user,
+        { $inc: { gramBalance: withdrawal.cryptoAmount } },
+        { new: true, session }
+      );
+      if (!user) {
+        const error = new Error('کاربر برداشت پیدا نشد.');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      withdrawal.status = 'rejected';
+      withdrawal.adminNote = String((req.body && req.body.note) || '').slice(0, 500);
+      await withdrawal.save({ session });
+
+      await applyPointsChange({
+        userId: user._id,
+        delta: 0,
+        type: 'withdrawal_audit',
+        referenceType: 'withdrawal',
+        referenceId: withdrawal._id,
+        idempotencyKey: `withdrawal:${withdrawal.requestId || withdrawal._id}:rejected`,
+        metadata: { status: 'rejected', gramReturned: withdrawal.cryptoAmount },
+        session
+      });
+    });
+
+    res.json({ success: true, withdrawal });
+  } catch (error) {
+    console.error('Reject withdrawal failed:', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      code: error.statusCode ? 'WITHDRAWAL_STATE_ERROR' : 'SERVER_ERROR',
+      message: error.statusCode ? error.message : 'رد برداشت انجام نشد.'
+    });
+  } finally {
+    await session.endSession();
   }
-
-  withdrawal.status = 'rejected';
-  withdrawal.adminNote = (req.body && req.body.note) || '';
-  await withdrawal.save();
-
-  res.json({ success: true, withdrawal });
 });
 
 /* -------------------- USERS -------------------- */
@@ -168,7 +231,17 @@ router.get('/settings', async (req, res) => {
 
 router.put('/settings', async (req, res) => {
   const settings = await Settings.getGlobal();
-  Object.assign(settings, req.body || {});
+  const body = req.body || {};
+  const numericFields = ['rate', 'minWithdrawPoints', 'dailyCheckInPoints', 'streakBonusPoints'];
+  for (const field of numericFields) {
+    if (Object.prototype.hasOwnProperty.call(body, field)) {
+      const value = Number(body[field]);
+      if (!Number.isFinite(value) || value < 0) {
+        return res.status(400).json({ success: false, message: `مقدار ${field} نامعتبر است.` });
+      }
+      settings[field] = value;
+    }
+  }
   await settings.save();
   res.json({ success: true, settings });
 });

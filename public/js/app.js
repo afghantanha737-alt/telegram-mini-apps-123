@@ -64,12 +64,42 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 /* ================= TELEGRAM INIT DATA ================= */
+function getHashInitData() {
+  const hash = String(window.location.hash || '').replace(/^#/, '');
+  if (!hash) return '';
+
+  try {
+    return String(
+      new URLSearchParams(hash).get('tgWebAppData') || ''
+    ).trim();
+  } catch {
+    return '';
+  }
+}
+
 function getInitData() {
-  return String(window.Telegram?.WebApp?.initData || tg?.initData || "").trim();
+  return String(
+    window.Telegram?.WebApp?.initData ||
+    tg?.initData ||
+    getHashInitData() ||
+    ''
+  ).trim();
 }
 
 function getTelegramUser() {
-  return window.Telegram?.WebApp?.initDataUnsafe?.user || tg?.initDataUnsafe?.user || null;
+  const sdkUser =
+    window.Telegram?.WebApp?.initDataUnsafe?.user ||
+    tg?.initDataUnsafe?.user;
+
+  if (sdkUser) return sdkUser;
+
+  try {
+    return JSON.parse(
+      new URLSearchParams(getInitData()).get('user') || 'null'
+    );
+  } catch {
+    return null;
+  }
 }
 
 /* ================= LOCAL STORAGE / THEME ================= */

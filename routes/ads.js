@@ -16,15 +16,21 @@ const MILESTONES = [
   { target: 30, reward: 20, field: 'reward30Awarded' }
 ];
 
-const blockId = String(process.env.ADSGRAM_BLOCK_ID || '').trim();
-const rewardSecret = String(process.env.ADSGRAM_REWARD_SECRET || '').trim();
-const debug = String(process.env.ADSGRAM_DEBUG || '').toLowerCase() === 'true';
-const adsConfigured = /^\d+$/.test(blockId) && Boolean(rewardSecret);
+const adsgramBlockId = String(process.env.ADSGRAM_BLOCK_ID || '').trim();
+const adsgramRewardSecret = String(process.env.ADSGRAM_REWARD_SECRET || '').trim();
+const adsgramDebug = String(process.env.ADSGRAM_DEBUG || '').toLowerCase() === 'true';
+const tadsWidgetId = String(process.env.TADS_WIDGET_ID || '').trim();
+const tadsWebhookSecret = String(process.env.TADS_WEBHOOK_SECRET || '').trim();
+const tadsDebug = String(process.env.TADS_DEBUG || '').toLowerCase() === 'true';
 
-function isValidSecret(value) {
-  if (!rewardSecret || typeof value !== 'string') return false;
+const adsgramConfigured = /^\d+$/.test(adsgramBlockId) && Boolean(adsgramRewardSecret);
+const tadsConfigured = Boolean(tadsWidgetId && tadsWebhookSecret);
+const provider = tadsConfigured ? 'tads' : adsgramConfigured ? 'adsgram' : '';
 
-  const expected = Buffer.from(rewardSecret);
+function isValidSecret(value, expectedSecret) {
+  if (!expectedSecret || typeof value !== 'string') return false;
+
+  const expected = Buffer.from(expectedSecret);
   const received = Buffer.from(value);
 
   return expected.length === received.length &&
@@ -71,9 +77,11 @@ function serializeProgress(dailyAds) {
 router.get('/config', (req, res) => {
   res.json({
     success: true,
-    enabled: adsConfigured,
-    blockId: adsConfigured ? blockId : '',
-    debug,
+    enabled: Boolean(provider),
+    provider,
+    blockId: provider === 'adsgram' ? adsgramBlockId : '',
+    widgetId: provider === 'tads' ? tadsWidgetId : '',
+    debug: provider === 'tads' ? tadsDebug : adsgramDebug,
     milestones: MILESTONES.map(({ target, reward }) => ({
       target,
       reward
@@ -88,32 +96,17 @@ router.get('/me', auth, (req, res) => {
   });
 });
 
-// AdsGram calls this URL after a real rewarded ad is completed.
-router.get('/reward', async (req, res) => {
-  if (!isValidSecret(String(req.query.token || ''))) {
-    return res.sendStatus(401);
-  }
-
-  const telegramId = String(
-    req.query.userid || req.query.userId || ''
-  ).trim();
-
-  if (!telegramId) {
-    return res.sendStatus(400);
-  }
-
+async function awardAd(telegramId) {
   let session;
   let response = { counted: false };
 
-  try {
-    session = await mongoose.startSession();
+  session = await mongoose.startSession();
 
+  try {
     await session.withTransaction(async () => {
       const user = await User.findOne({ telegramId }).session(session);
 
-      if (!user || user.isBanned) {
-        return;
-      }
+      if (!user || user.isBanned) return;
 
       const dailyAds = getDailyAds(user);
       dailyAds.watched += 1;
@@ -121,10 +114,8 @@ router.get('/reward', async (req, res) => {
       let earned = 0;
 
       for (const milestone of MILESTONES) {
-        if (
-          !dailyAds[milestone.field] &&
-          dailyAds.watched >= milestone.target
-        ) {
+        if (!dailyAds[milestone.field] &&
+            dailyAds.watched >= milestone.target) {
           dailyAds[milestone.field] = true;
           earned += milestone.reward;
         }
@@ -143,17 +134,65 @@ router.get('/reward', async (req, res) => {
       };
     });
 
+    return response;
+  } finally {
+    await session.endSession();
+  }
+});
+
+// Legacy AdsGram callback.
+router.get('/reward', async (req, res) => {
+  if (!adsgramConfigured ||
+      !isValidSecret(
+        String(req.query.token || ''),
+        adsgramRewardSecret
+      )) {
+    return res.sendStatus(401);
+  }
+
+  const telegramId = String(
+    req.query.userid || req.query.userId || ''
+  ).trim();
+
+  if (!telegramId) return res.sendStatus(400);
+
+  try {
     return res.json({
       success: true,
-      ...response
+      ...(await awardAd(telegramId))
     });
   } catch (error) {
     console.error('AdsGram reward callback failed:', error);
     return res.sendStatus(500);
-  } finally {
-    if (session) {
-      await session.endSession();
-    }
+  }
+});
+
+// TADS sends this POST after a fullscreen ad view.
+router.post('/tads-webhook', async (req, res) => {
+  if (!tadsConfigured ||
+      !isValidSecret(
+        String(req.query.token || ''),
+        tadsWebhookSecret
+      )) {
+    return res.sendStatus(401);
+  }
+
+  const payload = req.body || {};
+  const telegramId = String(payload.telegram_id || '').trim();
+  const widgetId = String(payload.widget_id || '').trim();
+
+  if (!telegramId || widgetId !== tadsWidgetId) {
+    return res.sendStatus(400);
+  }
+
+  try {
+    return res.json({
+      success: true,
+      ...(await awardAd(telegramId))
+    });
+  } catch (error) {
+    console.error('TADS reward webhook failed:', error);
+    return res.sendStatus(500);
   }
 });
 

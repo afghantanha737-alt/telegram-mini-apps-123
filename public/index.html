@@ -9,8 +9,8 @@
 <title>Points • Rewards</title>
 
 <!-- Telegram Mini App -->
-<<script src="https://w.tads.me/widget.js"></script>
-<script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+<script src="https://telegram.org/js/telegram-web-app.js?57"></script>
+<script src="https://w.tads.me/widget.js"></script>
 
 <!-- Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -82,15 +82,42 @@
         <span class="modalEyebrow">قوانین</span>
         <h3 id="termsTitle">قوانین و شرایط استفاده</h3>
       </div>
-      <button class="closeBtn" type="button" onclick="hideTerms()" aria-label="بستن">×</button>
+
+      <button
+        class="closeBtn"
+        type="button"
+        onclick="hideTerms()"
+        aria-label="بستن"
+      >
+        ×
+      </button>
     </div>
 
     <div id="termsBody" class="termsBody">
-      <p><b>۱. پوینت و نرخ تبدیل</b><br>پوینت‌ها از طریق تسک‌ها، دعوت دوستان و پاداش روزانه به دست می‌آیند. نرخ تبدیل ممکن است توسط مدیریت تغییر کند.</p>
-      <p><b>۲. تسک‌ها</b><br>تسک‌ها باید واقعی و طبق دستورالعمل انجام شوند. تقلب یا اتوماسیون می‌تواند باعث محدودیت حساب شود.</p>
-      <p><b>۳. رفرال</b><br>سیستم رفرال برای جلوگیری از سوءاستفاده بررسی می‌شود و پاداش‌ها ممکن است مشروط به فعالیت واقعی دعوت‌شده باشند.</p>
-      <p><b>۴. برداشت</b><br>درخواست‌های برداشت به‌صورت دستی بررسی می‌شوند و ممکن است مدتی زمان ببرند.</p>
-      <p><b>۵. امنیت</b><br>در صورت شناسایی فعالیت غیرعادی، امکان بررسی یا محدودکردن حساب وجود دارد.</p>
+      <p>
+        <b>۱. پوینت و نرخ تبدیل</b><br>
+        پوینت‌ها از طریق تسک‌ها، دعوت دوستان و پاداش روزانه به دست می‌آیند. نرخ تبدیل ممکن است توسط مدیریت تغییر کند.
+      </p>
+
+      <p>
+        <b>۲. تسک‌ها</b><br>
+        تسک‌ها باید واقعی و طبق دستورالعمل انجام شوند. تقلب یا اتوماسیون می‌تواند باعث محدودیت حساب شود.
+      </p>
+
+      <p>
+        <b>۳. رفرال</b><br>
+        سیستم رفرال برای جلوگیری از سوءاستفاده بررسی می‌شود و پاداش‌ها ممکن است مشروط به فعالیت واقعی دعوت‌شده باشند.
+      </p>
+
+      <p>
+        <b>۴. برداشت</b><br>
+        درخواست‌های برداشت به‌صورت دستی بررسی می‌شوند و ممکن است مدتی زمان ببرند.
+      </p>
+
+      <p>
+        <b>۵. امنیت</b><br>
+        در صورت شناسایی فعالیت غیرعادی، امکان بررسی یا محدودکردن حساب وجود دارد.
+      </p>
     </div>
   </div>
 </div>
@@ -99,12 +126,34 @@
 <div id="captchaOverlay" class="overlay" style="display:none">
   <div class="modalBox captchaBox" role="dialog" aria-modal="true" aria-labelledby="captchaTitle">
     <div class="captchaIcon" aria-hidden="true">🔐</div>
+
     <span class="modalEyebrow">امنیت</span>
     <h3 id="captchaTitle">یک لحظه...</h3>
-    <p class="captchaDescription">فقط می‌خواهیم مطمئن شویم کاربر واقعی هستی.</p>
+
+    <p class="captchaDescription">
+      فقط می‌خواهیم مطمئن شویم کاربر واقعی هستی.
+    </p>
+
     <p id="captchaQuestion" class="captchaQ">...</p>
-    <input id="captchaAnswer" type="number" inputmode="numeric" autocomplete="off" placeholder="جواب را وارد کن" aria-label="پاسخ کپچا">
-    <button type="button" class="primaryBtn" id="submitCaptcha" onclick="submitCaptcha()">تأیید و ادامه</button>
+
+    <input
+      id="captchaAnswer"
+      type="number"
+      inputmode="numeric"
+      autocomplete="off"
+      placeholder="جواب را وارد کن"
+      aria-label="پاسخ کپچا"
+    >
+
+    <button
+      type="button"
+      class="primaryBtn"
+      id="submitCaptcha"
+      onclick="submitCaptcha()"
+    >
+      تأیید و ادامه
+    </button>
+
     <p id="captchaError" class="captchaErr" role="alert"></p>
   </div>
 </div>
@@ -117,19 +166,42 @@
         <span class="modalEyebrow">برداشت</span>
         <h3 id="withdrawTitle">درخواست برداشت</h3>
       </div>
-      <button class="closeBtn" type="button" onclick="hideWithdraw()" aria-label="بستن">×</button>
+
+      <button
+        class="closeBtn"
+        type="button"
+        onclick="hideWithdraw()"
+        aria-label="بستن"
+      >
+        ×
+      </button>
     </div>
 
     <div class="withdrawBody">
       <label class="fieldLabel">مقدار GRAM</label>
-      <input id="withdrawPoints" type="number" inputmode="decimal" step="0.000001" placeholder="مثلاً 0.5">
+      <input
+        id="withdrawPoints"
+        type="number"
+        inputmode="decimal"
+        step="0.000001"
+        placeholder="مثلاً 0.5"
+      >
 
       <label class="fieldLabel">آدرس کیف پول</label>
-      <input id="withdrawAddress" type="text" placeholder="آدرس کیف پول خود را وارد کن">
+      <input
+        id="withdrawAddress"
+        type="text"
+        placeholder="آدرس کیف پول خود را وارد کن"
+      >
 
       <p id="withdrawError" class="captchaErr" role="alert"></p>
 
-      <button type="button" class="primaryBtn" id="submitWithdraw" onclick="submitWithdraw()">
+      <button
+        type="button"
+        class="primaryBtn"
+        id="submitWithdraw"
+        onclick="submitWithdraw()"
+      >
         ثبت درخواست
       </button>
     </div>
@@ -145,7 +217,12 @@
         <h3>زبان / ژبه / Language</h3>
       </div>
 
-      <button class="closeBtn" type="button" onclick="hideLanguageOverlay()" aria-label="close">
+      <button
+        class="closeBtn"
+        type="button"
+        onclick="hideLanguageOverlay()"
+        aria-label="close"
+      >
         ×
       </button>
     </div>
@@ -176,22 +253,42 @@
         <h3 id="exchangeTitle">تبدیل پوینت به GRAM</h3>
       </div>
 
-      <button class="closeBtn" type="button" onclick="hideExchange()" aria-label="بستن">
+      <button
+        class="closeBtn"
+        type="button"
+        onclick="hideExchange()"
+        aria-label="بستن"
+      >
         ×
       </button>
     </div>
 
     <div class="withdrawBody">
       <label class="fieldLabel">مقدار پوینت</label>
-      <input id="exchangePoints" type="number" inputmode="numeric" placeholder="مثلاً 1000" oninput="updateExchangePreview()">
 
-      <p id="exchangePreview" style="font-size:12px;color:var(--text-muted);margin:-4px 0 12px">
+      <input
+        id="exchangePoints"
+        type="number"
+        inputmode="numeric"
+        placeholder="مثلاً 1000"
+        oninput="updateExchangePreview()"
+      >
+
+      <p
+        id="exchangePreview"
+        style="font-size:12px;color:var(--text-muted);margin:-4px 0 12px"
+      >
         معادل GRAM دریافتی: 0
       </p>
 
       <p id="exchangeError" class="captchaErr" role="alert"></p>
 
-      <button type="button" class="primaryBtn" id="submitExchange" onclick="submitExchange()">
+      <button
+        type="button"
+        class="primaryBtn"
+        id="submitExchange"
+        onclick="submitExchange()"
+      >
         تبدیل کن
       </button>
     </div>
@@ -200,25 +297,43 @@
 
 <!-- DEPOSIT MODAL -->
 <div id="depositOverlay" class="overlay" style="display:none">
-  <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="depositTitle" style="text-align:center">
+  <div
+    class="modalBox withdrawBox"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="depositTitle"
+    style="text-align:center"
+  >
     <div class="modalHeader">
       <div>
         <span class="modalEyebrow">Deposit</span>
         <h3 id="depositTitle">واریز</h3>
       </div>
 
-      <button class="closeBtn" type="button" onclick="hideDeposit()" aria-label="بستن">
+      <button
+        class="closeBtn"
+        type="button"
+        onclick="hideDeposit()"
+        aria-label="بستن"
+      >
         ×
       </button>
     </div>
 
     <div class="captchaIcon" aria-hidden="true">🚧</div>
 
-    <p id="depositMessage" style="font-size:13px;color:var(--text-soft)">
+    <p
+      id="depositMessage"
+      style="font-size:13px;color:var(--text-soft)"
+    >
       قابلیت واریز به‌زودی فعال می‌شود.
     </p>
 
-    <button type="button" class="secondaryBtn" onclick="hideDeposit()">
+    <button
+      type="button"
+      class="secondaryBtn"
+      onclick="hideDeposit()"
+    >
       باشه
     </button>
   </div>
@@ -228,7 +343,6 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script src="js/i18n.js"></script>
-<script src="js/app.js"></script>
-
+<script src="js/app.js?v=20260916-auth2"></script>
 </body>
 </html>

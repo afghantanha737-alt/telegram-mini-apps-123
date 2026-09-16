@@ -21,7 +21,12 @@ const taskSchema = new mongoose.Schema(
     // مثال: "@mychannel" یا "-1001234567890"
     chatId: { type: String, default: '' },
     url: { type: String, default: '' },
-    reward: { type: Number, required: true, min: 0 },
+    reward: {
+      type: Number,
+      required: true,
+      min: 1,
+      validate: { validator: Number.isInteger, message: 'Task reward must be an integer.' }
+    },
     // null یعنی بدون محدودیت ظرفیت. اگر عدد باشد، فقط همین تعداد اول
     // که تسک را با موفقیت کامل می‌کنند پاداش می‌گیرند.
     maxCompletions: { type: Number, default: null, min: 1 },

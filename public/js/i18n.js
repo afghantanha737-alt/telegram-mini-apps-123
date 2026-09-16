@@ -339,70 +339,34 @@ const TRANSLATIONS = {
   }
 };
 
-// نگاشت کدهای خطای سرور به کلید ترجمه
+// نگاشت کدهای خطای سرور به کلید ترجمه (اگر مپ نشده بود، پیام خام سرور نمایش داده می‌شود)
 const ERROR_CODE_MAP = {
-  ALREADY_CHECKED_IN: {
-    fa: "امروز قبلاً ورود روزانه ثبت شده است.",
-    ps: "نن دی مخکې ثبت شوی.",
-    en: "You've already checked in today."
-  },
-  INVALID_AMOUNT: {
-    fa: "مقدار پوینت نامعتبر است.",
-    ps: "د پوائن اندازه سمه نه ده.",
-    en: "Invalid points amount."
-  },
-  INVALID_ADDRESS: {
-    fa: "آدرس کیف پول نامعتبر است.",
-    ps: "د والټ آدرس سم نه دی.",
-    en: "Invalid wallet address."
-  },
-  INSUFFICIENT_BALANCE: {
-    fa: "موجودی کافی نیست.",
-    ps: "بیلانس کافي نه دی.",
-    en: "Insufficient balance."
-  },
-  ALREADY_DONE: {
-    fa: "این تسک قبلاً انجام شده است.",
-    ps: "دا دنده مخکې ترسره شوې ده.",
-    en: "This task is already completed."
-  },
-  NOT_JOINED: {
-    fa: "هنوز عضویت شما تأیید نشد. اول عضو شو، بعد دوباره «بررسی» بزن.",
-    ps: "غړیتوب لا تایید نه دی. لومړی غړی شئ.",
-    en: "Membership not verified yet. Join first, then verify again."
-  },
-  NO_SPINS: {
-    fa: "شانس چرخ‌گردون نداری.",
-    ps: "هېڅ چانس نلرئ.",
-    en: "No spin chances left."
-  },
-  TASK_NOT_FOUND: {
-    fa: "تسک پیدا نشد.",
-    ps: "دنده ونه موندل شوه.",
-    en: "Task not found."
-  }
+  ALREADY_CHECKED_IN: { fa: "امروز قبلاً ورود روزانه ثبت شده است.", ps: "نن دی مخکې ثبت شوی.", en: "You've already checked in today." },
+  INVALID_AMOUNT: { fa: "مقدار پوینت نامعتبر است.", ps: "د پوائن اندازه سمه نه ده.", en: "Invalid points amount." },
+  INVALID_ADDRESS: { fa: "آدرس کیف پول نامعتبر است.", ps: "د والټ آدرس سم نه دی.", en: "Invalid wallet address." },
+  INSUFFICIENT_BALANCE: { fa: "موجودی کافی نیست.", ps: "بیلانس کافي نه دی.", en: "Insufficient balance." },
+  ALREADY_DONE: { fa: "این تسک قبلاً انجام شده است.", ps: "دا دنده مخکې ترسره شوې ده.", en: "This task is already completed." },
+  NOT_JOINED: { fa: "هنوز عضویت شما تأیید نشد. اول عضو شو، بعد دوباره «بررسی» بزن.", ps: "غړیتوب لا تایید نه دی. لومړی غړی شئ.", en: "Membership not verified yet. Join first, then verify again." },
+  NO_SPINS: { fa: "شانس چرخ‌گردون نداری.", ps: "هېڅ چانس نلرئ.", en: "No spin chances left." },
+  TASK_NOT_FOUND: { fa: "تسک پیدا نشد.", ps: "دنده ونه موندل شوه.", en: "Task not found." }
 };
 
 function t(key, vars) {
   const lang = (window.state && window.state.language) || "fa";
   let text = (TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) || TRANSLATIONS.fa[key] || key;
-
   if (vars) {
     Object.keys(vars).forEach(k => {
       text = text.replaceAll(`{${k}}`, vars[k]);
     });
   }
-
   return text;
 }
 
 function translateServerMessage(code, fallbackMessage) {
   const lang = (window.state && window.state.language) || "fa";
-
   if (code && ERROR_CODE_MAP[code]) {
     return ERROR_CODE_MAP[code][lang] || ERROR_CODE_MAP[code].fa;
   }
-
   return fallbackMessage || t("error_generic");
 }
 

@@ -53,6 +53,7 @@ const state = {
   adsWatched: 0,
   adsMilestones: [],
   adsBusy: false,
+  adsCooldownUntil: 0,
   captchaA: 0,
   captchaB: 0,
   initialized: false
@@ -65,15 +66,13 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 /* ================= TELEGRAM INIT DATA ================= */
 function getHashInitData() {
-  const hash = String(window.location.hash || '').replace(/^#/, '');
-  if (!hash) return '';
+  const hash = String(window.location.hash || "").replace(/^#/, "");
+  if (!hash) return "";
 
   try {
-    return String(
-      new URLSearchParams(hash).get('tgWebAppData') || ''
-    ).trim();
+    return String(new URLSearchParams(hash).get("tgWebAppData") || "").trim();
   } catch {
-    return '';
+    return "";
   }
 }
 
@@ -82,21 +81,16 @@ function getInitData() {
     window.Telegram?.WebApp?.initData ||
     tg?.initData ||
     getHashInitData() ||
-    ''
+    ""
   ).trim();
 }
 
 function getTelegramUser() {
-  const sdkUser =
-    window.Telegram?.WebApp?.initDataUnsafe?.user ||
-    tg?.initDataUnsafe?.user;
-
+  const sdkUser = window.Telegram?.WebApp?.initDataUnsafe?.user || tg?.initDataUnsafe?.user;
   if (sdkUser) return sdkUser;
 
   try {
-    return JSON.parse(
-      new URLSearchParams(getInitData()).get('user') || 'null'
-    );
+    return JSON.parse(new URLSearchParams(getInitData()).get("user") || "null");
   } catch {
     return null;
   }
@@ -359,10 +353,7 @@ function applyStaticTranslations() {
 
   $$("#tabbar [data-tab]").forEach(button => {
     const label = button.querySelector(".tabLabel");
-
-    if (label) {
-      label.textContent = t(`nav_${button.dataset.tab}`);
-    }
+    if (label) label.textContent = t(`nav_${button.dataset.tab}`);
   });
 
   updateThemeUI();
@@ -393,20 +384,12 @@ function updateNavigation() {
 async function navigate(tab) {
   const validTabs = ["home", "tasks", "daily", "wallet", "profile"];
 
-  if (!validTabs.includes(tab)) {
-    tab = "home";
-  }
+  if (!validTabs.includes(tab)) tab = "home";
 
   clearInterval(countdownInterval);
-
   state.activeTab = tab;
   updateNavigation();
-
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
-
+  window.scrollTo({ top: 0, behavior: "smooth" });
   await renderCurrentTab();
 }
 
@@ -425,7 +408,6 @@ function showTerms() {
 function hideTerms() {
   const overlay = $("#termsOverlay");
   if (overlay) overlay.style.display = "none";
-
   localStorage.setItem("termsAccepted", "1");
 }
 
@@ -454,9 +436,7 @@ function createCaptcha() {
     answer.focus();
   }
 
-  if (error) {
-    error.textContent = "";
-  }
+  if (error) error.textContent = "";
 }
 
 function showCaptcha() {
@@ -481,10 +461,7 @@ async function submitCaptcha() {
   const value = Number(answer.value);
 
   if (value !== state.captchaA + state.captchaB) {
-    if (error) {
-      error.textContent = "پاسخ صحیح نیست. دوباره تلاش کن.";
-    }
-
+    if (error) error.textContent = "پاسخ صحیح نیست. دوباره تلاش کن.";
     haptic("error");
     createCaptcha();
     return;
@@ -541,17 +518,63 @@ window.selectLanguage = selectLanguage;
 
 /* ================= DATA LOADERS ================= */
 let adsController = null;
+let adsCooldownTimer = null;
+const ADS_COOLDOWN_MS = 60 * 1000;
+
+function adsCooldownStorageKey() {
+  const user = state.user || getTelegramUser();
+  const telegramId = user?.id || user?.telegram_id || "anonymous";
+  return `adsCooldownUntil:${telegramId}`;
+}
+
+function getAdsCooldownSeconds() {
+  const stored = Number(localStorage.getItem(adsCooldownStorageKey()) || 0);
+  state.adsCooldownUntil = Number.isFinite(stored) ? stored : 0;
+
+  return Math.max(
+    0,
+    Math.ceil((state.adsCooldownUntil - Date.now()) / 1000)
+  );
+}
+
+function syncAdsCooldownUI() {
+  clearTimeout(adsCooldownTimer);
+
+  const seconds = getAdsCooldownSeconds();
+  const buttons = document.querySelectorAll("[data-ads-action]");
+
+  buttons.forEach(button => {
+    if (state.adsBusy) {
+      button.disabled = true;
+      button.textContent = t("ads_loading");
+      return;
+    }
+
+    button.disabled = seconds > 0;
+    button.textContent = seconds > 0
+      ? t("ads_cooldown", { n: seconds })
+      : t("ads_watch");
+  });
+
+  if (seconds > 0) {
+    adsCooldownTimer = setTimeout(syncAdsCooldownUI, 1000);
+  }
+}
+
+function startAdsCooldown() {
+  const until = Date.now() + ADS_COOLDOWN_MS;
+
+  state.adsCooldownUntil = until;
+  localStorage.setItem(adsCooldownStorageKey(), String(until));
+  syncAdsCooldownUI();
+}
 
 function setupAdsController() {
-  if (adsController || !state.adsEnabled) {
-    return adsController;
-  }
+  if (adsController || !state.adsEnabled) return adsController;
 
   try {
     if (state.adsProvider === "tads") {
-      if (!window.tads?.init || !state.adsWidgetId) {
-        return null;
-      }
+      if (!window.tads?.init || !state.adsWidgetId) return null;
 
       const containerId = `tads-container-${state.adsWidgetId}`;
 
@@ -566,17 +589,11 @@ function setupAdsController() {
         widgetId: state.adsWidgetId,
         type: "fullscreen",
         debug: state.adsDebug,
-        onShowReward: result => {
-          console.info("TADS ad viewed:", result);
-        },
-        onAdsNotFound: () => {
-          console.warn("TADS returned no ad");
-        }
+        onShowReward: result => console.info("TADS ad viewed:", result),
+        onAdsNotFound: () => console.warn("TADS returned no ad")
       });
     } else {
-      if (!window.Adsgram?.init || !state.adsBlockId) {
-        return null;
-      }
+      if (!window.Adsgram?.init || !state.adsBlockId) return null;
 
       adsController = window.Adsgram.init({
         blockId: state.adsBlockId,
@@ -611,7 +628,6 @@ async function loadAdsData() {
     if (!state.adsEnabled) return;
 
     const data = await api("/api/ads/me");
-
     state.adsWatched = Number(data?.watched) || 0;
 
     if (Array.isArray(data?.milestones)) {
@@ -641,6 +657,15 @@ function renderAdTasks() {
         { target: 30, reward: 20 }
       ];
 
+  const cooldownSeconds = getAdsCooldownSeconds();
+  const adsButtonDisabled = state.adsBusy || cooldownSeconds > 0;
+
+  const adsButtonText = state.adsBusy
+    ? t("ads_loading")
+    : cooldownSeconds > 0
+      ? t("ads_cooldown", { n: cooldownSeconds })
+      : t("ads_watch");
+
   const rows = milestones.map(item => {
     const target = Number(item.target) || 0;
     const watched = Math.min(state.adsWatched, target);
@@ -652,9 +677,7 @@ function renderAdTasks() {
     return `
       <div class="adsTaskRow ${awarded ? "completed" : ""}">
         <div class="adsTaskTop">
-          <strong>${t("ads_task_title", {
-            n: formatPoints(target)
-          })}</strong>
+          <strong>${t("ads_task_title", { n: formatPoints(target) })}</strong>
           <span class="adsReward">
             +${formatPoints(item.reward)} ${t("points_unit")}
           </span>
@@ -694,15 +717,23 @@ function renderAdTasks() {
         type="button"
         data-ads-action
         onclick="showAdsReward()"
-        ${state.adsBusy ? "disabled" : ""}
+        ${adsButtonDisabled ? "disabled" : ""}
       >
-        ${state.adsBusy ? t("ads_loading") : t("ads_watch")}
+        ${adsButtonText}
       </button>
     </div>`;
 }
 
 async function showAdsReward() {
   if (state.adsBusy) return;
+
+  const cooldownSeconds = getAdsCooldownSeconds();
+
+  if (cooldownSeconds > 0) {
+    syncAdsCooldownUI();
+    toast(t("ads_cooldown", { n: cooldownSeconds }), "warning");
+    return;
+  }
 
   const controller = setupAdsController();
 
@@ -717,6 +748,8 @@ async function showAdsReward() {
   }
 
   const watchedBefore = state.adsWatched;
+  let counted = false;
+
   state.adsBusy = true;
 
   document.querySelectorAll("[data-ads-action]").forEach(button => {
@@ -743,18 +776,14 @@ async function showAdsReward() {
       await new Promise(resolve => setTimeout(resolve, 1000));
       await loadAdsData();
 
-      if (state.adsWatched > watchedBefore) {
-        break;
-      }
+      if (state.adsWatched > watchedBefore) break;
     }
 
+    counted = state.adsWatched > watchedBefore;
+
     toast(
-      state.adsWatched > watchedBefore
-        ? t("ads_counted")
-        : t("ads_waiting"),
-      state.adsWatched > watchedBefore
-        ? "success"
-        : "warning"
+      counted ? t("ads_counted") : t("ads_waiting"),
+      counted ? "success" : "warning"
     );
   } catch (error) {
     console.warn("Rewarded ad was not completed:", error);
@@ -762,6 +791,9 @@ async function showAdsReward() {
   } finally {
     state.adsBusy = false;
     await loadAdsData();
+
+    if (counted) startAdsCooldown();
+
     updateHeader();
 
     if (state.activeTab === "daily") {
@@ -782,10 +814,9 @@ async function bootstrapAuth() {
   try {
     const data = await api(url);
 
-    state.language =
-      localStorage.getItem("appLanguage") ||
-      data.language ||
-      "fa";
+    state.language = localStorage.getItem("appLanguage")
+      || data.language
+      || "fa";
 
     if (data.firstName) {
       state.user = {
@@ -829,9 +860,7 @@ async function loadReferralData() {
     state.referralCode = data?.referralCode || "";
     state.shareLink = data?.shareLink || "";
     state.invitedCount = Number(data?.invitedCount) || 0;
-    state.invited = Array.isArray(data?.invited)
-      ? data.invited
-      : [];
+    state.invited = Array.isArray(data?.invited) ? data.invited : [];
     state.referralMinTasks = Number(data?.referralMinTasks) || 2;
   } catch (error) {
     console.warn("Referral data failed:", error);
@@ -842,10 +871,7 @@ async function loadTasks() {
   try {
     const data = await api("/api/tasks");
 
-    state.tasks = Array.isArray(data?.tasks)
-      ? data.tasks
-      : [];
-
+    state.tasks = Array.isArray(data?.tasks) ? data.tasks : [];
     state.completions = Array.isArray(data?.completions)
       ? data.completions
       : [];
@@ -862,10 +888,7 @@ async function loadLeaderboard() {
   try {
     const data = await api("/api/leaderboard/top");
 
-    state.leaderboard = Array.isArray(data?.top)
-      ? data.top
-      : [];
-
+    state.leaderboard = Array.isArray(data?.top) ? data.top : [];
     state.myRank = data?.myRank ?? null;
 
     return state.leaderboard;
@@ -898,9 +921,7 @@ function renderHome() {
     100,
     Math.max(
       0,
-      ((state.points - previousLevel) /
-        (nextLevel - previousLevel)) *
-        100
+      ((state.points - previousLevel) / (nextLevel - previousLevel)) * 100
     )
   );
 
@@ -910,9 +931,7 @@ function renderHome() {
   content.innerHTML = `
     <section class="hero heroFlat">
       <div class="heroFlatTop">
-        <span class="heroFlatLabel">
-          ${t("wallet_balance_title")}
-        </span>
+        <span class="heroFlatLabel">${t("wallet_balance_title")}</span>
         <span class="levelPillFlat">
           ${t("level_label", { n: formatPoints(currentLevel) })}
         </span>
@@ -920,9 +939,7 @@ function renderHome() {
 
       <p class="heroFlatBalance">
         ${formatPoints(state.points)}
-        <span class="heroFlatUnit">
-          ${t("points_unit").toUpperCase()}
-        </span>
+        <span class="heroFlatUnit">${t("points_unit").toUpperCase()}</span>
       </p>
 
       <div class="progressTrack">
@@ -988,9 +1005,7 @@ function renderHome() {
         <div class="earningBody">
           <div class="earningTitle">${t("earn_tasks_title")}</div>
           <div class="earningSub">
-            ${t("earn_tasks_sub", {
-              n: formatPoints(state.tasks.length)
-            })}
+            ${t("earn_tasks_sub", { n: formatPoints(state.tasks.length) })}
           </div>
         </div>
         <div class="earningArrow">‹</div>
@@ -1005,31 +1020,33 @@ function renderHome() {
         <div class="earningArrow">‹</div>
       </div>
 
-      ${featuredTasks.map(task => {
-        const status = completionStatus(task._id);
+      ${
+        featuredTasks.map(task => {
+          const status = completionStatus(task._id);
 
-        const subLabel =
-          status === "approved"
-            ? t("task_status_done")
-            : status === "pending"
-              ? t("task_status_pending")
-              : t("task_status_todo");
+          const subLabel =
+            status === "approved"
+              ? t("task_status_done")
+              : status === "pending"
+                ? t("task_status_pending")
+                : t("task_status_todo");
 
-        return `
-          <div class="earningItem" onclick="navigate('tasks')">
-            <div class="earningIcon">🎁</div>
-            <div class="earningBody">
-              <div class="earningTitle">
-                ${escapeHTML(task.title)}
+          return `
+            <div class="earningItem" onclick="navigate('tasks')">
+              <div class="earningIcon">🎁</div>
+              <div class="earningBody">
+                <div class="earningTitle">
+                  ${escapeHTML(task.title)}
+                </div>
+                <div class="earningSub">${subLabel}</div>
               </div>
-              <div class="earningSub">${subLabel}</div>
-            </div>
-            <div class="earningReward">
-              +${formatPoints(task.reward)}
-            </div>
-            <div class="earningArrow">‹</div>
-          </div>`;
-      }).join("")}
+              <div class="earningReward">
+                +${formatPoints(task.reward)}
+              </div>
+              <div class="earningArrow">‹</div>
+            </div>`;
+        }).join("")
+      }
     </div>
   `;
 }
@@ -1123,77 +1140,73 @@ function renderTasks() {
     </div>
 
     <div class="taskList">
-      ${state.tasks.map(task => {
-        const status = completionStatus(task._id);
-        const icon = TASK_ICONS[task.type] || "🎁";
-        const safeUrl = (task.url || "").replaceAll("'", "\\'");
-        let actionHtml;
+      ${
+        state.tasks.map(task => {
+          const status = completionStatus(task._id);
+          const icon = TASK_ICONS[task.type] || "🎁";
+          const safeUrl = (task.url || "").replaceAll("'", "\\'");
 
-        if (status === "approved") {
-          actionHtml = `
-            <button class="taskAction done" disabled>
-              ${t("task_btn_done")}
-            </button>`;
-        } else if (status === "pending") {
-          actionHtml = `
-            <button class="taskAction pending" disabled>
-              ${t("task_btn_pending")}
-            </button>`;
-        } else {
-          actionHtml = `
-            <div
-              style="display:flex;flex-direction:column;gap:6px;align-items:stretch"
-            >
-              ${
-                task.url
-                  ? `
-                    <button
-                      class="taskAction"
-                      style="background:var(--surface-3);color:var(--text)"
-                      onclick="openTaskLinkOnly('${safeUrl}')"
-                    >
-                      ${t("task_action_open")}
-                    </button>`
-                  : ""
-              }
+          let actionHtml;
 
-              <button
-                class="taskAction"
-                data-verify="${task._id}"
-                onclick="verifyTelegramTask('${task._id}')"
-              >
-                ${t("task_action_verify")}
-              </button>
+          if (status === "approved") {
+            actionHtml = `
+              <button class="taskAction done" disabled>
+                ${t("task_btn_done")}
+              </button>`;
+          } else if (status === "pending") {
+            actionHtml = `
+              <button class="taskAction pending" disabled>
+                ${t("task_btn_pending")}
+              </button>`;
+          } else {
+            actionHtml = `
+              <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
+                ${
+                  task.url
+                    ? `
+                      <button
+                        class="taskAction"
+                        style="background:var(--surface-3);color:var(--text)"
+                        onclick="openTaskLinkOnly('${safeUrl}')"
+                      >
+                        ${t("task_action_open")}
+                      </button>
+                    `
+                    : ""
+                }
+
+                <button
+                  class="taskAction"
+                  data-verify="${task._id}"
+                  onclick="verifyTelegramTask('${task._id}')"
+                >
+                  ${t("task_action_verify")}
+                </button>
+              </div>`;
+          }
+
+          return `
+            <div class="taskItem">
+              <div class="taskIcon">${icon}</div>
+
+              <div class="taskBody">
+                <div class="taskTitle">${escapeHTML(task.title)}</div>
+
+                ${
+                  task.description
+                    ? `<div class="taskDesc">${escapeHTML(task.description)}</div>`
+                    : ""
+                }
+
+                <div class="taskReward">
+                  +${formatPoints(task.reward)} ${t("points_unit")}
+                </div>
+              </div>
+
+              ${actionHtml}
             </div>`;
-        }
-
-        return `
-          <div class="taskItem">
-            <div class="taskIcon">${icon}</div>
-
-            <div class="taskBody">
-              <div class="taskTitle">
-                ${escapeHTML(task.title)}
-              </div>
-
-              ${
-                task.description
-                  ? `
-                    <div class="taskDesc">
-                      ${escapeHTML(task.description)}
-                    </div>`
-                  : ""
-              }
-
-              <div class="taskReward">
-                +${formatPoints(task.reward)}
-                ${t("points_unit")}
-              </div>
-            </div>
-
-            ${actionHtml}
-          </div>`;
-      }).join("")}
+        }).join("")
+      }
     </div>
   `;
 }
@@ -1203,42 +1216,12 @@ const WHEEL_SIZE = 260;
 const WHEEL_CENTER = WHEEL_SIZE / 2;
 
 const SPIN_SEGMENTS_UI = [
-  {
-    icon: "🪙",
-    value: "10",
-    color1: "#8b5cf6",
-    color2: "#6d28d9"
-  },
-  {
-    icon: "🪙",
-    value: "20",
-    color1: "#a78bfa",
-    color2: "#7c3aed"
-  },
-  {
-    icon: "💎",
-    value: "50",
-    color1: "#f5c451",
-    color2: "#c98a12"
-  },
-  {
-    icon: "🏆",
-    value: "30",
-    color1: "#22c55e",
-    color2: "#15803d"
-  },
-  {
-    icon: "💨",
-    value: "0",
-    color1: "#3a3f4d",
-    color2: "#1e2028"
-  },
-  {
-    icon: "🎡",
-    value: "+1",
-    color1: "#38bdf8",
-    color2: "#0284c7"
-  }
+  { icon: "🪙", value: "10", color1: "#8b5cf6", color2: "#6d28d9" },
+  { icon: "🪙", value: "20", color1: "#a78bfa", color2: "#7c3aed" },
+  { icon: "💎", value: "50", color1: "#f5c451", color2: "#c98a12" },
+  { icon: "🏆", value: "30", color1: "#22c55e", color2: "#15803d" },
+  { icon: "💨", value: "0", color1: "#3a3f4d", color2: "#1e2028" },
+  { icon: "🎡", value: "+1", color1: "#38bdf8", color2: "#0284c7" }
 ];
 
 let wheelRotation = 0;
@@ -1249,7 +1232,10 @@ function buildWheelGradient() {
   const stops = SPIN_SEGMENTS_UI.map((seg, i) => {
     const mid = i * step + step / 2;
 
-    return `${seg.color1} ${i * step}deg ${mid}deg, ${seg.color2} ${mid}deg ${(i + 1) * step}deg`;
+    return `
+      ${seg.color1} ${i * step}deg ${mid}deg,
+      ${seg.color2} ${mid}deg ${(i + 1) * step}deg
+    `;
   });
 
   return `conic-gradient(from 0deg, ${stops.join(", ")})`;
@@ -1276,9 +1262,7 @@ function buildWheelLabels() {
           style="transform:rotate(${-angleDeg}deg)"
         >
           <span class="wheelIcon">${seg.icon}</span>
-          <span class="wheelValue">
-            ${seg.value}${isSpin ? "" : ""}
-          </span>
+          <span class="wheelValue">${seg.value}${isSpin ? "" : ""}</span>
         </span>
       </span>`;
   }).join("");
@@ -1290,7 +1274,9 @@ function buildWheelRingDots() {
   let dots = "";
 
   for (let i = 0; i < count; i++) {
-    const angleRad = (i * (360 / count)) * (Math.PI / 180);
+    const angleRad =
+      (i * (360 / count)) * (Math.PI / 180);
+
     const x = WHEEL_CENTER + radius * Math.cos(angleRad);
     const y = WHEEL_CENTER + radius * Math.sin(angleRad);
 
@@ -1311,13 +1297,9 @@ function spinWheelTargetRotation(index) {
   const desiredMod = (360 - segCenter) % 360;
 
   let delta = desiredMod - currentMod;
-
-  if (delta <= 0) {
-    delta += 360;
-  }
+  if (delta <= 0) delta += 360;
 
   wheelRotation += delta + 360 * 4;
-
   return wheelRotation;
 }
 
@@ -1329,9 +1311,7 @@ async function doSpin() {
     return;
   }
 
-  if (button) {
-    button.disabled = true;
-  }
+  if (button) button.disabled = true;
 
   try {
     const result = await api("/api/points/spin", {
@@ -1352,7 +1332,6 @@ async function doSpin() {
       updateHeader();
 
       const chancesEl = $("#spinChancesValue");
-
       if (chancesEl) {
         chancesEl.textContent = formatPoints(state.spinChances);
       }
@@ -1384,9 +1363,7 @@ async function doSpin() {
       "error"
     );
 
-    if (button) {
-      button.disabled = false;
-    }
+    if (button) button.disabled = false;
   }
 }
 
@@ -1396,7 +1373,6 @@ function startResetCountdown() {
   clearInterval(countdownInterval);
 
   const el = $("#resetCountdown");
-
   if (!el || !state.nextResetAt) return;
 
   function tick() {
@@ -1423,10 +1399,7 @@ function startResetCountdown() {
 
 async function doCheckIn() {
   const button = $("#checkinBtn");
-
-  if (button) {
-    button.disabled = true;
-  }
+  if (button) button.disabled = true;
 
   try {
     const result = await api("/api/points/checkin", {
@@ -1448,9 +1421,10 @@ async function doCheckIn() {
     );
 
     if (result.gotSpin) {
-      setTimeout(() => {
-        toast(t("spin_result_extra"), "success");
-      }, 1200);
+      setTimeout(
+        () => toast(t("spin_result_extra"), "success"),
+        1200
+      );
     }
 
     updateHeader();
@@ -1463,9 +1437,7 @@ async function doCheckIn() {
       "error"
     );
 
-    if (button) {
-      button.disabled = false;
-    }
+    if (button) button.disabled = false;
   }
 }
 
@@ -1478,14 +1450,10 @@ function renderDaily() {
   const dayCells = Array.from({ length: 7 }, (_, index) => {
     const dayNumber = index + 1;
     const isFilled = dayNumber <= streakDays;
-    const isToday =
-      state.canCheckIn &&
-      dayNumber === streakDays + 1;
+    const isToday = state.canCheckIn && dayNumber === streakDays + 1;
 
     return `
-      <div
-        class="dayCell ${isFilled ? "filled" : ""} ${isToday ? "today" : ""}"
-      >
+      <div class="dayCell ${isFilled ? "filled" : ""} ${isToday ? "today" : ""}">
         <span class="dayNum">${isFilled ? "✓" : dayNumber}</span>
         <span>${t("day_label", { n: dayNumber })}</span>
       </div>`;
@@ -1502,10 +1470,7 @@ function renderDaily() {
       </div>
 
       <div class="wheelOuter">
-        <div class="wheelRingDots">
-          ${buildWheelRingDots()}
-        </div>
-
+        <div class="wheelRingDots">${buildWheelRingDots()}</div>
         <div class="wheelPointer">▼</div>
 
         <div
@@ -1516,16 +1481,12 @@ function renderDaily() {
           ${buildWheelLabels()}
         </div>
 
-        <div class="wheelHub">
-          <span>✦</span>
-        </div>
+        <div class="wheelHub"><span>✦</span></div>
       </div>
 
       <p style="font-size:11px;margin:14px 0 4px">
         ${t("spin_chances_label")}:
-        <b id="spinChancesValue">
-          ${formatPoints(state.spinChances)}
-        </b>
+        <b id="spinChancesValue">${formatPoints(state.spinChances)}</b>
       </p>
 
       <button
@@ -1585,7 +1546,8 @@ function renderDaily() {
               >
                 00:00:00
               </div>
-            </div>`
+            </div>
+          `
           : ""
       }
     </div>
@@ -1594,6 +1556,7 @@ function renderDaily() {
   `;
 
   startResetCountdown();
+  syncAdsCooldownUI();
 }
 
 /* ================= WALLET ================= */
@@ -1605,7 +1568,6 @@ function showWithdraw() {
       }),
       "warning"
     );
-
     return;
   }
 
@@ -1614,31 +1576,18 @@ function showWithdraw() {
   const addressInput = $("#withdrawAddress");
   const error = $("#withdrawError");
 
-  if (pointsInput) {
-    pointsInput.value = "";
-  }
+  if (pointsInput) pointsInput.value = "";
+  if (addressInput) addressInput.value = "";
+  if (error) error.textContent = "";
 
-  if (addressInput) {
-    addressInput.value = "";
-  }
-
-  if (error) {
-    error.textContent = "";
-  }
-
-  if (overlay) {
-    overlay.style.display = "flex";
-  }
+  if (overlay) overlay.style.display = "flex";
 }
 
 window.showWithdraw = showWithdraw;
 
 function hideWithdraw() {
   const overlay = $("#withdrawOverlay");
-
-  if (overlay) {
-    overlay.style.display = "none";
-  }
+  if (overlay) overlay.style.display = "none";
 }
 
 window.hideWithdraw = hideWithdraw;
@@ -1653,32 +1602,21 @@ async function submitWithdraw() {
   const address = String(addressInput?.value || "").trim();
 
   if (!gram || gram <= 0) {
-    if (error) {
-      error.textContent = t("error_generic");
-    }
-
+    if (error) error.textContent = t("error_generic");
     return;
   }
 
   if (address.length < 6) {
-    if (error) {
-      error.textContent = t("error_generic");
-    }
-
+    if (error) error.textContent = t("error_generic");
     return;
   }
 
-  if (button) {
-    button.disabled = true;
-  }
+  if (button) button.disabled = true;
 
   try {
     const result = await api("/api/points/withdraw", {
       method: "POST",
-      body: {
-        gram,
-        address
-      }
+      body: { gram, address }
     });
 
     state.gramBalance =
@@ -1699,9 +1637,7 @@ async function submitWithdraw() {
 
     haptic("error");
   } finally {
-    if (button) {
-      button.disabled = false;
-    }
+    if (button) button.disabled = false;
   }
 }
 
@@ -1718,29 +1654,19 @@ function showExchange() {
   const input = $("#exchangePoints");
   const error = $("#exchangeError");
 
-  if (input) {
-    input.value = "";
-  }
-
-  if (error) {
-    error.textContent = "";
-  }
+  if (input) input.value = "";
+  if (error) error.textContent = "";
 
   updateExchangePreview();
 
-  if (overlay) {
-    overlay.style.display = "flex";
-  }
+  if (overlay) overlay.style.display = "flex";
 }
 
 window.showExchange = showExchange;
 
 function hideExchange() {
   const overlay = $("#exchangeOverlay");
-
-  if (overlay) {
-    overlay.style.display = "none";
-  }
+  if (overlay) overlay.style.display = "none";
 }
 
 window.hideExchange = hideExchange;
@@ -1768,24 +1694,16 @@ async function submitExchange() {
   const points = Number(input?.value);
 
   if (!points || points <= 0) {
-    if (error) {
-      error.textContent = t("error_generic");
-    }
-
+    if (error) error.textContent = t("error_generic");
     return;
   }
 
   if (points > state.points) {
-    if (error) {
-      error.textContent = t("error_generic");
-    }
-
+    if (error) error.textContent = t("error_generic");
     return;
   }
 
-  if (button) {
-    button.disabled = true;
-  }
+  if (button) button.disabled = true;
 
   try {
     const result = await api("/api/points/exchange", {
@@ -1812,9 +1730,7 @@ async function submitExchange() {
 
     haptic("error");
   } finally {
-    if (button) {
-      button.disabled = false;
-    }
+    if (button) button.disabled = false;
   }
 }
 
@@ -1829,19 +1745,14 @@ function showDeposit() {
     message.textContent = t("deposit_coming_soon");
   }
 
-  if (overlay) {
-    overlay.style.display = "flex";
-  }
+  if (overlay) overlay.style.display = "flex";
 }
 
 window.showDeposit = showDeposit;
 
 function hideDeposit() {
   const overlay = $("#depositOverlay");
-
-  if (overlay) {
-    overlay.style.display = "none";
-  }
+  if (overlay) overlay.style.display = "none";
 }
 
 window.hideDeposit = hideDeposit;
@@ -1851,7 +1762,6 @@ let walletHistory = [];
 async function loadWalletHistory() {
   try {
     const data = await api("/api/points/withdrawals");
-
     walletHistory = Array.isArray(data?.withdrawals)
       ? data.withdrawals
       : [];
@@ -1879,19 +1789,13 @@ function renderWallet() {
     <div class="walletBalanceGrid">
       <div class="walletBalanceCard gold">
         <div class="walletBalanceIcon">🪙</div>
-        <div class="walletBalanceLabel">
-          ${t("wallet_points_card_title")}
-        </div>
-        <div class="walletBalanceValue">
-          ${formatPoints(state.points)}
-        </div>
+        <div class="walletBalanceLabel">${t("wallet_points_card_title")}</div>
+        <div class="walletBalanceValue">${formatPoints(state.points)}</div>
       </div>
 
       <div class="walletBalanceCard blue">
         <div class="walletBalanceIcon">💎</div>
-        <div class="walletBalanceLabel">
-          ${t("wallet_gram_card_title")}
-        </div>
+        <div class="walletBalanceLabel">${t("wallet_gram_card_title")}</div>
         <div class="walletBalanceValue">
           ${formatNumber(state.gramBalance, 6)}
         </div>
@@ -1956,15 +1860,10 @@ function renderWallet() {
 
     if (walletHistory.length === 0) {
       list.innerHTML = `
-        <div
-          class="emptyState"
-          style="padding:20px 0"
-        >
-          <div class="emptyDesc">
-            ${t("wallet_history_empty")}
-          </div>
-        </div>`;
-
+        <div class="emptyState" style="padding:20px 0">
+          <div class="emptyDesc">${t("wallet_history_empty")}</div>
+        </div>
+      `;
       return;
     }
 
@@ -1986,7 +1885,8 @@ function renderWallet() {
           <div class="badge ${statusInfo.cls}">
             ${item.status}
           </div>
-        </div>`;
+        </div>
+      `;
     }).join("");
   });
 }
@@ -2044,10 +1944,7 @@ function shareReferralLink() {
       `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`
     );
   } else if (navigator.share) {
-    navigator.share({
-      text,
-      url: link
-    }).catch(() => {});
+    navigator.share({ text, url: link }).catch(() => {});
   } else {
     copyReferralLink();
   }
@@ -2087,13 +1984,9 @@ function renderProfileMenu() {
       </div>
 
       <div>
-        <div class="profileNameLg">
-          ${escapeHTML(firstName)}
-        </div>
-
+        <div class="profileNameLg">${escapeHTML(firstName)}</div>
         <div class="profileSubLg">
-          ${formatPoints(state.points)}
-          ${t("points_unit")}
+          ${formatPoints(state.points)} ${t("points_unit")}
           •
           ${formatPoints(state.invitedCount)}
         </div>
@@ -2153,9 +2046,7 @@ function renderProfileMenu() {
             id="themeLabel"
             style="font-size:13px;font-weight:700"
           >
-            ${theme === "dark"
-              ? t("theme_dark")
-              : t("theme_light")}
+            ${theme === "dark" ? t("theme_dark") : t("theme_light")}
           </span>
         </div>
 
@@ -2190,10 +2081,7 @@ function renderProfileReferral() {
 
     <div class="card">
       <div class="cardHeader">
-        <div class="cardTitle">
-          ${t("referral_code_title")}
-        </div>
-
+        <div class="cardTitle">${t("referral_code_title")}</div>
         <div class="badge success">
           ${t("referral_code_bonus_badge")}
         </div>
@@ -2224,10 +2112,7 @@ function renderProfileReferral() {
 
     <div class="card">
       <div class="cardHeader">
-        <div class="cardTitle">
-          ${t("referral_invited_title")}
-        </div>
-
+        <div class="cardTitle">${t("referral_invited_title")}</div>
         <div class="badge gold">
           ${formatPoints(state.invitedCount)}
         </div>
@@ -2236,14 +2121,12 @@ function renderProfileReferral() {
       ${
         state.invited.length === 0
           ? `
-            <div
-              class="emptyState"
-              style="padding:20px 0"
-            >
+            <div class="emptyState" style="padding:20px 0">
               <div class="emptyDesc">
                 ${t("referral_invited_empty")}
               </div>
-            </div>`
+            </div>
+          `
           : state.invited.map(person => {
               const statusHtml = person.bonusAwarded
                 ? `
@@ -2252,7 +2135,8 @@ function renderProfileReferral() {
                     style="margin-top:4px"
                   >
                     ${t("team_status_awarded")}
-                  </span>`
+                  </span>
+                `
                 : `
                   <span
                     class="badge warning"
@@ -2261,7 +2145,8 @@ function renderProfileReferral() {
                     ${t("team_status_pending", {
                       n: person.tasksRemaining
                     })}
-                  </span>`;
+                  </span>
+                `;
 
               return `
                 <div
@@ -2271,9 +2156,7 @@ function renderProfileReferral() {
                   <div>
                     <div class="historyAmount">
                       ${escapeHTML(
-                        person.firstName ||
-                        person.username ||
-                        "—"
+                        person.firstName || person.username || "—"
                       )}
                     </div>
 
@@ -2285,7 +2168,8 @@ function renderProfileReferral() {
                   </div>
 
                   ${statusHtml}
-                </div>`;
+                </div>
+              `;
             }).join("")
       }
     </div>
@@ -2307,8 +2191,7 @@ function renderProfileLeaderboard() {
 
     const isMe =
       state.user &&
-      String(person.telegramId) ===
-        String(state.user.telegramId);
+      String(person.telegramId) === String(state.user.telegramId);
 
     return `
       <div class="leaderboardItem ${isMe ? "me" : ""}">
@@ -2317,17 +2200,14 @@ function renderProfileLeaderboard() {
         </div>
 
         <div class="leaderName">
-          ${escapeHTML(
-            person.firstName ||
-            person.username ||
-            "—"
-          )}
+          ${escapeHTML(person.firstName || person.username || "—")}
         </div>
 
         <div class="leaderPoints">
           ${formatPoints(person.points)}
         </div>
-      </div>`;
+      </div>
+    `;
   }).join("");
 
   return `
@@ -2340,20 +2220,14 @@ function renderProfileLeaderboard() {
         ${t("referral_back")}
       </button>
 
-      <h2 class="sectionTitle">
-        ${t("leaderboard_title")}
-      </h2>
-
+      <h2 class="sectionTitle">${t("leaderboard_title")}</h2>
       <span></span>
     </div>
 
     ${
       state.myRank
         ? `
-          <div
-            class="card"
-            style="text-align:center"
-          >
+          <div class="card" style="text-align:center">
             <div class="cardSubtitle">
               ${t("leaderboard_rank_label")}
             </div>
@@ -2363,7 +2237,8 @@ function renderProfileLeaderboard() {
             >
               #${formatPoints(state.myRank)}
             </div>
-          </div>`
+          </div>
+        `
         : ""
     }
 
@@ -2374,7 +2249,8 @@ function renderProfileLeaderboard() {
             <div class="emptyDesc">
               ${t("leaderboard_empty")}
             </div>
-          </div>`
+          </div>
+        `
         : rows
     }
   `;
@@ -2388,10 +2264,8 @@ async function renderProfile() {
     state.leaderboard.length === 0
   ) {
     content.innerHTML = `
-      <div
-        class="loading"
-        style="height:300px"
-      ></div>`;
+      <div class="loading" style="height:300px"></div>
+    `;
 
     await loadLeaderboard();
   }
@@ -2447,15 +2321,9 @@ async function renderCurrentTab() {
     $("#content").innerHTML = `
       <div class="card emptyState">
         <div class="emptyIcon">⚠️</div>
-
-        <div class="emptyTitle">
-          ${t("error_title")}
-        </div>
-
+        <div class="emptyTitle">${t("error_title")}</div>
         <div class="emptyDesc">
-          ${escapeHTML(
-            error.message || t("error_generic")
-          )}
+          ${escapeHTML(error.message || t("error_generic"))}
         </div>
 
         <button
@@ -2478,10 +2346,7 @@ async function boot() {
   updateNavigation();
 
   const telegramUser = getTelegramUser();
-
-  if (telegramUser) {
-    state.user = telegramUser;
-  }
+  if (telegramUser) state.user = telegramUser;
 
   if (!captchaPassed()) {
     updateHeader();

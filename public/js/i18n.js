@@ -6,68 +6,44 @@
 
 const TRANSLATIONS = {
   fa: {
-    nav_home: "خانه",
-    nav_tasks: "تسک‌ها",
-    nav_daily: "روزانه",
-    nav_wallet: "کیف پول",
-    nav_profile: "پروفایل",
-
+    nav_home: "خانه", nav_tasks: "تسک‌ها", nav_daily: "روزانه", nav_wallet: "کیف پول", nav_profile: "پروفایل",
     greet_hello: "سلام {name} 👋",
     points_unit: "پوینت",
-
     hero_eyebrow: "PREMIUM REWARDS",
     hero_title_line1: "امتیاز جمع کن،",
     hero_title_line2: "پاداش بگیر.",
     hero_desc: "با انجام فعالیت‌های ساده، امتیاز بیشتری به دست بیاور.",
     hero_action_earn: "⚡ کسب امتیاز",
     hero_action_wallet: "◇ کیف پول",
-
     level_label: "LEVEL {n}",
     progress_label: "پیشرفت سطح",
-
-    stat_streak: "استریک",
-    stat_checkins: "ورود روزانه",
-    stat_invited: "دعوت‌شده",
-
+    stat_streak: "استریک", stat_checkins: "ورود روزانه", stat_invited: "دعوت‌شده",
     section_quick_earn: "سریع‌ترین راه‌های کسب امتیاز",
     section_view_all: "مشاهده همه",
-
     earn_daily_title: "ورود روزانه",
     earn_daily_sub_available: "امروز هنوز ثبت نکرده‌ای",
     earn_daily_sub_done: "امروز قبلاً دریافت شد",
-
     earn_tasks_title: "انجام تسک‌ها",
     earn_tasks_sub: "{n} تسک فعال",
-
     earn_referral_title: "دعوت از دوستان",
     earn_referral_sub: "لینک اختصاصی خودت را به اشتراک بگذار",
-
-    task_status_done: "انجام شده",
-    task_status_pending: "در انتظار بررسی",
-    task_status_todo: "هنوز انجام نشده",
-
+    task_status_done: "انجام شده", task_status_pending: "در انتظار بررسی", task_status_todo: "هنوز انجام نشده",
     tasks_title: "تسک‌های امروز",
     tasks_empty_title: "فعلاً تسکی موجود نیست",
     tasks_empty_desc: "به‌زودی تسک‌های جدید اضافه می‌شود.",
-
     task_action_open: "باز کردن لینک",
     task_action_verify: "بررسی عضویت",
     task_action_verifying: "در حال بررسی...",
     task_action_upload: "ارسال اسکرین‌شات",
     task_action_uploading: "در حال ارسال...",
-
-    task_btn_done: "انجام شد",
-    task_btn_pending: "در بررسی",
-
+    task_btn_done: "انجام شد", task_btn_pending: "در بررسی",
     daily_title: "پاداش روزانه",
     streak_label: "استریک فعلی — هر ۷ روز پیوسته یک شانس چرخ‌گردون هدیه می‌گیری",
     daily_calendar_title: "📅 تقویم هفتگی",
     day_label: "روز {n}",
-
     checkin_button: "دریافت پاداش امروز",
     checkin_done_button: "امروز قبلاً دریافت شد ✓",
     reset_countdown_label: "زمان باقی‌مانده تا ورود روزانه بعدی",
-
     spin_title: "🎡 گردونه شانس",
     spin_chances_label: "شانس باقی‌مانده",
     spin_button: "چرخاندن گردونه",
@@ -75,12 +51,12 @@ const TRANSLATIONS = {
     spin_result_points: "🎉 {n} پوینت بردی!",
     spin_result_empty: "امیدوارم دفعه بعد شانس بیاری 🙂",
     spin_result_extra: "🎡 یک شانس دیگه گرفتی!",
-
     ads_title: "پاداش تماشای تبلیغ",
     ads_desc: "هر تبلیغ کامل‌شده، شمارنده امروز را افزایش می‌دهد.",
     ads_task_title: "{n} تبلیغ",
     ads_ads_unit: "تبلیغ",
     ads_watch: "تماشای تبلیغ",
+    ads_cooldown: "تبلیغ بعدی تا {n} ثانیه دیگر",
     ads_loading: "در حال بارگذاری تبلیغ...",
     ads_confirming: "تبلیغ کامل شد؛ در حال ثبت پاداش...",
     ads_counted: "تبلیغ ثبت شد و پیشرفتت به‌روزرسانی شد.",
@@ -89,7 +65,6 @@ const TRANSLATIONS = {
     ads_error: "تبلیغ کامل نشد یا در دسترس نیست.",
     ads_not_ready: "سرویس تبلیغ هنوز آماده نیست. دوباره تلاش کن.",
     ads_not_configured: "تبلیغات هنوز توسط مدیریت پیکربندی نشده است.",
-
     wallet_title: "کیف پول",
     wallet_estimated_value: "ارزش تخمینی",
     wallet_rate_label: "نرخ فعلی: هر پوینت ≈ {rate}",
@@ -102,35 +77,24 @@ const TRANSLATIONS = {
     wallet_exchange_button: "تبدیل",
     wallet_points_card_title: "پوینت",
     wallet_gram_card_title: "GRAM",
-
     exchange_modal_title: "تبدیل پوینت به GRAM",
     exchange_points_label: "مقدار پوینت",
     exchange_result_label: "معادل GRAM دریافتی",
     exchange_submit: "تبدیل کن",
-
     deposit_modal_title: "واریز",
     deposit_coming_soon: "قابلیت واریز به‌زودی فعال می‌شود. فعلاً پوینت‌ها را از طریق تسک‌ها، ورود روزانه و دعوت دوستان جمع کن.",
-
     wallet_history_empty: "هنوز درخواست برداشتی ثبت نشده است.",
-
     withdraw_modal_title: "درخواست برداشت",
     withdraw_points_label: "مقدار پوینت",
     withdraw_address_label: "آدرس کیف پول",
     withdraw_submit: "ثبت درخواست",
-
     menu_referral: "دعوت دوستان",
     menu_leaderboard: "جدول امتیازات برتر",
     menu_terms: "قوانین و شرایط",
     menu_language: "زبان برنامه",
-
-    theme_dark: "حالت تاریک",
-    theme_light: "حالت روشن",
-
+    theme_dark: "حالت تاریک", theme_light: "حالت روشن",
     language_title: "انتخاب زبان",
-    language_fa: "دری",
-    language_ps: "پشتو",
-    language_en: "English",
-
+    language_fa: "دری", language_ps: "پشتو", language_en: "English",
     referral_back: "‹ بازگشت",
     referral_title: "دعوت دوستان",
     referral_code_title: "🎁 کد اختصاصی تو",
@@ -139,14 +103,11 @@ const TRANSLATIONS = {
     referral_share_button: "اشتراک‌گذاری لینک دعوت",
     referral_invited_title: "دوستان دعوت‌شده",
     referral_invited_empty: "هنوز کسی را دعوت نکرده‌ای.",
-
     team_status_awarded: "✅ تکمیل شد",
     team_status_pending: "{n} تسک باقی‌مانده",
-
     leaderboard_title: "جدول امتیازات برتر",
     leaderboard_rank_label: "رتبه فعلی تو",
     leaderboard_empty: "هنوز داده‌ای برای نمایش نیست.",
-
     error_generic: "خطایی رخ داد، دوباره تلاش کن.",
     toast_link_copied: "لینک دعوت کپی شد.",
     toast_verify_needs_join: "هنوز عضویت شما تأیید نشد. اول عضو شو، بعد دوباره «بررسی» بزن.",
@@ -156,68 +117,44 @@ const TRANSLATIONS = {
   },
 
   ps: {
-    nav_home: "کور",
-    nav_tasks: "دندې",
-    nav_daily: "ورځنی",
-    nav_wallet: "والټ",
-    nav_profile: "پروفایل",
-
+    nav_home: "کور", nav_tasks: "دندې", nav_daily: "ورځنی", nav_wallet: "والټ", nav_profile: "پروفایل",
     greet_hello: "سلام {name} 👋",
     points_unit: "پوائن",
-
     hero_eyebrow: "PREMIUM REWARDS",
     hero_title_line1: "پوائن راټول کړه،",
     hero_title_line2: "انعام واخله.",
     hero_desc: "د ساده فعالیتونو په ترسره کولو سره، ډیر پوائن ترلاسه کړه.",
     hero_action_earn: "⚡ پوائن ترلاسه کول",
     hero_action_wallet: "◇ والټ",
-
     level_label: "کچه {n}",
     progress_label: "د کچې پرمختګ",
-
-    stat_streak: "پرله‌پسې ورځې",
-    stat_checkins: "ورځنی ننوتل",
-    stat_invited: "بلل شوي",
-
+    stat_streak: "پرله‌پسې ورځې", stat_checkins: "ورځنی ننوتل", stat_invited: "بلل شوي",
     section_quick_earn: "د پوائن ترلاسه کولو ترټولو ګړندي لارې",
     section_view_all: "ټول وګورئ",
-
     earn_daily_title: "ورځنی ننوتل",
     earn_daily_sub_available: "نن دی لا نه دی ثبت شوی",
     earn_daily_sub_done: "نن دی مخکې ترلاسه شوی",
-
     earn_tasks_title: "دندو ترسره کول",
     earn_tasks_sub: "{n} فعالې دندې",
-
     earn_referral_title: "ملګري بلل",
     earn_referral_sub: "خپل ځانګړی لینک شریک کړئ",
-
-    task_status_done: "ترسره شوی",
-    task_status_pending: "د بررسۍ په تمه",
-    task_status_todo: "لا نه دی ترسره شوی",
-
+    task_status_done: "ترسره شوی", task_status_pending: "د بررسۍ په تمه", task_status_todo: "لا نه دی ترسره شوی",
     tasks_title: "د نن ورځې دندې",
     tasks_empty_title: "اوس مهال هېڅ دنده نشته",
     tasks_empty_desc: "ډېر ژر نوې دندې اضافه کیږي.",
-
     task_action_open: "لینک خلاصول",
     task_action_verify: "غړیتوب وګورئ",
     task_action_verifying: "بررسي کیږي...",
     task_action_upload: "سکرین‌شاټ ولیږئ",
     task_action_uploading: "لیږل کیږي...",
-
-    task_btn_done: "ترسره شوی",
-    task_btn_pending: "بررسي کیږي",
-
+    task_btn_done: "ترسره شوی", task_btn_pending: "بررسي کیږي",
     daily_title: "ورځنی انعام",
     streak_label: "اوسنۍ پرله‌پسې ورځې — هره ۷ ورځې یو ګرځنده چانس ترلاسه کوئ",
     daily_calendar_title: "📅 اونیز جدول",
     day_label: "ورځ {n}",
-
     checkin_button: "د نن انعام ترلاسه کول",
     checkin_done_button: "نن دی مخکې ترلاسه شوی ✓",
     reset_countdown_label: "پاتې وخت تر بلې ورځنۍ ننوتلو",
-
     spin_title: "🎡 د چانس ګرځنده",
     spin_chances_label: "پاتې چانسونه",
     spin_button: "ګرځنده وګرځوئ",
@@ -225,12 +162,12 @@ const TRANSLATIONS = {
     spin_result_points: "🎉 تاسو {n} پوائن وګټل!",
     spin_result_empty: "هیله ده چې راتلونکی ځل ښه چانس ولرئ 🙂",
     spin_result_extra: "🎡 تاسو یو نور چانس ترلاسه کړ!",
-
     ads_title: "د اعلان لیدلو انعام",
     ads_desc: "هر بشپړ شوی اعلان د نن ورځې شمېر زیاتوي.",
     ads_task_title: "{n} اعلانونه",
     ads_ads_unit: "اعلان",
     ads_watch: "اعلان وګورئ",
+    ads_cooldown: "بل اعلان په {n} ثانیو کې",
     ads_loading: "اعلان پورته کېږي...",
     ads_confirming: "اعلان بشپړ شو؛ انعام ثبتېږي...",
     ads_counted: "اعلان ثبت شو او پرمختګ مو تازه شو.",
@@ -239,7 +176,6 @@ const TRANSLATIONS = {
     ads_error: "اعلان بشپړ نه شو یا شتون نه لري.",
     ads_not_ready: "د اعلان خدمت لا چمتو نه دی. بیا هڅه وکړئ.",
     ads_not_configured: "اعلانونه لا د مدیریت لخوا نه دي تنظیم شوي.",
-
     wallet_title: "والټ",
     wallet_estimated_value: "اټکل شوی ارزښت",
     wallet_rate_label: "اوسنۍ نرخ: هر پوائن ≈ {rate}",
@@ -252,35 +188,24 @@ const TRANSLATIONS = {
     wallet_exchange_button: "بدلول",
     wallet_points_card_title: "پوائن",
     wallet_gram_card_title: "GRAM",
-
     exchange_modal_title: "د پوائن GRAM ته بدلول",
     exchange_points_label: "د پوائن اندازه",
     exchange_result_label: "معادل GRAM",
     exchange_submit: "بدله کړئ",
-
     deposit_modal_title: "زیرمی کول",
     deposit_coming_soon: "د زیرمي کولو وړتیا ډېر ژر فعالیږي. اوس مهال د دندو، ورځني ننوتلو او د ملګرو بلنې له لارې پوائن راټول کړئ.",
-
     wallet_history_empty: "تر اوسه هېڅ غوښتنه نشته.",
-
     withdraw_modal_title: "د ایستلو غوښتنه",
     withdraw_points_label: "د پوائنونو اندازه",
     withdraw_address_label: "د والټ آدرس",
     withdraw_submit: "غوښتنه ثبت کړئ",
-
     menu_referral: "ملګري بلل",
     menu_leaderboard: "غوره لیست",
     menu_terms: "قوانین او شرایط",
     menu_language: "ژبه",
-
-    theme_dark: "تیاره حالت",
-    theme_light: "روښانه حالت",
-
+    theme_dark: "تیاره حالت", theme_light: "روښانه حالت",
     language_title: "ژبه غوره کړئ",
-    language_fa: "دری",
-    language_ps: "پښتو",
-    language_en: "انګلیسي",
-
+    language_fa: "دری", language_ps: "پښتو", language_en: "انګلیسي",
     referral_back: "‹ شاته",
     referral_title: "ملګري بلل",
     referral_code_title: "🎁 ستاسو ځانګړی کوډ",
@@ -289,14 +214,11 @@ const TRANSLATIONS = {
     referral_share_button: "د بلنې لینک شریک کړئ",
     referral_invited_title: "بلل شوي ملګري",
     referral_invited_empty: "تر اوسه مو هېڅوک نه دی بللی.",
-
     team_status_awarded: "✅ بشپړ شو",
     team_status_pending: "{n} پاتې دندې",
-
     leaderboard_title: "غوره لیست",
     leaderboard_rank_label: "ستاسو اوسنی درجه",
     leaderboard_empty: "تر اوسه هېڅ معلومات نشته.",
-
     error_generic: "یوه ستونزه رامنځته شوه، بیا هڅه وکړئ.",
     toast_link_copied: "د بلنې لینک کاپي شو.",
     toast_verify_needs_join: "ستاسو غړیتوب لا تایید نه دی شوی. لومړی غړی شئ، بیا «بررسي» فشار ورکړئ.",
@@ -306,68 +228,44 @@ const TRANSLATIONS = {
   },
 
   en: {
-    nav_home: "Home",
-    nav_tasks: "Tasks",
-    nav_daily: "Daily",
-    nav_wallet: "Wallet",
-    nav_profile: "Profile",
-
+    nav_home: "Home", nav_tasks: "Tasks", nav_daily: "Daily", nav_wallet: "Wallet", nav_profile: "Profile",
     greet_hello: "Hi {name} 👋",
     points_unit: "points",
-
     hero_eyebrow: "PREMIUM REWARDS",
     hero_title_line1: "Earn points,",
     hero_title_line2: "get rewards.",
     hero_desc: "Complete simple activities to earn more points.",
     hero_action_earn: "⚡ Earn points",
     hero_action_wallet: "◇ Wallet",
-
     level_label: "LEVEL {n}",
     progress_label: "Level progress",
-
-    stat_streak: "Streak",
-    stat_checkins: "Check-ins",
-    stat_invited: "Invited",
-
+    stat_streak: "Streak", stat_checkins: "Check-ins", stat_invited: "Invited",
     section_quick_earn: "Fastest ways to earn",
     section_view_all: "View all",
-
     earn_daily_title: "Daily check-in",
     earn_daily_sub_available: "Not claimed yet today",
     earn_daily_sub_done: "Already claimed today",
-
     earn_tasks_title: "Complete tasks",
     earn_tasks_sub: "{n} active tasks",
-
     earn_referral_title: "Invite friends",
     earn_referral_sub: "Share your unique invite link",
-
-    task_status_done: "Completed",
-    task_status_pending: "Under review",
-    task_status_todo: "Not done yet",
-
+    task_status_done: "Completed", task_status_pending: "Under review", task_status_todo: "Not done yet",
     tasks_title: "Today's tasks",
     tasks_empty_title: "No tasks available right now",
     tasks_empty_desc: "New tasks will be added soon.",
-
     task_action_open: "Open link",
     task_action_verify: "Verify",
     task_action_verifying: "Verifying...",
     task_action_upload: "Submit screenshot",
     task_action_uploading: "Uploading...",
-
-    task_btn_done: "Done",
-    task_btn_pending: "In review",
-
+    task_btn_done: "Done", task_btn_pending: "In review",
     daily_title: "Daily reward",
     streak_label: "Current streak — every 7 days in a row earns a spin wheel chance",
     daily_calendar_title: "📅 Weekly calendar",
     day_label: "Day {n}",
-
     checkin_button: "Claim today's reward",
     checkin_done_button: "Already claimed today ✓",
     reset_countdown_label: "Time until next daily reset",
-
     spin_title: "🎡 Spin wheel",
     spin_chances_label: "Chances left",
     spin_button: "Spin the wheel",
@@ -375,12 +273,12 @@ const TRANSLATIONS = {
     spin_result_points: "🎉 You won {n} points!",
     spin_result_empty: "Better luck next time 🙂",
     spin_result_extra: "🎡 You got another spin!",
-
     ads_title: "Watch ads and earn",
     ads_desc: "Each completed ad increases today's counter.",
     ads_task_title: "{n} ads",
     ads_ads_unit: "ads",
     ads_watch: "Watch an ad",
+    ads_cooldown: "Next ad available in {n}s",
     ads_loading: "Loading ad...",
     ads_confirming: "Ad completed; recording reward...",
     ads_counted: "Ad counted and progress updated.",
@@ -389,7 +287,6 @@ const TRANSLATIONS = {
     ads_error: "The ad was not completed or is unavailable.",
     ads_not_ready: "The ad service is not ready yet. Try again.",
     ads_not_configured: "Ads have not been configured by the admin yet.",
-
     wallet_title: "Wallet",
     wallet_estimated_value: "Estimated value",
     wallet_rate_label: "Current rate: 1 point ≈ {rate}",
@@ -402,35 +299,24 @@ const TRANSLATIONS = {
     wallet_exchange_button: "Exchange",
     wallet_points_card_title: "Points",
     wallet_gram_card_title: "GRAM",
-
     exchange_modal_title: "Exchange points to GRAM",
     exchange_points_label: "Points amount",
     exchange_result_label: "GRAM you'll receive",
     exchange_submit: "Exchange",
-
     deposit_modal_title: "Deposit",
     deposit_coming_soon: "Deposits are coming soon. For now, earn points via tasks, daily check-in, and inviting friends.",
-
     wallet_history_empty: "No withdrawal requests yet.",
-
     withdraw_modal_title: "Withdrawal request",
     withdraw_points_label: "Points amount",
     withdraw_address_label: "Wallet address",
     withdraw_submit: "Submit request",
-
     menu_referral: "Invite friends",
     menu_leaderboard: "Leaderboard",
     menu_terms: "Terms & conditions",
     menu_language: "App language",
-
-    theme_dark: "Dark mode",
-    theme_light: "Light mode",
-
+    theme_dark: "Dark mode", theme_light: "Light mode",
     language_title: "Choose language",
-    language_fa: "Dari",
-    language_ps: "Pashto",
-    language_en: "English",
-
+    language_fa: "Dari", language_ps: "Pashto", language_en: "English",
     referral_back: "‹ Back",
     referral_title: "Invite friends",
     referral_code_title: "🎁 Your referral code",
@@ -439,14 +325,11 @@ const TRANSLATIONS = {
     referral_share_button: "Share invite link",
     referral_invited_title: "Invited friends",
     referral_invited_empty: "You haven't invited anyone yet.",
-
     team_status_awarded: "✅ Completed",
     team_status_pending: "{n} tasks left",
-
     leaderboard_title: "Leaderboard",
     leaderboard_rank_label: "Your current rank",
     leaderboard_empty: "No data to show yet.",
-
     error_generic: "Something went wrong, please try again.",
     toast_link_copied: "Invite link copied.",
     toast_verify_needs_join: "Your membership isn't verified yet. Join first, then tap Verify again.",
@@ -456,49 +339,43 @@ const TRANSLATIONS = {
   }
 };
 
+// نگاشت کدهای خطای سرور به کلید ترجمه
 const ERROR_CODE_MAP = {
   ALREADY_CHECKED_IN: {
     fa: "امروز قبلاً ورود روزانه ثبت شده است.",
     ps: "نن دی مخکې ثبت شوی.",
     en: "You've already checked in today."
   },
-
   INVALID_AMOUNT: {
     fa: "مقدار پوینت نامعتبر است.",
     ps: "د پوائن اندازه سمه نه ده.",
     en: "Invalid points amount."
   },
-
   INVALID_ADDRESS: {
     fa: "آدرس کیف پول نامعتبر است.",
     ps: "د والټ آدرس سم نه دی.",
     en: "Invalid wallet address."
   },
-
   INSUFFICIENT_BALANCE: {
     fa: "موجودی کافی نیست.",
     ps: "بیلانس کافي نه دی.",
     en: "Insufficient balance."
   },
-
   ALREADY_DONE: {
     fa: "این تسک قبلاً انجام شده است.",
     ps: "دا دنده مخکې ترسره شوې ده.",
     en: "This task is already completed."
   },
-
   NOT_JOINED: {
     fa: "هنوز عضویت شما تأیید نشد. اول عضو شو، بعد دوباره «بررسی» بزن.",
     ps: "غړیتوب لا تایید نه دی. لومړی غړی شئ.",
     en: "Membership not verified yet. Join first, then verify again."
   },
-
   NO_SPINS: {
     fa: "شانس چرخ‌گردون نداری.",
     ps: "هېڅ چانس نلرئ.",
     en: "No spin chances left."
   },
-
   TASK_NOT_FOUND: {
     fa: "تسک پیدا نشد.",
     ps: "دنده ونه موندل شوه.",
@@ -508,11 +385,7 @@ const ERROR_CODE_MAP = {
 
 function t(key, vars) {
   const lang = (window.state && window.state.language) || "fa";
-
-  let text =
-    (TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) ||
-    TRANSLATIONS.fa[key] ||
-    key;
+  let text = (TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) || TRANSLATIONS.fa[key] || key;
 
   if (vars) {
     Object.keys(vars).forEach(k => {

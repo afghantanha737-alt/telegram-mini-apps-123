@@ -22,7 +22,6 @@ const adsgramDebug = String(process.env.ADSGRAM_DEBUG || '').toLowerCase() === '
 const tadsWidgetId = String(process.env.TADS_WIDGET_ID || '').trim();
 const tadsWebhookSecret = String(process.env.TADS_WEBHOOK_SECRET || '').trim();
 const tadsDebug = String(process.env.TADS_DEBUG || '').toLowerCase() === 'true';
-
 const adsgramConfigured = /^\d+$/.test(adsgramBlockId) && Boolean(adsgramRewardSecret);
 const tadsConfigured = Boolean(tadsWidgetId && tadsWebhookSecret);
 const provider = tadsConfigured ? 'tads' : adsgramConfigured ? 'adsgram' : '';
@@ -82,10 +81,7 @@ router.get('/config', (req, res) => {
     blockId: provider === 'adsgram' ? adsgramBlockId : '',
     widgetId: provider === 'tads' ? tadsWidgetId : '',
     debug: provider === 'tads' ? tadsDebug : adsgramDebug,
-    milestones: MILESTONES.map(({ target, reward }) => ({
-      target,
-      reward
-    }))
+    milestones: MILESTONES.map(({ target, reward }) => ({ target, reward }))
   });
 });
 
@@ -114,8 +110,7 @@ async function awardAd(telegramId) {
       let earned = 0;
 
       for (const milestone of MILESTONES) {
-        if (!dailyAds[milestone.field] &&
-            dailyAds.watched >= milestone.target) {
+        if (!dailyAds[milestone.field] && dailyAds.watched >= milestone.target) {
           dailyAds[milestone.field] = true;
           earned += milestone.reward;
         }
@@ -138,15 +133,12 @@ async function awardAd(telegramId) {
   } finally {
     await session.endSession();
   }
-});
+}
 
-// Legacy AdsGram callback.
+// AdsGram calls this URL after a real rewarded ad is completed.
 router.get('/reward', async (req, res) => {
   if (!adsgramConfigured ||
-      !isValidSecret(
-        String(req.query.token || ''),
-        adsgramRewardSecret
-      )) {
+      !isValidSecret(String(req.query.token || ''), adsgramRewardSecret)) {
     return res.sendStatus(401);
   }
 
@@ -170,10 +162,7 @@ router.get('/reward', async (req, res) => {
 // TADS sends this POST after a fullscreen ad view.
 router.post('/tads-webhook', async (req, res) => {
   if (!tadsConfigured ||
-      !isValidSecret(
-        String(req.query.token || ''),
-        tadsWebhookSecret
-      )) {
+      !isValidSecret(String(req.query.token || ''), tadsWebhookSecret)) {
     return res.sendStatus(401);
   }
 

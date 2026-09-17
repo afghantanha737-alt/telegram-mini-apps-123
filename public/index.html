@@ -182,10 +182,30 @@
   </div>
 </div>
 
+<!-- GRAM -> POINTS MODAL -->
+<div id="gramToPointsOverlay" class="overlay" style="display:none">
+  <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="gramToPointsTitle">
+    <div class="modalHeader">
+      <div>
+        <span class="modalEyebrow">Exchange</span>
+        <h3 id="gramToPointsTitle">تبدیل GRAM به پوینت</h3>
+      </div>
+      <button class="closeBtn" type="button" onclick="hideGramToPoints()" aria-label="بستن">×</button>
+    </div>
+    <div class="withdrawBody">
+      <label class="fieldLabel">مقدار GRAM</label>
+      <input id="gramToPointsAmount" type="number" inputmode="decimal" step="0.000001" placeholder="مثلاً 0.5" oninput="updateGramToPointsPreview()">
+      <p id="gramToPointsPreview" style="font-size:12px;color:var(--text-muted);margin:-4px 0 12px">معادل پوینت دریافتی: 0</p>
+      <p id="gramToPointsError" class="captchaErr" role="alert"></p>
+      <button type="button" class="primaryBtn" id="submitGramToPoints" onclick="submitGramToPoints()">تبدیل کن</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script src="js/i18n.js"></script>
-  <script src="js/app.js?v=20260917-history6"></script>
+  <script src="js/app.js?v=20260917-history3"></script>
 </body>
 </html>

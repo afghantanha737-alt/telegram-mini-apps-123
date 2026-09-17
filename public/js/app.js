@@ -1315,6 +1315,77 @@ async function submitExchange() {
 }
 window.submitExchange = submitExchange;
 
+/* ---- Exchange: GRAM -> Points ---- */
+function showGramToPoints() {
+  if (state.gramBalance <= 0) {
+    toast(t("error_generic"), "warning");
+    return;
+  }
+  const overlay = $("#gramToPointsOverlay");
+  const input = $("#gramToPointsAmount");
+  const error = $("#gramToPointsError");
+  const title = $("#gramToPointsTitle");
+  const label = document.querySelector("#gramToPointsOverlay .fieldLabel");
+  const button = $("#submitGramToPoints");
+  if (input) input.value = "";
+  if (error) error.textContent = "";
+  if (title) title.textContent = t("gram_to_points_modal_title");
+  if (label) label.textContent = t("gram_to_points_label");
+  if (button) button.textContent = t("gram_to_points_submit");
+  updateGramToPointsPreview();
+  if (overlay) overlay.style.display = "flex";
+}
+window.showGramToPoints = showGramToPoints;
+
+function hideGramToPoints() {
+  const overlay = $("#gramToPointsOverlay");
+  if (overlay) overlay.style.display = "none";
+}
+window.hideGramToPoints = hideGramToPoints;
+
+function updateGramToPointsPreview() {
+  const input = $("#gramToPointsAmount");
+  const preview = $("#gramToPointsPreview");
+  if (!input || !preview) return;
+  const gram = Number(input.value) || 0;
+  const points = state.rate > 0 ? Math.floor(gram / state.rate) : 0;
+  preview.textContent = `${t("gram_to_points_result_label")}: ${formatPoints(points)}`;
+}
+window.updateGramToPointsPreview = updateGramToPointsPreview;
+
+async function submitGramToPoints() {
+  const input = $("#gramToPointsAmount");
+  const error = $("#gramToPointsError");
+  const button = $("#submitGramToPoints");
+  const gram = Number(input?.value);
+  if (!gram || gram <= 0 || gram > state.gramBalance) {
+    if (error) error.textContent = t("error_generic");
+    return;
+  }
+
+  if (button) button.disabled = true;
+  try {
+    const result = await api("/api/points/convert-to-points", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey("gram-to-points") },
+      body: { gram }
+    });
+    state.points = Number(result.points) ?? state.points;
+    state.gramBalance = Number(result.gramBalance) ?? state.gramBalance;
+    haptic("success");
+    toast(result.message, "success");
+    hideGramToPoints();
+    updateHeader();
+    renderWallet();
+  } catch (err) {
+    if (error) error.textContent = translateServerMessage(err.code, err.message);
+    haptic("error");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+window.submitGramToPoints = submitGramToPoints;
+
 /* ---- Deposit: placeholder ---- */
 function showDeposit() {
   const overlay = $("#depositOverlay");
@@ -1372,6 +1443,10 @@ function renderWallet() {
       <button class="walletActionBtn" type="button" onclick="showExchange()">
         <span class="walletActionIcon">⇄</span>
         <span>${t("wallet_exchange_button")}</span>
+      </button>
+      <button class="walletActionBtn" type="button" onclick="showGramToPoints()">
+        <span class="walletActionIcon">↔</span>
+        <span>${t("wallet_gram_to_points_button")}</span>
       </button>
       <button class="walletActionBtn" type="button" onclick="showWithdraw()">
         <span class="walletActionIcon">➤</span>
@@ -1455,13 +1530,80 @@ function shareReferralLink() {
 }
 window.shareReferralLink = shareReferralLink;
 
-let profileView = "menu"; // menu | referral | leaderboard
+let profileView = "menu"; // menu | referral | leaderboard | history
+let transactionHistory = [];
 
 function setProfileView(view) {
   profileView = view;
-  renderProfile();
+  renderProfile().catch(error => {
+    console.error("Profile view failed:", error);
+    const content = $("#content");
+    if (content) content.innerHTML = `<div class="card emptyState"><div class="emptyDesc">${escapeHTML(error.message || t("error_generic"))}</div></div>`;
+  });
 }
 window.setProfileView = setProfileView;
+
+async function loadTransactionHistory() {
+  const data = await api("/api/points/history?limit=100");
+  transactionHistory = Array.isArray(data?.transactions)
+    ? data.transactions
+    : Array.isArray(data?.entries)
+      ? data.entries
+      : [];
+}
+
+function transactionTypeLabel(type) {
+  return t(`transaction_type_${type}`) || type || "—";
+}
+
+function transactionDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const locale = state.language === "en" ? "en-US" : state.language === "ps" ? "ps-AF" : "fa-AF";
+  return date.toLocaleString(locale, { dateStyle: "medium", timeStyle: "medium" });
+}
+
+function renderProfileHistory() {
+  const rows = transactionHistory.map(item => {
+    const unitLabel = item.unit === "Gram" ? t("history_gram_unit") : t("history_point_unit");
+    const amount = item.unit === "Gram"
+      ? formatNumber(item.amount, 6)
+      : formatPoints(item.amount);
+    const direction = item.direction || "neutral";
+    const directionLabel = direction === "increase"
+      ? t("history_increase")
+      : direction === "decrease"
+        ? t("history_decrease")
+        : t("history_neutral");
+    const sign = direction === "increase" ? "+" : direction === "decrease" ? "−" : "";
+    const transactionId = String(item.transactionId || item._id || "—");
+    const userId = String(item.userId || "—");
+    return `
+      <div class="transactionItem">
+        <div class="transactionTop">
+          <div class="transactionDescription">${escapeHTML(item.description || transactionTypeLabel(item.type))}</div>
+          <div class="transactionAmount ${escapeHTML(direction)}">${sign}${amount} ${unitLabel}</div>
+        </div>
+        <div class="transactionMeta historyMeta">${directionLabel} • ${escapeHTML(transactionTypeLabel(item.type))}</div>
+        <div class="transactionDetails">
+          <div>${escapeHTML(t("history_transaction_id"))}: ${escapeHTML(transactionId)}</div>
+          <div>${escapeHTML(t("history_user_id"))}: ${escapeHTML(userId)}</div>
+          <div class="transactionDate" title="${escapeHTML(String(item.createdAt || ""))}">${escapeHTML(t("history_date"))}: ${escapeHTML(transactionDate(item.createdAt))}</div>
+        </div>
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="sectionHeader">
+      <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
+      <h2 class="sectionTitle">${t("history_title")}</h2>
+      <button class="sectionMore" type="button" onclick="setProfileView('history')">↻</button>
+    </div>
+    <div class="card transactionList">
+      ${rows || `<div class="emptyState" style="padding:24px 0"><div class="emptyDesc">${t("history_empty")}</div></div>`}
+    </div>
+  `;
+}
 
 function renderProfileMenu() {
   const telegramUser = getTelegramUser();
@@ -1491,6 +1633,11 @@ function renderProfileMenu() {
         <div class="profileItem" onclick="setProfileView('leaderboard')">
           <div class="profileIcon">🏆</div>
           <div class="profileText">${t("menu_leaderboard")}</div>
+          <div class="profileChevron">‹</div>
+        </div>
+        <div class="profileItem" onclick="setProfileView('history')">
+          <div class="profileIcon">🧾</div>
+          <div class="profileText">${t("menu_history")}</div>
           <div class="profileChevron">‹</div>
         </div>
         <div class="profileItem" onclick="showTerms()">
@@ -1605,10 +1752,16 @@ async function renderProfile() {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadLeaderboard();
   }
+  if (profileView === "history") {
+    content.innerHTML = `<div class="loading" style="height:300px"></div>`;
+    await loadTransactionHistory();
+  }
   if (profileView === "referral") {
     content.innerHTML = renderProfileReferral();
   } else if (profileView === "leaderboard") {
     content.innerHTML = renderProfileLeaderboard();
+  } else if (profileView === "history") {
+    content.innerHTML = renderProfileHistory();
   } else {
     content.innerHTML = renderProfileMenu();
   }
@@ -1633,7 +1786,7 @@ async function renderCurrentTab() {
     } else if (state.activeTab === "profile") {
       profileView = "menu";
       await Promise.all([loadUserData(), loadReferralData()]);
-      renderProfile();
+      await renderProfile();
     }
   } catch (error) {
     console.error("Render tab failed:", error);

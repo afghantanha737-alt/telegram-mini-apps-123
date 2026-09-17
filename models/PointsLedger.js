@@ -7,7 +7,12 @@ const pointsLedgerSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     telegramId: { type: String, required: true, index: true },
     delta: { type: Number, required: true },
+    amount: { type: Number, required: true, min: 0 },
+    unit: { type: String, enum: ['Point', 'Gram'], default: 'Point', index: true },
+    direction: { type: String, enum: ['increase', 'decrease', 'neutral'], default: 'increase' },
     balanceAfter: { type: Number, required: true, min: 0 },
+    pointsAfter: { type: Number, default: 0, min: 0 },
+    gramAfter: { type: Number, default: 0, min: 0 },
     type: {
       type: String,
       enum: [
@@ -27,8 +32,10 @@ const pointsLedgerSchema = new mongoose.Schema(
     },
     referenceType: { type: String, default: '' },
     referenceId: { type: String, default: '' },
+    operationId: { type: String, default: '', index: true },
     idempotencyKey: { type: String, default: undefined },
     status: { type: String, enum: ['pending', 'completed'], default: 'completed' },
+    description: { type: String, default: '' },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} }
   },
   { timestamps: true }

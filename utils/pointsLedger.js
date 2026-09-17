@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const PointsLedger = require('../models/PointsLedger');
 const User = require('../models/User');
 
@@ -32,9 +33,14 @@ async function applyPointsChange({
   referenceType = '',
   referenceId = '',
   idempotencyKey = null,
+  operationId = null,
+  unit = 'Point',
+  description = '',
   metadata = {},
   extraUpdate = {},
   extraFilter = {},
+  additionalTransactions = [],
+  recordPrimary = true,
   session
 }) {
   if (!session) throw new Error('A MongoDB session is required for points changes.');
@@ -42,6 +48,10 @@ async function applyPointsChange({
   const amount = Number(delta);
   if (!Number.isFinite(amount) || !Number.isInteger(amount)) {
     throw operationError('INVALID_POINTS_DELTA', 'مقدار تغییر امتیاز نامعتبر است.');
+  }
+
+  if (!['Point', 'Gram'].includes(unit)) {
+    throw operationError('INVALID_LEDGER_UNIT', 'واحد تراکنش نامعتبر است.');
   }
 
   const normalizedKey = idempotencyKey ? String(idempotencyKey).trim().slice(0, 240) : '';
@@ -79,18 +89,59 @@ async function applyPointsChange({
     user: user._id,
     telegramId: user.telegramId,
     delta: amount,
-    balanceAfter: user.points,
+    amount: Math.abs(amount),
+    unit,
+    direction: amount === 0 ? 'neutral' : amount > 0 ? 'increase' : 'decrease',
+    balanceAfter: unit === 'Gram' ? user.gramBalance : user.points,
+    pointsAfter: user.points,
+    gramAfter: user.gramBalance,
     type,
     referenceType,
     referenceId: referenceId ? String(referenceId) : '',
+    operationId: String(operationId || normalizedKey || crypto.randomUUID()),
     status: 'completed',
+    description: description || type,
     metadata
   };
-  if (normalizedKey) entry.idempotencyKey = normalizedKey;
+  const entries = [];
+  if (recordPrimary) {
+    if (normalizedKey) entry.idempotencyKey = normalizedKey;
+    entries.push(entry);
+  }
 
-  const [ledger] = await PointsLedger.create([entry], { session });
+  for (const item of additionalTransactions) {
+    const transactionDelta = Number(item.delta);
+    if (!Number.isFinite(transactionDelta)) {
+      throw operationError('INVALID_LEDGER_DELTA', 'مقدار تراکنش نامعتبر است.');
+    }
+    if (!['Point', 'Gram'].includes(item.unit)) {
+      throw operationError('INVALID_LEDGER_UNIT', 'واحد تراکنش نامعتبر است.');
+    }
+    const additionalEntry = {
+      user: user._id,
+      telegramId: user.telegramId,
+      delta: transactionDelta,
+      amount: Math.abs(transactionDelta),
+      unit: item.unit,
+      direction: transactionDelta === 0 ? 'neutral' : transactionDelta > 0 ? 'increase' : 'decrease',
+      balanceAfter: item.balanceAfter ?? (item.unit === 'Gram' ? user.gramBalance : user.points),
+      pointsAfter: user.points,
+      gramAfter: user.gramBalance,
+      type: item.type || type,
+      referenceType: item.referenceType || referenceType,
+      referenceId: item.referenceId ? String(item.referenceId) : (referenceId ? String(referenceId) : ''),
+      operationId: String(item.operationId || operationId || normalizedKey || crypto.randomUUID()),
+      status: 'completed',
+      description: item.description || description || item.type || type,
+      metadata: item.metadata || metadata
+    };
+    if (item.idempotencyKey) additionalEntry.idempotencyKey = String(item.idempotencyKey).slice(0, 240);
+    entries.push(additionalEntry);
+  }
 
-  return { duplicate: false, ledger, user };
+  const ledgers = entries.length ? await PointsLedger.create(entries, { session }) : [];
+
+  return { duplicate: false, ledger: ledgers[0] || null, ledgers, user };
 }
 
 module.exports = { applyPointsChange, operationError };

@@ -1,7 +1,7 @@
 /* =========================================================
-   POINTS REWARDS — PREMIUM TELEGRAM MINI APP
+   POINTS REWARDS â€” PREMIUM TELEGRAM MINI APP
    File: public/js/app.js
-   (نیازمند i18n.js — باید قبل از این فایل لود شود)
+   (ظ†غŒط§ط²ظ…ظ†ط¯ i18n.js â€” ط¨ط§غŒط¯ ظ‚ط¨ظ„ ط§ط² ط§غŒظ† ظپط§غŒظ„ ظ„ظˆط¯ ط´ظˆط¯)
 ========================================================= */
 "use strict";
 
@@ -121,7 +121,7 @@ function updateThemeUI() {
   const label = $("#themeLabel");
   const toggle = $("#themeToggle");
   const theme = getTheme();
-  if (icon) icon.textContent = theme === "dark" ? "🌙" : "☀️";
+  if (icon) icon.textContent = theme === "dark" ? "ًںŒ™" : "âک€ï¸ڈ";
   if (label) label.textContent = theme === "dark" ? t("theme_dark") : t("theme_light");
   if (toggle) toggle.setAttribute("aria-checked", theme === "light" ? "true" : "false");
 }
@@ -180,7 +180,7 @@ function getInitials(user) {
 function timeAgo(dateString) {
   const date = new Date(dateString);
   const diffSeconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (diffSeconds < 60) return "•";
+  if (diffSeconds < 60) return "â€¢";
   const minutes = Math.floor(diffSeconds / 60);
   if (minutes < 60) return `${formatPoints(minutes)}m`;
   const hours = Math.floor(minutes / 60);
@@ -210,8 +210,8 @@ async function api(url, options = {}) {
   const initData = getInitData();
   const finalUrl = `${url}${separator}initData=${encodeURIComponent(initData)}`;
 
-  // اگر سرور بیش از حد کند شد (مثلاً سرویس رایگان تازه بیدار شده)،
-  // درخواست بعد از ۲۰ ثانیه خودش قطع می‌شود تا دکمه هیچ‌وقت برای همیشه گیر نکند.
+  // ط§ع¯ط± ط³ط±ظˆط± ط¨غŒط´ ط§ط² ط­ط¯ ع©ظ†ط¯ ط´ط¯ (ظ…ط«ظ„ط§ظ‹ ط³ط±ظˆغŒط³ ط±ط§غŒع¯ط§ظ† طھط§ط²ظ‡ ط¨غŒط¯ط§ط± ط´ط¯ظ‡)طŒ
+  // ط¯ط±ط®ظˆط§ط³طھ ط¨ط¹ط¯ ط§ط² غ²غ° ط«ط§ظ†غŒظ‡ ط®ظˆط¯ط´ ظ‚ط·ط¹ ظ…غŒâ€Œط´ظˆط¯ طھط§ ط¯ع©ظ…ظ‡ ظ‡غŒع†â€Œظˆظ‚طھ ط¨ط±ط§غŒ ظ‡ظ…غŒط´ظ‡ ع¯غŒط± ظ†ع©ظ†ط¯.
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 40000);
   config.signal = controller.signal;
@@ -244,7 +244,7 @@ async function api(url, options = {}) {
 }
 
 /**
- * برای آپلود multipart (اسکرین‌شات تسک) — initData را به‌صورت query پاس می‌کند.
+ * ط¨ط±ط§غŒ ط¢ظ¾ظ„ظˆط¯ multipart (ط§ط³ع©ط±غŒظ†â€Œط´ط§طھ طھط³ع©) â€” initData ط±ط§ ط¨ظ‡â€Œطµظˆط±طھ query ظ¾ط§ط³ ظ…غŒâ€Œع©ظ†ط¯.
  */
 async function apiUpload(url, formData) {
   const separator = url.includes("?") ? "&" : "?";
@@ -393,7 +393,7 @@ async function submitCaptcha() {
   const value = Number(answer.value);
 
   if (value !== state.captchaA + state.captchaB) {
-    if (error) error.textContent = "پاسخ صحیح نیست. دوباره تلاش کن.";
+    if (error) error.textContent = "ظ¾ط§ط³ط® طµط­غŒط­ ظ†غŒط³طھ. ط¯ظˆط¨ط§ط±ظ‡ طھظ„ط§ط´ ع©ظ†.";
     haptic("error");
     createCaptcha();
     return;
@@ -597,7 +597,7 @@ function renderAdTasks() {
         <div class="adsProgressTrack"><div class="adsProgressBar" style="width:${progress}%"></div></div>
         <div class="adsTaskMeta">
           <span>${awarded ? t("ads_done") : `${formatPoints(watched)} / ${formatPoints(target)} ${t("ads_ads_unit")}`}</span>
-          ${awarded ? "✓" : ""}
+          ${awarded ? "âœ“" : ""}
         </div>
       </div>`;
   }).join("");
@@ -675,9 +675,9 @@ async function showAdsReward() {
     console.warn("Rewarded ad was not completed:", errorText);
 
     if (/too many/i.test(errorText)) {
-      toast("محدودیت TADS فعال است؛ حداکثر ۱۰ تبلیغ در ۳۰ دقیقه مجاز است.", "warning");
+      toast("ظ…ط­ط¯ظˆط¯غŒطھ TADS ظپط¹ط§ظ„ ط§ط³طھط› ط­ط¯ط§ع©ط«ط± غ±غ° طھط¨ظ„غŒط؛ ط¯ط± غ³غ° ط¯ظ‚غŒظ‚ظ‡ ظ…ط¬ط§ط² ط§ط³طھ.", "warning");
     } else if (/no ads|no ads data/i.test(errorText)) {
-      toast("در حال حاضر تبلیغی از TADS موجود نیست. بعداً دوباره تلاش کن.", "warning");
+      toast("ط¯ط± ط­ط§ظ„ ط­ط§ط¶ط± طھط¨ظ„غŒط؛غŒ ط§ط² TADS ظ…ظˆط¬ظˆط¯ ظ†غŒط³طھ. ط¨ط¹ط¯ط§ظ‹ ط¯ظˆط¨ط§ط±ظ‡ طھظ„ط§ط´ ع©ظ†.", "warning");
     } else {
       toast(t("ads_error"), "warning");
     }
@@ -787,17 +787,17 @@ function renderHome() {
 
     <div class="statsGrid">
       <div class="statCard">
-        <div class="statIcon">🔥</div>
+        <div class="statIcon">ًں”¥</div>
         <div class="statValue">${formatPoints(state.streak)}</div>
         <div class="statLabel">${t("stat_streak")}</div>
       </div>
       <div class="statCard">
-        <div class="statIcon">🎯</div>
+        <div class="statIcon">ًںژ¯</div>
         <div class="statValue">${formatPoints(state.totalCheckins)}</div>
         <div class="statLabel">${t("stat_checkins")}</div>
       </div>
       <div class="statCard">
-        <div class="statIcon">👥</div>
+        <div class="statIcon">ًں‘¥</div>
         <div class="statValue">${formatPoints(state.invitedCount)}</div>
         <div class="statLabel">${t("stat_invited")}</div>
       </div>
@@ -810,41 +810,41 @@ function renderHome() {
 
     <div class="earningList">
       <div class="earningItem" onclick="navigate('daily')">
-        <div class="earningIcon">◷</div>
+        <div class="earningIcon">â—·</div>
         <div class="earningBody">
           <div class="earningTitle">${t("earn_daily_title")}</div>
           <div class="earningSub">${state.canCheckIn ? t("earn_daily_sub_available") : t("earn_daily_sub_done")}</div>
         </div>
-        <div class="earningArrow">‹</div>
+        <div class="earningArrow">â€¹</div>
       </div>
       <div class="earningItem" onclick="navigate('tasks')">
-        <div class="earningIcon">✓</div>
+        <div class="earningIcon">âœ“</div>
         <div class="earningBody">
           <div class="earningTitle">${t("earn_tasks_title")}</div>
           <div class="earningSub">${t("earn_tasks_sub", { n: formatPoints(state.tasks.length) })}</div>
         </div>
-        <div class="earningArrow">‹</div>
+        <div class="earningArrow">â€¹</div>
       </div>
       <div class="earningItem" onclick="navigate('profile')">
-        <div class="earningIcon">👥</div>
+        <div class="earningIcon">ًں‘¥</div>
         <div class="earningBody">
           <div class="earningTitle">${t("earn_referral_title")}</div>
           <div class="earningSub">${t("earn_referral_sub")}</div>
         </div>
-        <div class="earningArrow">‹</div>
+        <div class="earningArrow">â€¹</div>
       </div>
       ${featuredTasks.map(task => {
         const status = completionStatus(task._id);
         const subLabel = status === "approved" ? t("task_status_done") : status === "pending" ? t("task_status_pending") : t("task_status_todo");
         return `
         <div class="earningItem" onclick="navigate('tasks')">
-          <div class="earningIcon">🎁</div>
+          <div class="earningIcon">ًںژپ</div>
           <div class="earningBody">
             <div class="earningTitle">${escapeHTML(task.title)}</div>
             <div class="earningSub">${subLabel}</div>
           </div>
           <div class="earningReward">+${formatPoints(task.reward)}</div>
-          <div class="earningArrow">‹</div>
+          <div class="earningArrow">â€¹</div>
         </div>`;
       }).join("")}
     </div>
@@ -852,7 +852,7 @@ function renderHome() {
 }
 
 /* ================= TASKS ================= */
-const TASK_ICONS = { channel: "📢", group: "👥", link: "🔗", custom: "🎁" };
+const TASK_ICONS = { channel: "ًں“¢", group: "ًں‘¥", link: "ًں”—", custom: "ًںژپ" };
 
 function openTaskLinkOnly(url) {
   if (!url) return;
@@ -861,7 +861,7 @@ function openTaskLinkOnly(url) {
 }
 window.openTaskLinkOnly = openTaskLinkOnly;
 
-/** تسک‌های تلگرامی: بررسی خودکار عضویت با API ربات */
+/** طھط³ع©â€Œظ‡ط§غŒ طھظ„ع¯ط±ط§ظ…غŒ: ط¨ط±ط±ط³غŒ ط®ظˆط¯ع©ط§ط± ط¹ط¶ظˆغŒطھ ط¨ط§ API ط±ط¨ط§طھ */
 async function verifyTelegramTask(taskId) {
   const button = document.querySelector(`[data-verify="${taskId}"]`);
   if (button) { button.disabled = true; button.textContent = t("task_action_verifying"); }
@@ -882,7 +882,7 @@ async function verifyTelegramTask(taskId) {
     if (error.code === "NOT_JOINED") {
       toast(t("toast_verify_needs_join"), "warning");
     } else if (error.code === "VERIFY_CONFIG_ERROR") {
-      // خطای واقعی تنظیمات (chatId اشتباه، ربات بدون دسترسی و ...) — پیام دقیق را نشان بده
+      // ط®ط·ط§غŒ ظˆط§ظ‚ط¹غŒ طھظ†ط¸غŒظ…ط§طھ (chatId ط§ط´طھط¨ط§ظ‡طŒ ط±ط¨ط§طھ ط¨ط¯ظˆظ† ط¯ط³طھط±ط³غŒ ظˆ ...) â€” ظ¾غŒط§ظ… ط¯ظ‚غŒظ‚ ط±ط§ ظ†ط´ط§ظ† ط¨ط¯ظ‡
       toast(error.message, "error");
     } else {
       toast(translateServerMessage(error.code, error.message), "error");
@@ -899,7 +899,7 @@ function renderTasks() {
     content.innerHTML = `
       <div class="sectionHeader"><h2 class="sectionTitle">${t("tasks_title")}</h2></div>
       <div class="card emptyState">
-        <div class="emptyIcon">🗂️</div>
+        <div class="emptyIcon">ًں—‚ï¸ڈ</div>
         <div class="emptyTitle">${t("tasks_empty_title")}</div>
         <div class="emptyDesc">${t("tasks_empty_desc")}</div>
       </div>
@@ -912,7 +912,7 @@ function renderTasks() {
     <div class="taskList">
       ${state.tasks.map(task => {
         const status = completionStatus(task._id);
-        const icon = TASK_ICONS[task.type] || "🎁";
+        const icon = TASK_ICONS[task.type] || "ًںژپ";
         const safeUrl = (task.url || "").replaceAll("'", "\\'");
         let actionHtml;
 
@@ -948,12 +948,12 @@ const WHEEL_SIZE = 260;
 const WHEEL_CENTER = WHEEL_SIZE / 2;
 
 const SPIN_SEGMENTS_UI = [
-  { icon: "🪙", value: "10", color1: "#8b5cf6", color2: "#6d28d9" },
-  { icon: "🪙", value: "20", color1: "#a78bfa", color2: "#7c3aed" },
-  { icon: "💎", value: "50", color1: "#f5c451", color2: "#c98a12" },
-  { icon: "🏆", value: "30", color1: "#22c55e", color2: "#15803d" },
-  { icon: "💨", value: "0", color1: "#3a3f4d", color2: "#1e2028" },
-  { icon: "🎡", value: "+1", color1: "#38bdf8", color2: "#0284c7" }
+  { icon: "ًںھ™", value: "10", color1: "#8b5cf6", color2: "#6d28d9" },
+  { icon: "ًںھ™", value: "20", color1: "#a78bfa", color2: "#7c3aed" },
+  { icon: "ًں’ژ", value: "50", color1: "#f5c451", color2: "#c98a12" },
+  { icon: "ًںڈ†", value: "30", color1: "#22c55e", color2: "#15803d" },
+  { icon: "ًں’¨", value: "0", color1: "#3a3f4d", color2: "#1e2028" },
+  { icon: "ًںژ،", value: "+1", color1: "#38bdf8", color2: "#0284c7" }
 ];
 
 let wheelRotation = 0;
@@ -967,7 +967,7 @@ function buildWheelGradient() {
   return `conic-gradient(from 0deg, ${stops.join(", ")})`;
 }
 
-/** برچسب‌ها داخل خودِ دیسک قرار می‌گیرند تا هنگام چرخش، همراه رنگ‌ها بچرخند */
+/** ط¨ط±ع†ط³ط¨â€Œظ‡ط§ ط¯ط§ط®ظ„ ط®ظˆط¯ظگ ط¯غŒط³ع© ظ‚ط±ط§ط± ظ…غŒâ€Œع¯غŒط±ظ†ط¯ طھط§ ظ‡ظ†ع¯ط§ظ… ع†ط±ط®ط´طŒ ظ‡ظ…ط±ط§ظ‡ ط±ظ†ع¯â€Œظ‡ط§ ط¨ع†ط±ط®ظ†ط¯ */
 function buildWheelLabels() {
   const step = 360 / SPIN_SEGMENTS_UI.length;
   const radius = WHEEL_CENTER - 46;
@@ -987,7 +987,7 @@ function buildWheelLabels() {
   }).join("");
 }
 
-/** نقطه‌های تزئینی نورانی دور کادر گردونه (ثابت، نمی‌چرخند) */
+/** ظ†ظ‚ط·ظ‡â€Œظ‡ط§غŒ طھط²ط¦غŒظ†غŒ ظ†ظˆط±ط§ظ†غŒ ط¯ظˆط± ع©ط§ط¯ط± ع¯ط±ط¯ظˆظ†ظ‡ (ط«ط§ط¨طھطŒ ظ†ظ…غŒâ€Œع†ط±ط®ظ†ط¯) */
 function buildWheelRingDots() {
   const count = 12;
   const radius = WHEEL_CENTER + 6;
@@ -1094,7 +1094,7 @@ async function doCheckIn() {
     state.nextResetAt = Number(result.nextResetAt) || state.nextResetAt;
 
     haptic("success");
-    toast(`+${formatPoints(result.earned)} ${t("points_unit")} 🎉`, "success");
+    toast(`+${formatPoints(result.earned)} ${t("points_unit")} ًںژ‰`, "success");
     if (result.gotSpin) {
       setTimeout(() => toast(t("spin_result_extra"), "success"), 1200);
     }
@@ -1119,7 +1119,7 @@ function renderDaily() {
     const isToday = state.canCheckIn && dayNumber === streakDays + 1;
     return `
       <div class="dayCell ${isFilled ? "filled" : ""} ${isToday ? "today" : ""}">
-        <span class="dayNum">${isFilled ? "✓" : dayNumber}</span>
+        <span class="dayNum">${isFilled ? "âœ“" : dayNumber}</span>
         <span>${t("day_label", { n: dayNumber })}</span>
       </div>`;
   }).join("");
@@ -1133,20 +1133,20 @@ function renderDaily() {
       </div>
       <div class="wheelOuter">
         <div class="wheelRingDots">${buildWheelRingDots()}</div>
-        <div class="wheelPointer">▼</div>
+        <div class="wheelPointer">â–¼</div>
         <div class="wheelDisc" id="wheelDisc" style="background:${buildWheelGradient()}">
           ${buildWheelLabels()}
         </div>
-        <div class="wheelHub"><span>✦</span></div>
+        <div class="wheelHub"><span>âœ¦</span></div>
       </div>
       <p style="font-size:11px;margin:14px 0 4px">${t("spin_chances_label")}: <b id="spinChancesValue">${formatPoints(state.spinChances)}</b></p>
       <button id="spinBtn" class="primaryBtn wheelSpinBtn" type="button" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">
-        🎡 ${t("spin_button")}
+        ًںژ، ${t("spin_button")}
       </button>
     </div>
 
     <div class="streakBox">
-      <div class="streakFire">🔥</div>
+      <div class="streakFire">ًں”¥</div>
       <div>
         <div class="streakValue">${formatPoints(state.streak)}</div>
         <div class="streakLabel">${t("streak_label")}</div>
@@ -1424,12 +1424,12 @@ function renderWallet() {
 
     <div class="walletBalanceGrid">
       <div class="walletBalanceCard gold">
-        <div class="walletBalanceIcon">🪙</div>
+        <div class="walletBalanceIcon">ًںھ™</div>
         <div class="walletBalanceLabel">${t("wallet_points_card_title")}</div>
         <div class="walletBalanceValue">${formatPoints(state.points)}</div>
       </div>
       <div class="walletBalanceCard blue">
-        <div class="walletBalanceIcon">💎</div>
+        <div class="walletBalanceIcon">ًں’ژ</div>
         <div class="walletBalanceLabel">${t("wallet_gram_card_title")}</div>
         <div class="walletBalanceValue">${formatNumber(state.gramBalance, 6)}</div>
       </div>
@@ -1437,21 +1437,21 @@ function renderWallet() {
 
     <div class="walletActionsGrid">
       <button class="walletActionBtn" type="button" onclick="showDeposit()">
-        <span class="walletActionIcon">＋</span>
+        <span class="walletActionIcon">ï¼‹</span>
         <span>${t("wallet_deposit_button")}</span>
       </button>
-      <button class="walletActionBtn" type="button" onclick="showGramToPoints()">
-        <span class="walletActionIcon">↔</span>
-        <span>${t("wallet_gram_to_points_button")}</span>
+      <button class="walletActionBtn" type="button" onclick="showExchange()">
+        <span class="walletActionIcon">â‡„</span>
+        <span>${t("wallet_exchange_button")}</span>
       </button>
       <button class="walletActionBtn" type="button" onclick="showWithdraw()">
-        <span class="walletActionIcon">➤</span>
+        <span class="walletActionIcon">â‍¤</span>
         <span>${t("wallet_withdraw_button")}</span>
       </button>
     </div>
 
     <div class="card">
-      <p style="font-size:11px;margin-bottom:0">${t("wallet_rate_label", { rate: formatNumber(state.rate, 6) })} • ${t("wallet_min_withdraw_note", { n: formatNumber(state.minWithdrawGram, 6) })}</p>
+      <p style="font-size:11px;margin-bottom:0">${t("wallet_rate_label", { rate: formatNumber(state.rate, 6) })} â€¢ ${t("wallet_min_withdraw_note", { n: formatNumber(state.minWithdrawGram, 6) })}</p>
     </div>
 
     <div class="card" id="withdrawHistoryCard">
@@ -1515,7 +1515,7 @@ function fallbackCopy(text, onDone) {
 function shareReferralLink() {
   const link = state.shareLink || state.referralCode;
   if (!link) return;
-  const text = "🎁";
+  const text = "ًںژپ";
   if (tg?.openTelegramLink) {
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
   } else if (navigator.share) {
@@ -1549,12 +1549,12 @@ async function loadTransactionHistory() {
 }
 
 function transactionTypeLabel(type) {
-  return t(`transaction_type_${type}`) || type || "—";
+  return t(`transaction_type_${type}`) || type || "â€”";
 }
 
 function transactionDate(value) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "â€”";
   const locale = state.language === "en" ? "en-US" : state.language === "ps" ? "ps-AF" : "fa-AF";
   return date.toLocaleString(locale, { dateStyle: "medium", timeStyle: "medium" });
 }
@@ -1571,16 +1571,16 @@ function renderProfileHistory() {
       : direction === "decrease"
         ? t("history_decrease")
         : t("history_neutral");
-    const sign = direction === "increase" ? "+" : direction === "decrease" ? "−" : "";
-    const transactionId = String(item.transactionId || item._id || "—");
-    const userId = String(item.userId || "—");
+    const sign = direction === "increase" ? "+" : direction === "decrease" ? "âˆ’" : "";
+    const transactionId = String(item.transactionId || item._id || "â€”");
+    const userId = String(item.userId || "â€”");
     return `
       <div class="transactionItem">
         <div class="transactionTop">
           <div class="transactionDescription">${escapeHTML(item.description || transactionTypeLabel(item.type))}</div>
           <div class="transactionAmount ${escapeHTML(direction)}">${sign}${amount} ${unitLabel}</div>
         </div>
-        <div class="transactionMeta historyMeta">${directionLabel} • ${escapeHTML(transactionTypeLabel(item.type))}</div>
+        <div class="transactionMeta historyMeta">${directionLabel} â€¢ ${escapeHTML(transactionTypeLabel(item.type))}</div>
         <div class="transactionDetails">
           <div>${escapeHTML(t("history_transaction_id"))}: ${escapeHTML(transactionId)}</div>
           <div>${escapeHTML(t("history_user_id"))}: ${escapeHTML(userId)}</div>
@@ -1593,7 +1593,7 @@ function renderProfileHistory() {
     <div class="sectionHeader">
       <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
       <h2 class="sectionTitle">${t("history_title")}</h2>
-      <button class="sectionMore" type="button" onclick="setProfileView('history')">↻</button>
+      <button class="sectionMore" type="button" onclick="setProfileView('history')">â†»</button>
     </div>
     <div class="card transactionList">
       ${rows || `<div class="emptyState" style="padding:24px 0"><div class="emptyDesc">${t("history_empty")}</div></div>`}
@@ -1615,36 +1615,36 @@ function renderProfileMenu() {
       </div>
       <div>
         <div class="profileNameLg">${escapeHTML(firstName)}</div>
-        <div class="profileSubLg">${formatPoints(state.points)} ${t("points_unit")} • ${formatPoints(state.invitedCount)}</div>
+        <div class="profileSubLg">${formatPoints(state.points)} ${t("points_unit")} â€¢ ${formatPoints(state.invitedCount)}</div>
       </div>
     </div>
 
     <div class="card">
       <div class="profileList">
         <div class="profileItem" onclick="setProfileView('referral')">
-          <div class="profileIcon">👥</div>
+          <div class="profileIcon">ًں‘¥</div>
           <div class="profileText">${t("menu_referral")}</div>
-          <div class="profileChevron">‹</div>
+          <div class="profileChevron">â€¹</div>
         </div>
         <div class="profileItem" onclick="setProfileView('leaderboard')">
-          <div class="profileIcon">🏆</div>
+          <div class="profileIcon">ًںڈ†</div>
           <div class="profileText">${t("menu_leaderboard")}</div>
-          <div class="profileChevron">‹</div>
+          <div class="profileChevron">â€¹</div>
         </div>
         <div class="profileItem" onclick="setProfileView('history')">
-          <div class="profileIcon">🧾</div>
+          <div class="profileIcon">ًں§¾</div>
           <div class="profileText">${t("menu_history")}</div>
-          <div class="profileChevron">‹</div>
+          <div class="profileChevron">â€¹</div>
         </div>
         <div class="profileItem" onclick="showTerms()">
-          <div class="profileIcon">📜</div>
+          <div class="profileIcon">ًں“œ</div>
           <div class="profileText">${t("menu_terms")}</div>
-          <div class="profileChevron">‹</div>
+          <div class="profileChevron">â€¹</div>
         </div>
         <div class="profileItem" onclick="showLanguageOverlay()">
-          <div class="profileIcon">🌐</div>
-          <div class="profileText">${t("menu_language")} — ${langNames[state.language]}</div>
-          <div class="profileChevron">‹</div>
+          <div class="profileIcon">ًںŒگ</div>
+          <div class="profileText">${t("menu_language")} â€” ${langNames[state.language]}</div>
+          <div class="profileChevron">â€¹</div>
         </div>
       </div>
     </div>
@@ -1652,7 +1652,7 @@ function renderProfileMenu() {
     <div class="card">
       <div class="themeRow">
         <div style="display:flex;align-items:center;gap:10px">
-          <span id="themeIcon">${theme === "dark" ? "🌙" : "☀️"}</span>
+          <span id="themeIcon">${theme === "dark" ? "ًںŒ™" : "âک€ï¸ڈ"}</span>
           <span id="themeLabel" style="font-size:13px;font-weight:700">${theme === "dark" ? t("theme_dark") : t("theme_light")}</span>
         </div>
         <div id="themeToggle" class="switchTrack" role="switch" aria-checked="${theme === "light"}" onclick="toggleTheme()">
@@ -1677,7 +1677,7 @@ function renderProfileReferral() {
         <div class="badge success">${t("referral_code_bonus_badge")}</div>
       </div>
       <div class="referralCodeBox">
-        <span class="referralCodeText">${escapeHTML(state.referralCode || "—")}</span>
+        <span class="referralCodeText">${escapeHTML(state.referralCode || "â€”")}</span>
         <button class="copyBtn" type="button" onclick="copyReferralLink()">${t("referral_copy_button")}</button>
       </div>
       <button class="primaryBtn" type="button" onclick="shareReferralLink()">${t("referral_share_button")}</button>
@@ -1697,8 +1697,8 @@ function renderProfileReferral() {
             return `
             <div class="historyItem" style="align-items:flex-start">
               <div>
-                <div class="historyAmount">${escapeHTML(person.firstName || person.username || "—")}</div>
-                <div class="historyMeta">${timeAgo(person.createdAt)} • ID ${escapeHTML(person.telegramId)}</div>
+                <div class="historyAmount">${escapeHTML(person.firstName || person.username || "â€”")}</div>
+                <div class="historyMeta">${timeAgo(person.createdAt)} â€¢ ID ${escapeHTML(person.telegramId)}</div>
               </div>
               ${statusHtml}
             </div>`;
@@ -1716,7 +1716,7 @@ function renderProfileLeaderboard() {
     return `
       <div class="leaderboardItem ${isMe ? "me" : ""}">
         <div class="rankBadge ${rankClass}">${formatPoints(rank)}</div>
-        <div class="leaderName">${escapeHTML(person.firstName || person.username || "—")}</div>
+        <div class="leaderName">${escapeHTML(person.firstName || person.username || "â€”")}</div>
         <div class="leaderPoints">${formatPoints(person.points)}</div>
       </div>`;
   }).join("");
@@ -1788,7 +1788,7 @@ async function renderCurrentTab() {
     console.error("Render tab failed:", error);
     $("#content").innerHTML = `
       <div class="card emptyState">
-        <div class="emptyIcon">⚠️</div>
+        <div class="emptyIcon">âڑ ï¸ڈ</div>
         <div class="emptyTitle">${t("error_title")}</div>
         <div class="emptyDesc">${escapeHTML(error.message || t("error_generic"))}</div>
         <button class="secondaryBtn" style="margin-top:14px" onclick="renderCurrentTab()">${t("retry_button")}</button>

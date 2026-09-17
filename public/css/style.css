@@ -430,7 +430,7 @@ html[data-theme="light"] .progressTrack { background: rgba(20,22,28,.08); }
 .walletBalanceCard.blue .walletBalanceValue { color: #38bdf8; }
 
 .walletActionsGrid {
-  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px;
 }
 .walletActionBtn {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
@@ -450,6 +450,17 @@ html[data-theme="light"] .progressTrack { background: rgba(20,22,28,.08); }
 .historyItem:last-child { border-bottom: 0; }
 .historyMeta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 .historyAmount { font-weight: 800; font-size: 13px; }
+.transactionItem { display: block; padding: 13px 2px; border-bottom: 1px solid var(--line); }
+.transactionItem:last-child { border-bottom: 0; }
+.transactionTop { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.transactionDescription { min-width: 0; font-size: 13px; font-weight: 800; }
+.transactionAmount { white-space: nowrap; font-size: 13px; font-weight: 900; }
+.transactionAmount.increase { color: var(--success); }
+.transactionAmount.decrease { color: var(--danger); }
+.transactionAmount.neutral { color: var(--text-muted); }
+.transactionDetails { display: grid; gap: 3px; margin-top: 7px; color: var(--text-muted); font: 10px/1.6 Consolas, monospace; direction: ltr; text-align: left; word-break: break-all; }
+.transactionDate { font-family: inherit; }
+.transactionType { color: var(--text-soft); font-family: inherit; }
 
 /* REFERRAL / PROFILE LIST */
 .referralCodeBox {

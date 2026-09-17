@@ -1315,6 +1315,77 @@ async function submitExchange() {
 }
 window.submitExchange = submitExchange;
 
+/* ---- Exchange: GRAM -> Points ---- */
+function showGramToPoints() {
+  if (state.gramBalance <= 0) {
+    toast(t("error_generic"), "warning");
+    return;
+  }
+  const overlay = $("#gramToPointsOverlay");
+  const input = $("#gramToPointsAmount");
+  const error = $("#gramToPointsError");
+  const title = $("#gramToPointsTitle");
+  const label = document.querySelector("#gramToPointsOverlay .fieldLabel");
+  const button = $("#submitGramToPoints");
+  if (input) input.value = "";
+  if (error) error.textContent = "";
+  if (title) title.textContent = t("gram_to_points_modal_title");
+  if (label) label.textContent = t("gram_to_points_label");
+  if (button) button.textContent = t("gram_to_points_submit");
+  updateGramToPointsPreview();
+  if (overlay) overlay.style.display = "flex";
+}
+window.showGramToPoints = showGramToPoints;
+
+function hideGramToPoints() {
+  const overlay = $("#gramToPointsOverlay");
+  if (overlay) overlay.style.display = "none";
+}
+window.hideGramToPoints = hideGramToPoints;
+
+function updateGramToPointsPreview() {
+  const input = $("#gramToPointsAmount");
+  const preview = $("#gramToPointsPreview");
+  if (!input || !preview) return;
+  const gram = Number(input.value) || 0;
+  const points = state.rate > 0 ? Math.floor(gram / state.rate) : 0;
+  preview.textContent = `${t("gram_to_points_result_label")}: ${formatPoints(points)}`;
+}
+window.updateGramToPointsPreview = updateGramToPointsPreview;
+
+async function submitGramToPoints() {
+  const input = $("#gramToPointsAmount");
+  const error = $("#gramToPointsError");
+  const button = $("#submitGramToPoints");
+  const gram = Number(input?.value);
+  if (!gram || gram <= 0 || gram > state.gramBalance) {
+    if (error) error.textContent = t("error_generic");
+    return;
+  }
+
+  if (button) button.disabled = true;
+  try {
+    const result = await api("/api/points/convert-to-points", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey("gram-to-points") },
+      body: { gram }
+    });
+    state.points = Number(result.points) ?? state.points;
+    state.gramBalance = Number(result.gramBalance) ?? state.gramBalance;
+    haptic("success");
+    toast(result.message, "success");
+    hideGramToPoints();
+    updateHeader();
+    renderWallet();
+  } catch (err) {
+    if (error) error.textContent = translateServerMessage(err.code, err.message);
+    haptic("error");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+window.submitGramToPoints = submitGramToPoints;
+
 /* ---- Deposit: placeholder ---- */
 function showDeposit() {
   const overlay = $("#depositOverlay");
@@ -1372,6 +1443,10 @@ function renderWallet() {
       <button class="walletActionBtn" type="button" onclick="showExchange()">
         <span class="walletActionIcon">⇄</span>
         <span>${t("wallet_exchange_button")}</span>
+      </button>
+      <button class="walletActionBtn" type="button" onclick="showGramToPoints()">
+        <span class="walletActionIcon">↔</span>
+        <span>${t("wallet_gram_to_points_button")}</span>
       </button>
       <button class="walletActionBtn" type="button" onclick="showWithdraw()">
         <span class="walletActionIcon">➤</span>

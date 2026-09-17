@@ -13,8 +13,6 @@ const auth = requireTelegramAuth(process.env.BOT_TOKEN);
 
 const MILESTONES = [
   { target: 5, reward: 10, field: 'reward5Awarded' },
-  { target: 15, reward: 10, field: 'reward15Awarded' },
-  { target: 30, reward: 20, field: 'reward30Awarded' }
 ];
 
 const adsgramBlockId = String(process.env.ADSGRAM_BLOCK_ID || '').trim();

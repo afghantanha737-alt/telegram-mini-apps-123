@@ -83,6 +83,7 @@ async function maybeAwardReferralBonus(userId, session) {
     referenceType: 'referred_user',
     referenceId: userId,
     idempotencyKey: `referral:${userId}`,
+    description: 'Referral reward',
     metadata: { approvedTasks: approvedCount },
     session
   });
@@ -184,6 +185,7 @@ router.post('/:id/claim', auth, async (req, res) => {
           referenceType: 'task_completion',
           referenceId: completion._id,
           idempotencyKey: `task:${u._id}:${task._id}`,
+          description: 'Task reward',
           metadata: { taskId: task._id, taskTitle: task.title },
           session
         });

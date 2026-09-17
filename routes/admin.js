@@ -189,7 +189,20 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
         referenceType: 'withdrawal',
         referenceId: withdrawal._id,
         idempotencyKey: `withdrawal:${withdrawal.requestId || withdrawal._id}:rejected`,
-        metadata: { status: 'rejected', gramReturned: withdrawal.cryptoAmount },
+        operationId: `withdrawal:${withdrawal.requestId || withdrawal._id}:rejected`,
+        recordPrimary: false,
+        description: 'Returned Gram after rejected withdrawal',
+        additionalTransactions: [{
+          delta: withdrawal.cryptoAmount,
+          unit: 'Gram',
+          type: 'withdrawal_audit',
+          referenceType: 'withdrawal',
+          referenceId: withdrawal._id,
+          idempotencyKey: `withdrawal:${withdrawal.requestId || withdrawal._id}:rejected`,
+          operationId: `withdrawal:${withdrawal.requestId || withdrawal._id}:rejected`,
+          description: 'Gram returned after rejected withdrawal',
+          metadata: { status: 'rejected', gramReturned: withdrawal.cryptoAmount }
+        }],
         session
       });
     });

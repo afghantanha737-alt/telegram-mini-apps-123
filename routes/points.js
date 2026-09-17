@@ -43,6 +43,30 @@ function nextResetTimestamp() {
   return (utcDayKey(new Date()) + 1) * 86400000;
 }
 
+function normalizeTransaction(entry, fallbackUserId = '') {
+  const delta = Number(entry.delta) || 0;
+  const unit = entry.unit === 'Gram' ? 'Gram' : 'Point';
+  return {
+    transactionId: String(entry._id),
+    operationId: entry.operationId || String(entry._id),
+    userId: entry.telegramId || fallbackUserId,
+    userObjectId: String(entry.user),
+    type: entry.type,
+    unit,
+    amount: Number(entry.amount ?? Math.abs(delta)),
+    delta,
+    direction: entry.direction || (delta === 0 ? 'neutral' : delta > 0 ? 'increase' : 'decrease'),
+    balanceAfter: Number(entry.balanceAfter) || 0,
+    pointsAfter: Number(entry.pointsAfter ?? (unit === 'Point' ? entry.balanceAfter : 0)) || 0,
+    gramAfter: Number(entry.gramAfter ?? (unit === 'Gram' ? entry.balanceAfter : 0)) || 0,
+    description: entry.description || entry.type,
+    referenceType: entry.referenceType || '',
+    referenceId: entry.referenceId || '',
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt
+  };
+}
+
 const SPIN_SEGMENTS = [
   { type: 'points', value: 10 },
   { type: 'points', value: 25 },
@@ -104,6 +128,7 @@ router.post('/checkin', auth, async (req, res) => {
         referenceType: 'checkin',
         referenceId: `${u._id}:${todayKey}`,
         idempotencyKey: `checkin:${u._id}:${todayKey}`,
+        description: 'Daily check-in reward',
         metadata: { dayKey: todayKey, streak, gotSpin },
         extraUpdate: {
           $inc: { totalCheckins: 1, spinChances: gotSpin ? 1 : 0 },
@@ -147,6 +172,7 @@ router.post('/spin', auth, async (req, res) => {
         referenceType: 'spin',
         referenceId: spinRequestId,
         idempotencyKey: spinRequestId,
+        description: 'Spin wheel reward',
         metadata: { segmentIndex, segmentType: segment.type, value: segment.value },
         extraFilter: { spinChances: { $gte: 1 } },
         extraUpdate: {
@@ -206,8 +232,18 @@ router.post('/exchange', auth, async (req, res) => {
         referenceType: 'exchange',
         referenceId: exchangeRequestId,
         idempotencyKey: exchangeRequestId,
+        description: 'Point to Gram conversion',
         metadata: { points, rate: settings.rate, gramGained },
         extraUpdate: { $inc: { gramBalance: gramGained } },
+        additionalTransactions: [{
+          delta: gramGained,
+          unit: 'Gram',
+          type: 'exchange',
+          description: 'Gram received from Point conversion',
+          idempotencyKey: `${exchangeRequestId}:gram`,
+          operationId: exchangeRequestId,
+          metadata: { points, rate: settings.rate, gramGained }
+        }],
         session
       });
       response = {
@@ -221,6 +257,71 @@ router.post('/exchange', auth, async (req, res) => {
     res.json(response);
   } catch (error) {
     sendRouteError(res, error, 'تبدیل پوینت انجام نشد.');
+  } finally {
+    await session.endSession();
+  }
+});
+
+// POST /api/points/convert-to-points — تبدیل موجودی GRAM به Point
+router.post('/convert-to-points', auth, async (req, res) => {
+  const settings = await Settings.getGlobal();
+  const requestedGram = Number(req.body?.gram || 0);
+  const gram = Number(requestedGram.toFixed(6));
+  if (!Number.isFinite(gram) || gram <= 0) {
+    return res.status(400).json({ success: false, message: 'مقدار GRAM نامعتبر است.', code: 'INVALID_AMOUNT' });
+  }
+  if (!Number.isFinite(settings.rate) || settings.rate <= 0) {
+    return res.status(400).json({ success: false, message: 'نرخ تبدیل تنظیم نشده است.', code: 'INVALID_RATE' });
+  }
+
+  const points = Math.floor(gram / settings.rate);
+  const gramSpent = Number((points * settings.rate).toFixed(6));
+  if (points <= 0 || gramSpent <= 0) {
+    return res.status(400).json({ success: false, message: 'مقدار GRAM برای دریافت Point کافی نیست.', code: 'INVALID_AMOUNT' });
+  }
+
+  const conversionRequestId = requestId(req, 'gram-to-points');
+  const session = await mongoose.startSession();
+  try {
+    let response;
+    await session.withTransaction(async () => {
+      const updated = await applyPointsChange({
+        userId: req.dbUser._id,
+        delta: points,
+        type: 'exchange',
+        referenceType: 'exchange',
+        referenceId: conversionRequestId,
+        idempotencyKey: conversionRequestId,
+        operationId: conversionRequestId,
+        description: 'Gram to Point conversion',
+        metadata: { points, rate: settings.rate, gramSpent },
+        extraFilter: { gramBalance: { $gte: gramSpent } },
+        extraUpdate: { $inc: { gramBalance: -gramSpent } },
+        additionalTransactions: [{
+          delta: -gramSpent,
+          unit: 'Gram',
+          type: 'exchange',
+          referenceType: 'exchange',
+          referenceId: conversionRequestId,
+          description: 'Gram spent for Point conversion',
+          idempotencyKey: `${conversionRequestId}:gram`,
+          operationId: conversionRequestId,
+          metadata: { points, rate: settings.rate, gramSpent }
+        }],
+        session
+      });
+      response = {
+        success: true,
+        message: `${gramSpent} GRAM به ${points} پوینت تبدیل شد.`,
+        points: updated.user.points,
+        gramBalance: Number(updated.user.gramBalance.toFixed(6)),
+        pointsGained: points,
+        gramSpent
+      };
+    });
+    res.json(response);
+  } catch (error) {
+    sendRouteError(res, error, 'تبدیل GRAM به پوینت انجام نشد.');
   } finally {
     await session.endSession();
   }
@@ -286,8 +387,21 @@ router.post('/withdraw', auth, async (req, res) => {
         type: 'withdrawal_audit',
         referenceType: 'withdrawal',
         referenceId: withdrawal._id,
-        idempotencyKey: `withdrawal:${withdrawalKey}`,
-        metadata: { amount, address: walletAddress, status: 'pending' },
+        idempotencyKey: `withdrawal:${withdrawalKey}:gram`,
+        operationId: withdrawalKey,
+        recordPrimary: false,
+        description: 'Gram withdrawal',
+        additionalTransactions: [{
+          delta: -amount,
+          unit: 'Gram',
+          type: 'withdrawal_audit',
+          referenceType: 'withdrawal',
+          referenceId: withdrawal._id,
+          description: 'Gram withdrawal request',
+          idempotencyKey: `withdrawal:${withdrawalKey}:gram`,
+          operationId: withdrawalKey,
+          metadata: { amount, address: walletAddress, status: 'pending' }
+        }],
         session
       });
 
@@ -317,7 +431,7 @@ router.get('/withdrawals', auth, async (req, res) => {
   }
 });
 
-router.get('/ledger', auth, async (req, res) => {
+async function listTransactions(req, res) {
   try {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
     const before = req.query.before ? new Date(req.query.before) : null;
@@ -328,10 +442,19 @@ router.get('/ledger', auth, async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
-    res.json({ success: true, entries, nextBefore: entries.length ? entries[entries.length - 1].createdAt : null });
+    const transactions = entries.map(entry => normalizeTransaction(entry, req.dbUser.telegramId));
+    res.json({
+      success: true,
+      transactions,
+      entries: transactions,
+      nextBefore: transactions.length ? transactions[transactions.length - 1].createdAt : null
+    });
   } catch (error) {
     sendRouteError(res, error);
   }
-});
+}
+
+router.get('/ledger', auth, listTransactions);
+router.get('/history', auth, listTransactions);
 
 module.exports = router;

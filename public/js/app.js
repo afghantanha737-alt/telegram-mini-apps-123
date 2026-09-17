@@ -1440,10 +1440,6 @@ function renderWallet() {
         <span class="walletActionIcon">＋</span>
         <span>${t("wallet_deposit_button")}</span>
       </button>
-      <button class="walletActionBtn" type="button" onclick="showExchange()">
-        <span class="walletActionIcon">⇄</span>
-        <span>${t("wallet_exchange_button")}</span>
-      </button>
       <button class="walletActionBtn" type="button" onclick="showGramToPoints()">
         <span class="walletActionIcon">↔</span>
         <span>${t("wallet_gram_to_points_button")}</span>

@@ -1245,6 +1245,36 @@ async function submitWithdraw() {
 }
 window.submitWithdraw = submitWithdraw;
 
+function showExchangeChooser() {
+  const overlay = $("#exchangeChooserOverlay");
+  const title = $("#exchangeChooserTitle");
+  const pointsToGram = $("#exchangePointsToGramButton");
+  const gramToPoints = $("#exchangeGramToPointsButton");
+  if (title) title.textContent = t("exchange_choose_title");
+  if (pointsToGram) pointsToGram.textContent = t("exchange_points_to_gram");
+  if (gramToPoints) gramToPoints.textContent = t("exchange_gram_to_points");
+  if (overlay) overlay.style.display = "flex";
+}
+window.showExchangeChooser = showExchangeChooser;
+
+function hideExchangeChooser() {
+  const overlay = $("#exchangeChooserOverlay");
+  if (overlay) overlay.style.display = "none";
+}
+window.hideExchangeChooser = hideExchangeChooser;
+
+function openPointsToGram() {
+  hideExchangeChooser();
+  showExchange();
+}
+window.openPointsToGram = openPointsToGram;
+
+function openGramToPoints() {
+  hideExchangeChooser();
+  showGramToPoints();
+}
+window.openGramToPoints = openGramToPoints;
+
 /* ---- Exchange: Points -> GRAM ---- */
 function showExchange() {
   if (state.points <= 0) {
@@ -1254,8 +1284,14 @@ function showExchange() {
   const overlay = $("#exchangeOverlay");
   const input = $("#exchangePoints");
   const error = $("#exchangeError");
+  const title = $("#exchangeTitle");
+  const label = document.querySelector("#exchangeOverlay .fieldLabel");
+  const button = $("#submitExchange");
   if (input) input.value = "";
   if (error) error.textContent = "";
+  if (title) title.textContent = t("exchange_modal_title");
+  if (label) label.textContent = t("exchange_points_label");
+  if (button) button.textContent = t("exchange_submit");
   updateExchangePreview();
   if (overlay) overlay.style.display = "flex";
 }
@@ -1440,13 +1476,9 @@ function renderWallet() {
         <span class="walletActionIcon">＋</span>
         <span>${t("wallet_deposit_button")}</span>
       </button>
-      <button class="walletActionBtn" type="button" onclick="showExchange()">
+      <button class="walletActionBtn" type="button" onclick="showExchangeChooser()">
         <span class="walletActionIcon">⇄</span>
         <span>${t("wallet_exchange_button")}</span>
-      </button>
-      <button class="walletActionBtn" type="button" onclick="showGramToPoints()">
-        <span class="walletActionIcon">↔</span>
-        <span>${t("wallet_gram_to_points_button")}</span>
       </button>
       <button class="walletActionBtn" type="button" onclick="showWithdraw()">
         <span class="walletActionIcon">➤</span>

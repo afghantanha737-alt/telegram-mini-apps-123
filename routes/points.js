@@ -24,11 +24,35 @@ function requestId(req, prefix) {
 }
 
 function sendRouteError(res, error, fallback = 'خطای سرور رخ داد.') {
-  console.error('Points route failed:', error);
+  const isDuplicate = error?.code === 11000 || error?.codeName === 'DuplicateKey';
+  const isValidation = error?.name === 'ValidationError';
+  const isTransactionUnavailable = /transaction numbers are only allowed|replica set|transactions are not supported/i.test(String(error?.message || ''));
+  const explicitCode = typeof error?.code === 'string' ? error.code : null;
+  const code = explicitCode || (
+    isDuplicate ? 'LEDGER_DUPLICATE' :
+    isValidation ? 'LEDGER_VALIDATION' :
+    isTransactionUnavailable ? 'TRANSACTION_UNAVAILABLE' :
+    'SERVER_ERROR'
+  );
+  console.error('Points route failed:', {
+    code,
+    name: error?.name,
+    message: error?.message,
+    keyPattern: error?.keyPattern,
+    keyValue: error?.keyValue
+  });
   return res.status(error.statusCode || 500).json({
     success: false,
-    code: error.code || 'SERVER_ERROR',
-    message: error.statusCode ? error.message : fallback
+    code,
+    message: error.statusCode
+      ? error.message
+      : isDuplicate
+        ? 'این تبدیل قبلاً ثبت شده یا با سابقه‌ی قدیمی تداخل دارد.'
+        : isValidation
+          ? 'ثبت سابقه‌ی تبدیل با داده‌های فعلی انجام نشد.'
+          : isTransactionUnavailable
+            ? 'ارتباط امن با دیتابیس برای تبدیل آماده نیست.'
+            : fallback
   });
 }
 
@@ -233,16 +257,17 @@ router.post('/exchange', auth, async (req, res) => {
         referenceId: exchangeRequestId,
         idempotencyKey: exchangeRequestId,
         description: 'Point to Gram conversion',
-        metadata: { points, rate: settings.rate, gramGained },
+        metadata: { points, rate: settings.rate, gramGained, conversionId: exchangeRequestId },
         extraUpdate: { $inc: { gramBalance: gramGained } },
         additionalTransactions: [{
           delta: gramGained,
           unit: 'Gram',
           type: 'exchange',
           description: 'Gram received from Point conversion',
+          referenceId: `${exchangeRequestId}:gram`,
           idempotencyKey: `${exchangeRequestId}:gram`,
-          operationId: exchangeRequestId,
-          metadata: { points, rate: settings.rate, gramGained }
+          operationId: `${exchangeRequestId}:gram`,
+          metadata: { points, rate: settings.rate, gramGained, conversionId: exchangeRequestId }
         }],
         session
       });
@@ -294,7 +319,7 @@ router.post('/convert-to-points', auth, async (req, res) => {
         idempotencyKey: conversionRequestId,
         operationId: conversionRequestId,
         description: 'Gram to Point conversion',
-        metadata: { points, rate: settings.rate, gramSpent },
+        metadata: { points, rate: settings.rate, gramSpent, conversionId: conversionRequestId },
         extraFilter: { gramBalance: { $gte: gramSpent } },
         extraUpdate: { $inc: { gramBalance: -gramSpent } },
         additionalTransactions: [{
@@ -302,11 +327,11 @@ router.post('/convert-to-points', auth, async (req, res) => {
           unit: 'Gram',
           type: 'exchange',
           referenceType: 'exchange',
-          referenceId: conversionRequestId,
+          referenceId: `${conversionRequestId}:gram`,
           description: 'Gram spent for Point conversion',
           idempotencyKey: `${conversionRequestId}:gram`,
-          operationId: conversionRequestId,
-          metadata: { points, rate: settings.rate, gramSpent }
+          operationId: `${conversionRequestId}:gram`,
+          metadata: { points, rate: settings.rate, gramSpent, conversionId: conversionRequestId }
         }],
         session
       });

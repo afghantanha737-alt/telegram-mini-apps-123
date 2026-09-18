@@ -82,6 +82,9 @@ async function applyPointsChange({
 
   if (!user) {
     if (amount < 0) throw operationError('INSUFFICIENT_POINTS', 'موجودی پوینت کافی نیست.');
+    if (Object.prototype.hasOwnProperty.call(extraFilter, 'gramBalance')) {
+      throw operationError('INSUFFICIENT_BALANCE', 'موجودی GRAM کافی نیست.');
+    }
     throw operationError('USER_NOT_FOUND', 'کاربر پیدا نشد.');
   }
 

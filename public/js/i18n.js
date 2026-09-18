@@ -427,8 +427,11 @@ const TRANSLATIONS = {
 const ERROR_CODE_MAP = {
   ALREADY_CHECKED_IN: { fa: "امروز قبلاً ورود روزانه ثبت شده است.", ps: "نن دی مخکې ثبت شوی.", en: "You've already checked in today." },
   INVALID_AMOUNT: { fa: "مقدار پوینت نامعتبر است.", ps: "د پوائن اندازه سمه نه ده.", en: "Invalid points amount." },
+  INVALID_RATE: { fa: "نرخ تبدیل تنظیم نشده است.", ps: "د بدلولو نرخ نه دی تنظیم شوی.", en: "Conversion rate is not configured." },
   INVALID_ADDRESS: { fa: "آدرس کیف پول نامعتبر است.", ps: "د والټ آدرس سم نه دی.", en: "Invalid wallet address." },
   INSUFFICIENT_BALANCE: { fa: "موجودی کافی نیست.", ps: "بیلانس کافي نه دی.", en: "Insufficient balance." },
+  INSUFFICIENT_POINTS: { fa: "موجودی پوینت کافی نیست.", ps: "د پوائنونو بیلانس کافي نه دی.", en: "Insufficient points." },
+  USER_NOT_FOUND: { fa: "کاربر پیدا نشد.", ps: "کارن ونه موندل شو.", en: "User not found." },
   ALREADY_DONE: { fa: "این تسک قبلاً انجام شده است.", ps: "دا دنده مخکې ترسره شوې ده.", en: "This task is already completed." },
   NOT_JOINED: { fa: "هنوز عضویت شما تأیید نشد. اول عضو شو، بعد دوباره «بررسی» بزن.", ps: "غړیتوب لا تایید نه دی. لومړی غړی شئ.", en: "Membership not verified yet. Join first, then verify again." },
   NO_SPINS: { fa: "شانس چرخ‌گردون نداری.", ps: "هېڅ چانس نلرئ.", en: "No spin chances left." },

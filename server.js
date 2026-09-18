@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 const { createRateLimiter } = require('./utils/rateLimit');
+const PointsLedger = require('./models/PointsLedger');
 
 const app = express();
 
@@ -128,6 +129,15 @@ async function startServer() {
     // userId/taskId که در مدل فعلی وجود ندارند و باعث خطای duplicate
     // key کاذب می‌شوند).
     await cleanupStaleIndexes();
+
+    // Make sure the ledger collection exists before the first MongoDB
+    // transaction tries to insert a conversion or reward entry.
+    try {
+      await PointsLedger.createCollection();
+    } catch (error) {
+      if (error.code !== 48 && error.codeName !== 'NamespaceExists') throw error;
+    }
+    await PointsLedger.init();
 
     const backfillOpeningBalances = require('./utils/ledgerBackfill');
     await backfillOpeningBalances();

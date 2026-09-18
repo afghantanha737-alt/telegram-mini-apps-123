@@ -137,6 +137,7 @@ async function startServer() {
     } catch (error) {
       if (error.code !== 48 && error.codeName !== 'NamespaceExists') throw error;
     }
+    await cleanupLedgerIndexes();
     await PointsLedger.init();
 
     const backfillOpeningBalances = require('./utils/ledgerBackfill');
@@ -177,6 +178,35 @@ async function cleanupStaleIndexes() {
     // این عملیات صرفاً پاک‌سازی است؛ اگر کالکشن هنوز وجود ندارد یا خطای
     // بی‌ضرر دیگری رخ دهد، نباید جلوی بالا آمدن سرور را بگیرد.
     console.warn('Index cleanup skipped (non-fatal):', error.message);
+  }
+}
+
+async function cleanupLedgerIndexes() {
+  try {
+    const collection = mongoose.connection.collection('pointsledgers');
+    const indexes = await collection.indexes();
+
+    for (const index of indexes) {
+      if (index.name === '_id_') continue;
+
+      const fields = Object.keys(index.key || {});
+      const isSafeIdempotencyIndex =
+        fields.length === 1 &&
+        fields[0] === 'idempotencyKey' &&
+        index.unique === true &&
+        index.sparse === true;
+
+      // Old deployments may have made operation/reference indexes unique.
+      // A conversion intentionally creates two rows with shared references.
+      if (index.unique && !isSafeIdempotencyIndex) {
+        await collection.dropIndex(index.name);
+        console.log(`🧹 Dropped unsafe ledger index "${index.name}"`);
+      }
+    }
+  } catch (error) {
+    if (error.codeName !== 'NamespaceNotFound' && error.code !== 26) {
+      console.warn('Ledger index cleanup skipped:', error.message);
+    }
   }
 }
 

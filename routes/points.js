@@ -129,33 +129,75 @@ router.post('/spin', auth, async (req, res) => {
 });
 
 /**
- * POST /api/points/exchange — تبدیل پوینت به موجودی GRAM
+ * POST /api/points/exchange — تبدیل دوطرفه پوینت <-> موجودی GRAM
  * (بر اساس نرخ فعلی؛ این مبلغ بعداً از طریق «برداشت» قابل خارج شدن است)
+ * body: { direction: 'points_to_gram' | 'gram_to_points', amount }
+ * برای سازگاری با نسخه‌ی قبلی، body.points هم به‌عنوان amount برای points_to_gram پذیرفته می‌شود.
  */
 router.post('/exchange', auth, async (req, res) => {
   const u = req.dbUser;
   const settings = await Settings.getGlobal();
-  const points = Math.floor(Number((req.body && req.body.points) || 0));
+  const body = req.body || {};
+  const direction = body.direction === 'gram_to_points' ? 'gram_to_points' : 'points_to_gram';
 
-  if (!points || points <= 0) {
-    return res.status(400).json({ success: false, message: 'مقدار پوینت نامعتبر است.', code: 'INVALID_AMOUNT' });
+  if (direction === 'points_to_gram') {
+    const points = Math.floor(Number(body.amount != null ? body.amount : body.points) || 0);
+
+    if (!points || points <= 0) {
+      return res.status(400).json({ success: false, message: 'مقدار پوینت نامعتبر است.', code: 'INVALID_AMOUNT' });
+    }
+    if (points > u.points) {
+      return res.status(400).json({ success: false, message: 'موجودی پوینت کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
+    }
+
+    const gramGained = Number((points * settings.rate).toFixed(6));
+
+    u.points -= points;
+    u.gramBalance = Number((u.gramBalance + gramGained).toFixed(6));
+    await u.save();
+
+    return res.json({
+      success: true,
+      direction,
+      message: `${points} پوینت به ${gramGained} GRAM تبدیل شد.`,
+      points: u.points,
+      gramBalance: u.gramBalance,
+      gramGained
+    });
   }
-  if (points > u.points) {
-    return res.status(400).json({ success: false, message: 'موجودی پوینت کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
+
+  // direction === 'gram_to_points'
+  const gram = Number(body.amount || 0);
+
+  if (!gram || gram <= 0) {
+    return res.status(400).json({ success: false, message: 'مقدار GRAM نامعتبر است.', code: 'INVALID_AMOUNT' });
+  }
+  if (gram > u.gramBalance) {
+    return res.status(400).json({ success: false, message: 'موجودی GRAM کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
+  }
+  if (!settings.rate || settings.rate <= 0) {
+    return res.status(400).json({ success: false, message: 'نرخ تبدیل نامعتبر است.', code: 'INVALID_RATE' });
   }
 
-  const gramGained = Number((points * settings.rate).toFixed(6));
+  const pointsGained = Math.floor(gram / settings.rate);
 
-  u.points -= points;
-  u.gramBalance = Number((u.gramBalance + gramGained).toFixed(6));
+  if (pointsGained <= 0) {
+    return res.status(400).json({ success: false, message: 'مقدار GRAM برای تبدیل بسیار کم است.', code: 'INVALID_AMOUNT' });
+  }
+
+  const gramSpent = Number((pointsGained * settings.rate).toFixed(6));
+
+  u.gramBalance = Number((u.gramBalance - gramSpent).toFixed(6));
+  u.points += pointsGained;
   await u.save();
 
   res.json({
     success: true,
-    message: `${points} پوینت به ${gramGained} GRAM تبدیل شد.`,
+    direction,
+    message: `${gramSpent} GRAM به ${pointsGained} پوینت تبدیل شد.`,
     points: u.points,
     gramBalance: u.gramBalance,
-    gramGained
+    pointsGained
   });
 });
 

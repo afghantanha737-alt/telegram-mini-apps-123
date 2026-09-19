@@ -53,10 +53,9 @@ router.post('/webhook', async (req, res) => {
         });
 
         if (referredBy) {
-          const REFERRAL_BONUS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
-          await User.findByIdAndUpdate(referredBy, {
-            $inc: { points: REFERRAL_BONUS, invitedCount: 1 }
-          });
+          // پاداش اینجا داده نمی‌شود — فقط بعد از تکمیل حداقل تعداد تسک لازم
+          // توسط همین کاربر جدید (در routes/tasks.js) پرداخت می‌شود.
+          await User.findByIdAndUpdate(referredBy, { $inc: { invitedCount: 1 } });
         }
       }
 

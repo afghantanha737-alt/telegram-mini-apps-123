@@ -27,18 +27,19 @@ const state = {
   language: "fa",
   user: null,
   points: 0,
-  estimatedCryptoValue: 0,
+  gramBalance: 0,
   rate: 0,
   streak: 0,
   canCheckIn: false,
   spinChances: 0,
   totalCheckins: 0,
-  minWithdrawPoints: 1000,
+  minWithdrawGram: 0,
   nextResetAt: 0,
   referralCode: "",
   shareLink: "",
   invitedCount: 0,
   invited: [],
+  referralMinTasks: 2,
   tasks: [],
   completions: [],
   leaderboard: [],
@@ -166,11 +167,22 @@ async function api(url, options = {}) {
   const initData = getInitData();
   const finalUrl = `${url}${separator}initData=${encodeURIComponent(initData)}`;
 
+  // اگر سرور بیش از حد کند شد (مثلاً سرویس رایگان تازه بیدار شده)،
+  // درخواست بعد از ۲۰ ثانیه خودش قطع می‌شود تا دکمه هیچ‌وقت برای همیشه گیر نکند.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 40000);
+  config.signal = controller.signal;
+
   let response;
   try {
     response = await fetch(finalUrl, config);
   } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error(t("error_generic") + " (Timeout)");
+    }
     throw new Error(t("error_generic"));
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   let data = null;
@@ -401,13 +413,13 @@ async function bootstrapAuth() {
 async function loadUserData() {
   const data = await api("/api/points/me");
   state.points = Number(data?.points) || 0;
-  state.estimatedCryptoValue = Number(data?.estimatedCryptoValue) || 0;
+  state.gramBalance = Number(data?.gramBalance) || 0;
   state.rate = Number(data?.rate) || 0;
   state.streak = Number(data?.streak) || 0;
   state.canCheckIn = Boolean(data?.canCheckIn);
   state.spinChances = Number(data?.spinChances) || 0;
   state.totalCheckins = Number(data?.totalCheckins) || 0;
-  state.minWithdrawPoints = Number(data?.minWithdrawPoints) || 1000;
+  state.minWithdrawGram = Number(data?.minWithdrawGram) || 0;
   state.nextResetAt = Number(data?.nextResetAt) || 0;
   if (data?.firstName) state.user = { ...(state.user || {}), first_name: data.firstName };
   updateHeader();
@@ -420,6 +432,7 @@ async function loadReferralData() {
     state.shareLink = data?.shareLink || "";
     state.invitedCount = Number(data?.invitedCount) || 0;
     state.invited = Array.isArray(data?.invited) ? data.invited : [];
+    state.referralMinTasks = Number(data?.referralMinTasks) || 2;
   } catch (error) {
     console.warn("Referral data failed:", error);
   }
@@ -467,30 +480,14 @@ function renderHome() {
 
   const content = $("#content");
   content.innerHTML = `
-    <section class="hero">
-      <div class="heroTop">
-        <div>
-          <div class="heroEyebrow">${t("hero_eyebrow")}</div>
-          <h1 class="heroTitle">${t("hero_title_line1")}<br>${t("hero_title_line2")}</h1>
-          <p class="heroDescription">${t("hero_desc")}</p>
-        </div>
-        <div class="badge gold">${t("level_label", { n: formatPoints(currentLevel) })}</div>
+    <section class="hero heroFlat">
+      <div class="heroFlatTop">
+        <span class="heroFlatLabel">${t("wallet_balance_title")}</span>
+        <span class="levelPillFlat">${t("level_label", { n: formatPoints(currentLevel) })}</span>
       </div>
-      <div class="heroBalance">
-        <div class="balanceLabel">${t("wallet_balance_title")}</div>
-        <div class="balanceValue">${formatPoints(state.points)} <span class="balanceUnit">${t("points_unit").toUpperCase()}</span></div>
-      </div>
-      <div class="progressWrap">
-        <div class="progressMeta">
-          <span>${t("progress_label")}</span>
-          <span>${formatPoints(state.points)} / ${formatPoints(nextLevel)}</span>
-        </div>
-        <div class="progressTrack"><div class="progressBar" style="width:${levelProgress}%"></div></div>
-      </div>
-      <div class="heroActions">
-        <button class="heroAction" type="button" onclick="navigate('tasks')">${t("hero_action_earn")}</button>
-        <button class="heroAction" type="button" onclick="navigate('wallet')">${t("hero_action_wallet")}</button>
-      </div>
+      <p class="heroFlatBalance">${formatPoints(state.points)} <span class="heroFlatUnit">${t("points_unit").toUpperCase()}</span></p>
+      <div class="progressTrack"><div class="progressBar" style="width:${levelProgress}%"></div></div>
+      <p class="heroFlatCaption">${formatPoints(state.points)} ${t("progress_label")} ${formatPoints(nextLevel)}</p>
     </section>
 
     <div class="statsGrid">
@@ -586,6 +583,9 @@ async function verifyTelegramTask(taskId) {
     haptic("error");
     if (error.code === "NOT_JOINED") {
       toast(t("toast_verify_needs_join"), "warning");
+    } else if (error.code === "VERIFY_CONFIG_ERROR") {
+      // خطای واقعی تنظیمات (chatId اشتباه، ربات بدون دسترسی و ...) — پیام دقیق را نشان بده
+      toast(error.message, "error");
     } else {
       toast(translateServerMessage(error.code, error.message), "error");
     }
@@ -593,38 +593,6 @@ async function verifyTelegramTask(taskId) {
   }
 }
 window.verifyTelegramTask = verifyTelegramTask;
-
-/** تسک‌های دستی: انتخاب فایل -> آپلود خودکار اسکرین‌شات */
-function triggerProofUpload(taskId) {
-  const input = document.getElementById(`proofInput-${taskId}`);
-  if (input) input.click();
-}
-window.triggerProofUpload = triggerProofUpload;
-
-async function handleProofFileChange(taskId, inputEl) {
-  const file = inputEl.files && inputEl.files[0];
-  if (!file) return;
-
-  const button = document.querySelector(`[data-upload="${taskId}"]`);
-  if (button) { button.disabled = true; button.textContent = t("task_action_uploading"); }
-
-  try {
-    const formData = new FormData();
-    formData.append("proof", file);
-    const result = await apiUpload(`/api/tasks/${taskId}/submit-proof`, formData);
-    haptic("success");
-    toast(t("toast_proof_sent"), "success");
-    await loadTasks();
-    renderTasks();
-  } catch (error) {
-    haptic("error");
-    toast(translateServerMessage(error.code, error.message), "error");
-    if (button) { button.disabled = false; button.textContent = t("task_action_upload"); }
-  } finally {
-    inputEl.value = "";
-  }
-}
-window.handleProofFileChange = handleProofFileChange;
 
 function renderTasks() {
   const content = $("#content");
@@ -654,19 +622,11 @@ function renderTasks() {
           actionHtml = `<button class="taskAction done" disabled>${t("task_btn_done")}</button>`;
         } else if (status === "pending") {
           actionHtml = `<button class="taskAction pending" disabled>${t("task_btn_pending")}</button>`;
-        } else if (task.verifyType === "telegram") {
-          actionHtml = `
-            <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
-              ${task.url ? `<button class="taskAction" style="background:var(--surface-3);color:var(--text)" onclick="openTaskLinkOnly('${safeUrl}')">${t("task_action_open")}</button>` : ""}
-              <button class="taskAction" data-verify="${task._id}" onclick="verifyTelegramTask('${task._id}')">${t("task_action_verify")}</button>
-            </div>`;
         } else {
           actionHtml = `
             <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
               ${task.url ? `<button class="taskAction" style="background:var(--surface-3);color:var(--text)" onclick="openTaskLinkOnly('${safeUrl}')">${t("task_action_open")}</button>` : ""}
-              <input type="file" accept="image/*" capture="environment" id="proofInput-${task._id}" style="display:none"
-                onchange="handleProofFileChange('${task._id}', this)">
-              <button class="taskAction" data-upload="${task._id}" onclick="triggerProofUpload('${task._id}')">${t("task_action_upload")}</button>
+              <button class="taskAction" data-verify="${task._id}" onclick="verifyTelegramTask('${task._id}')">${t("task_action_verify")}</button>
             </div>`;
         }
 
@@ -686,33 +646,61 @@ function renderTasks() {
 }
 
 /* ================= DAILY + SPIN WHEEL ================= */
+const WHEEL_SIZE = 260;
+const WHEEL_CENTER = WHEEL_SIZE / 2;
+
 const SPIN_SEGMENTS_UI = [
-  { label: "2", color: "#8b5cf6" },
-  { label: "5", color: "#a78bfa" },
-  { label: "15", color: "#f5c451" },
-  { label: "20", color: "#22c55e" },
-  { label: "0", color: "#3a3f4d" },
-  { label: "🎡", color: "#38bdf8" }
+  { icon: "🪙", value: "2", color1: "#8b5cf6", color2: "#6d28d9" },
+  { icon: "🪙", value: "5", color1: "#a78bfa", color2: "#7c3aed" },
+  { icon: "💎", value: "15", color1: "#f5c451", color2: "#c98a12" },
+  { icon: "🏆", value: "20", color1: "#22c55e", color2: "#15803d" },
+  { icon: "💨", value: "0", color1: "#3a3f4d", color2: "#1e2028" },
+  { icon: "🎡", value: "+1", color1: "#38bdf8", color2: "#0284c7" }
 ];
 
 let wheelRotation = 0;
 
 function buildWheelGradient() {
   const step = 360 / SPIN_SEGMENTS_UI.length;
-  const stops = SPIN_SEGMENTS_UI.map((seg, i) => `${seg.color} ${i * step}deg ${(i + 1) * step}deg`);
+  const stops = SPIN_SEGMENTS_UI.map((seg, i) => {
+    const mid = i * step + step / 2;
+    return `${seg.color1} ${i * step}deg ${mid}deg, ${seg.color2} ${mid}deg ${(i + 1) * step}deg`;
+  });
   return `conic-gradient(from 0deg, ${stops.join(", ")})`;
 }
 
+/** برچسب‌ها داخل خودِ دیسک قرار می‌گیرند تا هنگام چرخش، همراه رنگ‌ها بچرخند */
 function buildWheelLabels() {
   const step = 360 / SPIN_SEGMENTS_UI.length;
-  const radius = 78;
+  const radius = WHEEL_CENTER - 46;
   return SPIN_SEGMENTS_UI.map((seg, i) => {
     const angleDeg = i * step + step / 2;
     const angleRad = (angleDeg - 90) * (Math.PI / 180);
-    const x = 110 + radius * Math.cos(angleRad);
-    const y = 110 + radius * Math.sin(angleRad);
-    return `<span class="wheelLabel" style="left:${x}px;top:${y}px">${seg.label}</span>`;
+    const x = WHEEL_CENTER + radius * Math.cos(angleRad);
+    const y = WHEEL_CENTER + radius * Math.sin(angleRad);
+    const isSpin = seg.value === "+1";
+    return `
+      <span class="wheelLabel" style="left:${x}px;top:${y}px;transform:translate(-50%,-50%) rotate(${angleDeg}deg)">
+        <span class="wheelLabelInner" style="transform:rotate(${-angleDeg}deg)">
+          <span class="wheelIcon">${seg.icon}</span>
+          <span class="wheelValue">${seg.value}${isSpin ? "" : ""}</span>
+        </span>
+      </span>`;
   }).join("");
+}
+
+/** نقطه‌های تزئینی نورانی دور کادر گردونه (ثابت، نمی‌چرخند) */
+function buildWheelRingDots() {
+  const count = 12;
+  const radius = WHEEL_CENTER + 6;
+  let dots = "";
+  for (let i = 0; i < count; i++) {
+    const angleRad = (i * (360 / count)) * (Math.PI / 180);
+    const x = WHEEL_CENTER + radius * Math.cos(angleRad);
+    const y = WHEEL_CENTER + radius * Math.sin(angleRad);
+    dots += `<span class="wheelDot" style="left:${x}px;top:${y}px"></span>`;
+  }
+  return dots;
 }
 
 function spinWheelTargetRotation(index) {
@@ -840,13 +828,16 @@ function renderDaily() {
         <div class="cardTitle">${t("spin_title")}</div>
       </div>
       <div class="wheelOuter">
+        <div class="wheelRingDots">${buildWheelRingDots()}</div>
         <div class="wheelPointer">▼</div>
-        <div class="wheelDisc" id="wheelDisc" style="background:${buildWheelGradient()}"></div>
-        <div class="wheelLabels">${buildWheelLabels()}</div>
+        <div class="wheelDisc" id="wheelDisc" style="background:${buildWheelGradient()}">
+          ${buildWheelLabels()}
+        </div>
+        <div class="wheelHub"><span>✦</span></div>
       </div>
-      <p style="font-size:11px;margin:12px 0 4px">${t("spin_chances_label")}: <b id="spinChancesValue">${formatPoints(state.spinChances)}</b></p>
-      <button id="spinBtn" class="primaryBtn" type="button" style="margin-top:8px" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">
-        ${t("spin_button")}
+      <p style="font-size:11px;margin:14px 0 4px">${t("spin_chances_label")}: <b id="spinChancesValue">${formatPoints(state.spinChances)}</b></p>
+      <button id="spinBtn" class="primaryBtn wheelSpinBtn" type="button" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">
+        🎡 ${t("spin_button")}
       </button>
     </div>
 
@@ -886,8 +877,8 @@ function renderDaily() {
 
 /* ================= WALLET ================= */
 function showWithdraw() {
-  if (state.points < state.minWithdrawPoints) {
-    toast(t("wallet_min_withdraw_note", { n: formatPoints(state.minWithdrawPoints) }), "warning");
+  if (state.gramBalance < state.minWithdrawGram) {
+    toast(t("wallet_min_withdraw_note", { n: formatNumber(state.minWithdrawGram, 6) }), "warning");
     return;
   }
   const overlay = $("#withdrawOverlay");
@@ -908,15 +899,15 @@ function hideWithdraw() {
 window.hideWithdraw = hideWithdraw;
 
 async function submitWithdraw() {
-  const pointsInput = $("#withdrawPoints");
+  const gramInput = $("#withdrawPoints");
   const addressInput = $("#withdrawAddress");
   const error = $("#withdrawError");
   const button = $("#submitWithdraw");
 
-  const points = Number(pointsInput?.value);
+  const gram = Number(gramInput?.value);
   const address = String(addressInput?.value || "").trim();
 
-  if (!points || points <= 0) {
+  if (!gram || gram <= 0) {
     if (error) error.textContent = t("error_generic");
     return;
   }
@@ -927,8 +918,8 @@ async function submitWithdraw() {
 
   if (button) button.disabled = true;
   try {
-    const result = await api("/api/points/withdraw", { method: "POST", body: { points, address } });
-    state.points = Number(result.points) || state.points;
+    const result = await api("/api/points/withdraw", { method: "POST", body: { gram, address } });
+    state.gramBalance = Number(result.gramBalance) ?? state.gramBalance;
     haptic("success");
     toast(result.message, "success");
     hideWithdraw();
@@ -942,6 +933,87 @@ async function submitWithdraw() {
   }
 }
 window.submitWithdraw = submitWithdraw;
+
+/* ---- Exchange: Points -> GRAM ---- */
+function showExchange() {
+  if (state.points <= 0) {
+    toast(t("error_generic"), "warning");
+    return;
+  }
+  const overlay = $("#exchangeOverlay");
+  const input = $("#exchangePoints");
+  const error = $("#exchangeError");
+  if (input) input.value = "";
+  if (error) error.textContent = "";
+  updateExchangePreview();
+  if (overlay) overlay.style.display = "flex";
+}
+window.showExchange = showExchange;
+
+function hideExchange() {
+  const overlay = $("#exchangeOverlay");
+  if (overlay) overlay.style.display = "none";
+}
+window.hideExchange = hideExchange;
+
+function updateExchangePreview() {
+  const input = $("#exchangePoints");
+  const preview = $("#exchangePreview");
+  if (!input || !preview) return;
+  const points = Number(input.value) || 0;
+  const gram = points * state.rate;
+  preview.textContent = `${t("exchange_result_label")}: ${formatNumber(gram, 6)} GRAM`;
+}
+window.updateExchangePreview = updateExchangePreview;
+
+async function submitExchange() {
+  const input = $("#exchangePoints");
+  const error = $("#exchangeError");
+  const button = $("#submitExchange");
+
+  const points = Number(input?.value);
+  if (!points || points <= 0) {
+    if (error) error.textContent = t("error_generic");
+    return;
+  }
+  if (points > state.points) {
+    if (error) error.textContent = t("error_generic");
+    return;
+  }
+
+  if (button) button.disabled = true;
+  try {
+    const result = await api("/api/points/exchange", { method: "POST", body: { points } });
+    state.points = Number(result.points) ?? state.points;
+    state.gramBalance = Number(result.gramBalance) ?? state.gramBalance;
+    haptic("success");
+    toast(result.message, "success");
+    hideExchange();
+    updateHeader();
+    renderWallet();
+  } catch (err) {
+    if (error) error.textContent = translateServerMessage(err.code, err.message);
+    haptic("error");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+window.submitExchange = submitExchange;
+
+/* ---- Deposit: placeholder ---- */
+function showDeposit() {
+  const overlay = $("#depositOverlay");
+  const message = $("#depositMessage");
+  if (message) message.textContent = t("deposit_coming_soon");
+  if (overlay) overlay.style.display = "flex";
+}
+window.showDeposit = showDeposit;
+
+function hideDeposit() {
+  const overlay = $("#depositOverlay");
+  if (overlay) overlay.style.display = "none";
+}
+window.hideDeposit = hideDeposit;
 
 let walletHistory = [];
 async function loadWalletHistory() {
@@ -964,22 +1036,36 @@ function renderWallet() {
   content.innerHTML = `
     <div class="sectionHeader"><h2 class="sectionTitle">${t("wallet_title")}</h2></div>
 
-    <section class="walletHero card">
-      <div class="balanceLabel">${t("wallet_estimated_value")}</div>
-      <div class="walletCryptoValue">${formatNumber(state.estimatedCryptoValue)}</div>
-      <div class="walletRate">${t("wallet_rate_label", { rate: formatNumber(state.rate, 6) })}</div>
-      <div class="walletActions">
-        <button class="primaryBtn" type="button" onclick="showWithdraw()">${t("wallet_withdraw_button")}</button>
-        <button class="secondaryBtn" type="button" onclick="navigate('tasks')">${t("wallet_increase_button")}</button>
+    <div class="walletBalanceGrid">
+      <div class="walletBalanceCard gold">
+        <div class="walletBalanceIcon">🪙</div>
+        <div class="walletBalanceLabel">${t("wallet_points_card_title")}</div>
+        <div class="walletBalanceValue">${formatPoints(state.points)}</div>
       </div>
-    </section>
+      <div class="walletBalanceCard blue">
+        <div class="walletBalanceIcon">💎</div>
+        <div class="walletBalanceLabel">${t("wallet_gram_card_title")}</div>
+        <div class="walletBalanceValue">${formatNumber(state.gramBalance, 6)}</div>
+      </div>
+    </div>
+
+    <div class="walletActionsGrid">
+      <button class="walletActionBtn" type="button" onclick="showDeposit()">
+        <span class="walletActionIcon">＋</span>
+        <span>${t("wallet_deposit_button")}</span>
+      </button>
+      <button class="walletActionBtn" type="button" onclick="showExchange()">
+        <span class="walletActionIcon">⇄</span>
+        <span>${t("wallet_exchange_button")}</span>
+      </button>
+      <button class="walletActionBtn" type="button" onclick="showWithdraw()">
+        <span class="walletActionIcon">➤</span>
+        <span>${t("wallet_withdraw_button")}</span>
+      </button>
+    </div>
 
     <div class="card">
-      <div class="cardHeader">
-        <div class="cardTitle">${t("wallet_balance_title")}</div>
-        <div class="badge gold">${formatPoints(state.points)}</div>
-      </div>
-      <p style="font-size:11px;margin-bottom:0">${t("wallet_min_withdraw_note", { n: formatPoints(state.minWithdrawPoints) })}</p>
+      <p style="font-size:11px;margin-bottom:0">${t("wallet_rate_label", { rate: formatNumber(state.rate, 6) })} • ${t("wallet_min_withdraw_note", { n: formatNumber(state.minWithdrawGram, 6) })}</p>
     </div>
 
     <div class="card" id="withdrawHistoryCard">
@@ -1002,7 +1088,7 @@ function renderWallet() {
       return `
         <div class="historyItem">
           <div>
-            <div class="historyAmount">${formatPoints(item.pointsSpent)} ${t("points_unit")}</div>
+            <div class="historyAmount">${formatNumber(item.cryptoAmount, 6)} GRAM</div>
             <div class="historyMeta">${timeAgo(item.createdAt)}</div>
           </div>
           <div class="badge ${statusInfo.cls}">${item.status}</div>
@@ -1146,13 +1232,19 @@ function renderProfileReferral() {
       </div>
       ${state.invited.length === 0
         ? `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("referral_invited_empty")}</div></div>`
-        : state.invited.map(person => `
-          <div class="historyItem">
-            <div>
-              <div class="historyAmount">${escapeHTML(person.firstName || person.username || "—")}</div>
-              <div class="historyMeta">${timeAgo(person.createdAt)}</div>
-            </div>
-          </div>`).join("")
+        : state.invited.map(person => {
+            const statusHtml = person.bonusAwarded
+              ? `<span class="badge success" style="margin-top:4px">${t("team_status_awarded")}</span>`
+              : `<span class="badge warning" style="margin-top:4px">${t("team_status_pending", { n: person.tasksRemaining })}</span>`;
+            return `
+            <div class="historyItem" style="align-items:flex-start">
+              <div>
+                <div class="historyAmount">${escapeHTML(person.firstName || person.username || "—")}</div>
+                <div class="historyMeta">${timeAgo(person.createdAt)} • ID ${escapeHTML(person.telegramId)}</div>
+              </div>
+              ${statusHtml}
+            </div>`;
+          }).join("")
       }
     </div>
   `;

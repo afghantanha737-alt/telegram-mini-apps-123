@@ -249,6 +249,72 @@ html[data-theme="light"] .hero {
   color: var(--text); font-size: 11px; font-weight: 800;
 }
 
+/* HOME HERO — نسخه‌ی پریمیوم (صندوق طلا + سکه) */
+.heroPremium {
+  background:
+    radial-gradient(circle at 90% 0%, rgba(245, 196, 81, .16), transparent 45%),
+    radial-gradient(circle at 10% 100%, rgba(139, 92, 246, .28), transparent 45%),
+    linear-gradient(160deg, #14101f, #08070d 70%);
+  border-color: rgba(245, 196, 81, .22);
+}
+.levelBadge {
+  position: relative; z-index: 2; display: inline-flex; align-items: center; gap: 4px;
+  align-self: flex-start; padding: 6px 12px; border-radius: 999px; margin-bottom: 12px;
+  background: linear-gradient(135deg, #ffe9a8, #f5c451 55%, #c98a12);
+  color: #3a2600; font-size: 11px; font-weight: 900;
+  box-shadow: 0 4px 14px rgba(245, 196, 81, .35);
+}
+.heroMainRow { position: relative; z-index: 1; display: flex; align-items: center; gap: 14px; }
+.heroChestWrap { flex: 0 0 92px; width: 92px; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .5)); }
+.heroChestSvg { width: 100%; height: auto; display: block; }
+.heroTextCol { flex: 1; min-width: 0; }
+.heroBalanceRow {
+  position: relative; z-index: 1; margin-top: 20px; display: flex; flex-direction: column; gap: 4px;
+}
+.balanceValuePremium {
+  display: flex; align-items: center; gap: 8px; font-size: 30px; font-weight: 900; letter-spacing: -.5px;
+  color: var(--text);
+}
+.coinIconSmall { font-size: 24px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
+.balanceValuePremium .balanceUnit { font-size: 12px; align-self: flex-end; margin-bottom: 4px; }
+.progressTrackRow { display: flex; align-items: center; gap: 8px; }
+.progressTrackRow .progressTrack { flex: 1; }
+.progressPercent {
+  flex: 0 0 auto; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 800;
+  background: var(--primary-soft); color: var(--primary-2);
+}
+.heroActionsPremium { grid-template-columns: 1fr 1fr; }
+.heroActionPurple, .heroActionGold {
+  min-height: 46px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; border-radius: 13px; font-size: 12px; font-weight: 800;
+}
+.heroActionPurple {
+  background: linear-gradient(135deg, rgba(139, 92, 246, .22), rgba(139, 92, 246, .1));
+  border: 1px solid rgba(139, 92, 246, .35); color: var(--text);
+}
+.heroActionGold {
+  background: linear-gradient(135deg, #ffe9a8, #f5c451 60%, #c98a12);
+  color: #3a2600; box-shadow: 0 6px 16px rgba(245, 196, 81, .3);
+}
+.heroActionArrow { font-size: 13px; opacity: .8; }
+
+/* HOME HERO — نسخه‌ی ساده و تمیز (بدون گرادینت/درخشش زیاد) */
+.heroFlat {
+  background: var(--surface); padding: 18px 17px;
+  min-height: 0;
+}
+.heroFlatTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.heroFlatLabel { font-size: 12px; color: var(--text-muted); font-weight: 700; }
+.levelPillFlat {
+  font-size: 11px; font-weight: 800; padding: 4px 11px; border-radius: 999px;
+  background: var(--primary-soft); color: var(--primary-2);
+}
+.heroFlatBalance {
+  margin: 0 0 14px; font-size: 30px; font-weight: 900; letter-spacing: -.5px; color: var(--text);
+}
+.heroFlatUnit { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.heroFlatCaption { margin: 8px 0 0; font-size: 11px; color: var(--text-muted); }
+
 /* STATS GRID */
 .statsGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-bottom: 13px; }
 .statCard {
@@ -341,20 +407,41 @@ html[data-theme="light"] .progressTrack { background: rgba(20,22,28,.08); }
 .streakValue { font-size: 20px; font-weight: 900; }
 .streakLabel { font-size: 10px; color: var(--text-muted); }
 
-/* WALLET */
-.walletHero {
-  padding: 22px 19px; margin-bottom: 14px; border-radius: var(--radius-xl);
-  border: 1px solid rgba(245,196,81,.18);
-  background:
-    radial-gradient(circle at 85% 10%, rgba(245,196,81,.2), transparent 40%),
-    linear-gradient(145deg, #201a10, #0b0c12 68%);
+/* WALLET — کارت‌های موجودی + دکمه‌های واریز/تبدیل/برداشت */
+.walletBalanceGrid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;
 }
-html[data-theme="light"] .walletHero {
-  background: radial-gradient(circle at 85% 10%, rgba(245,196,81,.18), transparent 40%), linear-gradient(145deg, #ffffff, #faf3e2);
+.walletBalanceCard {
+  padding: 18px 14px; border-radius: var(--radius-lg); text-align: center;
+  border: 1px solid var(--line); position: relative; overflow: hidden;
 }
-.walletCryptoValue { font-size: 26px; font-weight: 900; color: var(--gold); margin-top: 4px; }
-.walletRate { margin-top: 6px; font-size: 10px; color: var(--text-muted); }
-.walletActions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+.walletBalanceCard.gold {
+  border-color: rgba(245, 196, 81, .3);
+  background: radial-gradient(circle at 80% 0%, rgba(245, 196, 81, .18), transparent 55%), var(--surface);
+}
+.walletBalanceCard.blue {
+  border-color: rgba(56, 189, 248, .3);
+  background: radial-gradient(circle at 80% 0%, rgba(56, 189, 248, .18), transparent 55%), var(--surface);
+}
+.walletBalanceIcon { font-size: 26px; margin-bottom: 8px; }
+.walletBalanceLabel { font-size: 11px; color: var(--text-muted); font-weight: 700; }
+.walletBalanceValue { margin-top: 4px; font-size: 19px; font-weight: 900; }
+.walletBalanceCard.gold .walletBalanceValue { color: var(--gold); }
+.walletBalanceCard.blue .walletBalanceValue { color: #38bdf8; }
+
+.walletActionsGrid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px;
+}
+.walletActionBtn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 14px 6px; border-radius: var(--radius-md); border: 1px solid var(--line);
+  background: var(--surface); color: var(--text); font-size: 11px; font-weight: 700;
+}
+.walletActionBtn:active { transform: scale(.96); }
+.walletActionIcon {
+  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--primary-soft); color: var(--primary-2); font-size: 16px;
+}
 
 .historyItem {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -478,22 +565,59 @@ html[data-theme="light"] .walletHero {
   .heroTitle { font-size: 21px; }
 }
 
-/* SPIN WHEEL */
-.wheelOuter { position: relative; width: 220px; height: 220px; margin: 6px auto 4px; }
+/* SPIN WHEEL — حلقه‌ی نورانی + برچسب‌های چرخنده + هاب مرکزی */
+.wheelOuter { position: relative; width: 260px; height: 260px; margin: 14px auto 6px; }
+
+.wheelRingDots { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.wheelDot {
+  position: absolute; width: 9px; height: 9px; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 35% 30%, #fff, var(--primary-2) 60%, var(--primary) 100%);
+  box-shadow: 0 0 10px 2px rgba(167, 139, 250, .75);
+}
+
 .wheelDisc {
-  width: 100%; height: 100%; border-radius: 50%;
-  border: 4px solid var(--surface-3);
-  box-shadow: 0 10px 40px rgba(0,0,0,.4), inset 0 0 0 2px rgba(255,255,255,.06);
-  transition: transform 3.5s cubic-bezier(.17,.67,.16,1);
+  position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%;
+  border: 5px solid rgba(167, 139, 250, .55);
+  box-shadow:
+    0 0 0 3px rgba(139, 92, 246, .18),
+    0 0 45px rgba(139, 92, 246, .55),
+    inset 0 0 30px rgba(0, 0, 0, .45);
+  transition: transform 3.8s cubic-bezier(.12, .65, .15, 1);
+  overflow: hidden;
 }
+
 .wheelPointer {
-  position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
-  font-size: 22px; color: var(--gold); z-index: 3; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5));
+  position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+  font-size: 32px; color: var(--gold); z-index: 4;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .6)) drop-shadow(0 0 10px rgba(245, 196, 81, .6));
 }
-.wheelLabels { position: absolute; inset: 0; pointer-events: none; }
-.wheelLabel {
-  position: absolute; transform: translate(-50%, -50%);
-  font-size: 13px; font-weight: 900; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.5);
+
+.wheelLabel { position: absolute; z-index: 1; }
+.wheelLabelInner {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.wheelIcon { font-size: 21px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .6)); }
+.wheelValue {
+  font-size: 15px; font-weight: 900; color: #fff; line-height: 1;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .7);
+}
+
+.wheelHub {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 56px; height: 56px; border-radius: 50%; z-index: 3;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .35), transparent 60%),
+    linear-gradient(145deg, var(--primary-2), var(--primary));
+  border: 2px solid rgba(255, 255, 255, .35);
+  box-shadow: 0 0 22px rgba(139, 92, 246, .75), inset 0 0 12px rgba(255, 255, 255, .25);
+  font-size: 22px; color: #fff;
+}
+
+.wheelSpinBtn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 15px; margin-top: 6px;
 }
 
 /* LANGUAGE MODAL */

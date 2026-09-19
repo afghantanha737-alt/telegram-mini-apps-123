@@ -96,12 +96,55 @@ router.post('/:id/claim', auth, async (req, res) => {
       });
     }
 
-    if (existing) {
-      existing.status = 'approved';
-      existing.reward = task.reward;
-      await existing.save();
-    } else {
-      await TaskCompletion.create({ user: u._id, task: task._id, reward: task.reward, status: 'approved' });
+    // رزرو اتمی ظرفیت (چه تکمیل تازه، چه تلاش دوباره بعد از رد‌شدن قبلی):
+    // این آپدیت فقط وقتی موفق می‌شود که تسک هنوز فعال باشد و (بدون محدودیت
+    // ظرفیت باشد یا هنوز جا داشته باشد). چون این عملیات در سطح دیتابیس
+    // atomic است، حتی با صدها درخواست هم‌زمان، هرگز بیشتر از ظرفیت
+    // تعیین‌شده رزرو نمی‌شود.
+    const reserved = await Task.findOneAndUpdate(
+      {
+        _id: task._id,
+        isActive: true,
+        $or: [
+          { maxCompletions: null },
+          { $expr: { $lt: ['$completedCount', '$maxCompletions'] } }
+        ]
+      },
+      { $inc: { completedCount: 1 } },
+      { new: true }
+    );
+
+    if (!reserved) {
+      return res.status(400).json({
+        success: false,
+        message: 'ظرفیت این تسک تکمیل شده یا غیرفعال شده است.',
+        code: 'TASK_FULL'
+      });
+    }
+
+    // اگر با همین تکمیل، ظرفیت پر شد، تسک را برای همیشه غیرفعال کن
+    // تا در لیست تسک‌های بقیه‌ی کاربران نمایش داده نشود.
+    let weJustFilledCapacity = false;
+    if (reserved.maxCompletions != null && reserved.completedCount >= reserved.maxCompletions) {
+      await Task.findByIdAndUpdate(reserved._id, { isActive: false });
+      weJustFilledCapacity = true;
+    }
+
+    try {
+      if (existing) {
+        existing.status = 'approved';
+        existing.reward = task.reward;
+        await existing.save();
+      } else {
+        await TaskCompletion.create({ user: u._id, task: task._id, reward: task.reward, status: 'approved' });
+      }
+    } catch (createError) {
+      // اگر ثبت تکمیل به هر دلیلی شکست خورد، ظرفیتی که رزرو کرده بودیم
+      // را برمی‌گردانیم تا از دست نرود.
+      const rollback = { $inc: { completedCount: -1 } };
+      if (weJustFilledCapacity) rollback.$set = { isActive: true };
+      await Task.findByIdAndUpdate(task._id, rollback);
+      throw createError;
     }
 
     u.points += task.reward;

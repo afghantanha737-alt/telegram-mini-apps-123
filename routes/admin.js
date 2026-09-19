@@ -76,14 +76,24 @@ router.get('/tasks', async (req, res) => {
 });
 
 router.post('/tasks', async (req, res) => {
-  const { title, description, type, url, reward, chatId } = req.body || {};
+  const { title, description, type, url, reward, chatId, maxCompletions } = req.body || {};
   if (!title || !reward) {
     return res.status(400).json({ success: false, message: 'عنوان و مقدار پاداش الزامی است.' });
   }
   if (!chatId) {
     return res.status(400).json({ success: false, message: 'chatId (آیدی/یوزرنیم کانال یا گروه) الزامی است.' });
   }
-  const task = await Task.create({ title, description, type, url, reward, verifyType: 'telegram', chatId });
+
+  // اگر خالی/صفر/نامعتبر بود یعنی «بدون محدودیت ظرفیت»
+  const parsedMax = Number(maxCompletions);
+  const finalMaxCompletions = Number.isFinite(parsedMax) && parsedMax > 0 ? Math.floor(parsedMax) : null;
+
+  const task = await Task.create({
+    title, description, type, url, reward,
+    verifyType: 'telegram',
+    chatId,
+    maxCompletions: finalMaxCompletions
+  });
   res.json({ success: true, task });
 });
 
@@ -177,6 +187,8 @@ router.post('/broadcast', upload.single('image'), async (req, res) => {
   let sent = 0;
   let failed = 0;
 
+  // برای جلوگیری از برخورد با محدودیت نرخ تلگرام (~۳۰ پیام در ثانیه)،
+  // ارسال را به‌صورت دسته‌ای و با تأخیر کوتاه انجام می‌دهیم.
   const BATCH_SIZE = 20;
   const DELAY_MS = 1100;
 

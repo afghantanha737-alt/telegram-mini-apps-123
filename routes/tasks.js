@@ -1,71 +1,144 @@
+'use strict';
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const { requireTelegramAuth } = require('../utils/telegramAuth');
+const { bot, isChatMember } = require('../utils/bot');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
-const User = require('../models/User');
-const verifyTelegramInitData = require('../utils/verifyTelegram');
 
-// GET /api/tasks?initData=...
-// لیست تسک‌های فعال به همراه وضعیت انجام‌شده/نشده برای این کاربر
-router.get('/', async (req, res) => {
-  try {
-    const { initData } = req.query;
-    const botToken = process.env.BOT_TOKEN;
-    const tgUser = verifyTelegramInitData(initData, botToken);
-    if (!tgUser) return res.status(401).json({ error: 'تایید هویت ناموفق' });
-
-    const tasks = await Task.find({ active: true }).sort({ createdAt: -1 });
-    const completions = await TaskCompletion.find({ userId: String(tgUser.id) });
-    const completedIds = new Set(completions.map(c => String(c.taskId)));
-
-    const result = tasks.map(t => ({
-      _id: t._id,
-      title: t.title,
-      description: t.description,
-      link: t.link,
-      pointsReward: t.pointsReward,
-      completed: completedIds.has(String(t._id))
-    }));
-
-    res.json({ tasks: result });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'خطای سرور' });
-  }
+const auth = requireTelegramAuth(process.env.BOT_TOKEN);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 } // حداکثر 8 مگابایت
 });
 
-// POST /api/tasks/:id/complete
-// body: { initData }
-router.post('/:id/complete', async (req, res) => {
-  try {
-    const { initData } = req.body;
-    const botToken = process.env.BOT_TOKEN;
-    const tgUser = verifyTelegramInitData(initData, botToken);
-    if (!tgUser) return res.status(401).json({ error: 'تایید هویت ناموفق' });
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || '';
 
-    const task = await Task.findById(req.params.id);
-    if (!task || !task.active) return res.status(404).json({ error: 'تسک پیدا نشد' });
+// GET /api/tasks
+router.get('/', auth, async (req, res) => {
+  const [tasks, completions] = await Promise.all([
+    Task.find({ isActive: true }).sort({ createdAt: -1 }),
+    TaskCompletion.find({ user: req.dbUser._id })
+  ]);
 
-    const already = await TaskCompletion.findOne({ userId: String(tgUser.id), taskId: task._id });
-    if (already) return res.status(400).json({ error: 'این تسک قبلا انجام شده' });
+  res.json({ success: true, tasks, completions });
+});
 
-    await TaskCompletion.create({
-      userId: String(tgUser.id),
-      taskId: task._id,
-      pointsAwarded: task.pointsReward
-    });
+/**
+ * POST /api/tasks/:id/claim
+ * فقط برای تسک‌های verifyType=telegram — عضویت کاربر در کانال/گروه را
+ * با API تلگرام بررسی می‌کند. اگر عضو باشد پاداش را می‌دهد.
+ */
+router.post('/:id/claim', auth, async (req, res) => {
+  const u = req.dbUser;
+  const task = await Task.findById(req.params.id);
 
-    const user = await User.findOneAndUpdate(
-      { telegramId: String(tgUser.id) },
-      { $inc: { points: task.pointsReward } },
-      { new: true }
-    );
-
-    res.json({ success: true, points: user.points });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'خطای سرور' });
+  if (!task || !task.isActive) {
+    return res.status(404).json({ success: false, message: 'تسک پیدا نشد.', code: 'TASK_NOT_FOUND' });
   }
+  if (task.verifyType !== 'telegram') {
+    return res.status(400).json({ success: false, message: 'این تسک نیاز به ارسال اسکرین‌شات دارد.', code: 'NEEDS_PROOF' });
+  }
+
+  const existing = await TaskCompletion.findOne({ user: u._id, task: task._id });
+  if (existing && existing.status !== 'rejected') {
+    return res.status(400).json({ success: false, message: 'این تسک قبلاً انجام شده است.', code: 'ALREADY_DONE' });
+  }
+
+  const joined = await isChatMember(task.chatId, u.telegramId);
+  if (!joined) {
+    return res.status(400).json({
+      success: false,
+      joined: false,
+      message: 'هنوز عضویت شما تأیید نشد. ابتدا در کانال/گروه عضو شوید، سپس دوباره روی «بررسی» بزنید.',
+      code: 'NOT_JOINED'
+    });
+  }
+
+  if (existing) {
+    existing.status = 'approved';
+    existing.reward = task.reward;
+    await existing.save();
+  } else {
+    await TaskCompletion.create({ user: u._id, task: task._id, reward: task.reward, status: 'approved' });
+  }
+
+  u.points += task.reward;
+  await u.save();
+
+  res.json({
+    success: true,
+    joined: true,
+    message: `${task.reward} پوینت به حساب شما اضافه شد.`,
+    points: u.points,
+    status: 'approved'
+  });
+});
+
+/**
+ * POST /api/tasks/:id/submit-proof
+ * فقط برای تسک‌های verifyType=manual — کاربر اسکرین‌شات آپلود می‌کند،
+ * عکس برای بررسی به چت ادمین فرستاده می‌شود و وضعیت pending ثبت می‌شود.
+ */
+router.post('/:id/submit-proof', auth, upload.single('proof'), async (req, res) => {
+  const u = req.dbUser;
+  const task = await Task.findById(req.params.id);
+
+  if (!task || !task.isActive) {
+    return res.status(404).json({ success: false, message: 'تسک پیدا نشد.', code: 'TASK_NOT_FOUND' });
+  }
+  if (task.verifyType !== 'manual') {
+    return res.status(400).json({ success: false, message: 'این تسک نیاز به اسکرین‌شات ندارد.', code: 'NO_PROOF_NEEDED' });
+  }
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'لطفاً یک تصویر انتخاب کنید.', code: 'NO_FILE' });
+  }
+
+  const existing = await TaskCompletion.findOne({ user: u._id, task: task._id });
+  if (existing && (existing.status === 'approved' || existing.status === 'pending')) {
+    return res.status(400).json({ success: false, message: 'این تسک قبلاً ثبت شده است.', code: 'ALREADY_DONE' });
+  }
+
+  let proofFileId = '';
+  try {
+    if (bot && ADMIN_CHAT_ID) {
+      const caption =
+        `📥 تسک جدید برای بررسی\n` +
+        `تسک: ${task.title}\n` +
+        `کاربر: ${u.firstName || u.username || u.telegramId} (${u.telegramId})\n` +
+        `پاداش: ${task.reward} پوینت\n` +
+        `شناسه تکمیل: ${existing ? existing._id : 'در حال ثبت...'}`;
+
+      const sent = await bot.sendPhoto(ADMIN_CHAT_ID, req.file.buffer, { caption });
+      const photos = sent.photo || [];
+      proofFileId = photos.length > 0 ? photos[photos.length - 1].file_id : '';
+    }
+  } catch (error) {
+    console.error('Failed to forward proof to admin chat:', error.message);
+  }
+
+  if (existing) {
+    existing.status = 'pending';
+    existing.reward = task.reward;
+    existing.proofFileId = proofFileId;
+    existing.adminNote = '';
+    await existing.save();
+  } else {
+    await TaskCompletion.create({
+      user: u._id,
+      task: task._id,
+      reward: task.reward,
+      status: 'pending',
+      proofFileId
+    });
+  }
+
+  res.json({
+    success: true,
+    message: 'اسکرین‌شات ثبت شد و در انتظار بررسی ادمین است.',
+    status: 'pending'
+  });
 });
 
 module.exports = router;

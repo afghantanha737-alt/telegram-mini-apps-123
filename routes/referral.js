@@ -1,22 +1,38 @@
+'use strict';
 const express = require('express');
 const router = express.Router();
+const { requireTelegramAuth } = require('../utils/telegramAuth');
 const User = require('../models/User');
-const verifyTelegramInitData = require('../utils/verifyTelegram');
 
-// GET /api/referral/me?initData=...
-router.get('/me', async (req, res) => {
-  const { initData } = req.query;
-  const tgUser = verifyTelegramInitData(initData, process.env.BOT_TOKEN);
-  if (!tgUser) return res.status(401).json({ error: 'تایید هویت ناموفق' });
+const auth = requireTelegramAuth(process.env.BOT_TOKEN);
 
-  const user = await User.findOne({ telegramId: String(tgUser.id) });
-  if (!user) return res.status(404).json({ error: 'کاربر پیدا نشد' });
+// GET /api/referral/me
+router.get('/me', auth, async (req, res) => {
+  const u = req.dbUser;
+  const botUsername = process.env.BOT_USERNAME || '';
+  const shortName = process.env.MINI_APP_SHORT_NAME || '';
 
-  const invitedCount = await User.countDocuments({ referredBy: user.referralCode });
+  let shareLink = '';
+  if (botUsername) {
+    shareLink = shortName
+      // اگر Mini App دارای short name باشد: لینک مستقیماً اپ را با کد رفرال باز می‌کند
+      ? `https://t.me/${botUsername}/${shortName}?startapp=${u.referralCode}`
+      // در غیر این‌صورت: لینک چت ربات را باز می‌کند و ربات دکمه‌ی «باز کردن اپ» می‌فرستد
+      : `https://t.me/${botUsername}?start=${u.referralCode}`;
+  }
+
+  const invited = await User.find({ referredBy: u._id })
+    .select('firstName username createdAt')
+    .sort({ createdAt: -1 })
+    .limit(50);
 
   res.json({
-    referralCode: user.referralCode,
-    invitedCount
+    success: true,
+    referralCode: u.referralCode,
+    invitedCount: u.invitedCount,
+    shareLink,
+    botUsernameConfigured: Boolean(botUsername),
+    invited
   });
 });
 

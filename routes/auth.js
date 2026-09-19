@@ -17,10 +17,11 @@ router.get('/me', auth, async (req, res) => {
       u.referredBy = referrer._id;
       await u.save();
 
-      const REFERRAL_BONUS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
-      await User.findByIdAndUpdate(referrer._id, {
-        $inc: { points: REFERRAL_BONUS, invitedCount: 1 }
-      });
+      // پاداش اینجا داده نمی‌شود — فقط بعد از تکمیل حداقل تعداد تسک لازم
+      // توسط همین کاربر (در routes/tasks.js) پرداخت می‌شود. این بلوک فقط
+      // یک‌بار اجرا می‌شود چون بعد از اجرا u.referredBy دیگر خالی نیست،
+      // پس رفرش/درخواست تکراری تأثیری روی referredBy یا شمارنده ندارد.
+      await User.findByIdAndUpdate(referrer._id, { $inc: { invitedCount: 1 } });
     }
   }
 

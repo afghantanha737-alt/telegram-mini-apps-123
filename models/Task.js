@@ -22,6 +22,11 @@ const taskSchema = new mongoose.Schema(
     chatId: { type: String, default: '' },
     url: { type: String, default: '' },
     reward: { type: Number, required: true, min: 0 },
+    // null یعنی بدون محدودیت ظرفیت. اگر عدد باشد، فقط همین تعداد اول
+    // که تسک را با موفقیت کامل می‌کنند پاداش می‌گیرند.
+    maxCompletions: { type: Number, default: null, min: 1 },
+    // تعداد تکمیل‌های موفق (approved) — به‌صورت atomic در routes/tasks.js افزایش می‌یابد
+    completedCount: { type: Number, default: 0, min: 0 },
     isActive: { type: Boolean, default: true }
   },
   { timestamps: true }

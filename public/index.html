@@ -145,6 +145,42 @@
   </div>
 </div>
 
+<!-- EXCHANGE MODAL (points -> GRAM) -->
+<div id="exchangeOverlay" class="overlay" style="display:none">
+  <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="exchangeTitle">
+    <div class="modalHeader">
+      <div>
+        <span class="modalEyebrow">Exchange</span>
+        <h3 id="exchangeTitle">تبدیل پوینت به GRAM</h3>
+      </div>
+      <button class="closeBtn" type="button" onclick="hideExchange()" aria-label="بستن">×</button>
+    </div>
+    <div class="withdrawBody">
+      <label class="fieldLabel">مقدار پوینت</label>
+      <input id="exchangePoints" type="number" inputmode="numeric" placeholder="مثلاً 1000" oninput="updateExchangePreview()">
+      <p id="exchangePreview" style="font-size:12px;color:var(--text-muted);margin:-4px 0 12px">معادل GRAM دریافتی: 0</p>
+      <p id="exchangeError" class="captchaErr" role="alert"></p>
+      <button type="button" class="primaryBtn" id="submitExchange" onclick="submitExchange()">تبدیل کن</button>
+    </div>
+  </div>
+</div>
+
+<!-- DEPOSIT MODAL (placeholder) -->
+<div id="depositOverlay" class="overlay" style="display:none">
+  <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="depositTitle" style="text-align:center">
+    <div class="modalHeader">
+      <div>
+        <span class="modalEyebrow">Deposit</span>
+        <h3 id="depositTitle">واریز</h3>
+      </div>
+      <button class="closeBtn" type="button" onclick="hideDeposit()" aria-label="بستن">×</button>
+    </div>
+    <div class="captchaIcon" aria-hidden="true">🚧</div>
+    <p id="depositMessage" style="font-size:13px;color:var(--text-soft)">قابلیت واریز به‌زودی فعال می‌شود.</p>
+    <button type="button" class="secondaryBtn" onclick="hideDeposit()">باشه</button>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast" role="status" aria-live="polite"></div>
 

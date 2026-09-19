@@ -3,7 +3,6 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const Task = require('../models/Task');
-const TaskCompletion = require('../models/TaskCompletion');
 const Withdrawal = require('../models/Withdrawal');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
@@ -33,14 +32,14 @@ router.get('/tasks', async (req, res) => {
 });
 
 router.post('/tasks', async (req, res) => {
-  const { title, description, type, url, reward, verifyType, chatId } = req.body || {};
+  const { title, description, type, url, reward, chatId } = req.body || {};
   if (!title || !reward) {
     return res.status(400).json({ success: false, message: 'عنوان و مقدار پاداش الزامی است.' });
   }
-  if (verifyType === 'telegram' && !chatId) {
-    return res.status(400).json({ success: false, message: 'برای تسک تلگرامی، chatId (آیدی/یوزرنیم کانال یا گروه) الزامی است.' });
+  if (!chatId) {
+    return res.status(400).json({ success: false, message: 'chatId (آیدی/یوزرنیم کانال یا گروه) الزامی است.' });
   }
-  const task = await Task.create({ title, description, type, url, reward, verifyType, chatId });
+  const task = await Task.create({ title, description, type, url, reward, verifyType: 'telegram', chatId });
   res.json({ success: true, task });
 });
 
@@ -53,58 +52,6 @@ router.put('/tasks/:id', async (req, res) => {
 router.delete('/tasks/:id', async (req, res) => {
   await Task.findByIdAndDelete(req.params.id);
   res.json({ success: true });
-});
-
-/* -------------------- TASK COMPLETIONS (بررسی اسکرین‌شات) -------------------- */
-router.get('/task-completions', async (req, res) => {
-  const status = req.query.status || 'pending';
-  const filter = status === 'all' ? {} : { status };
-  const list = await TaskCompletion.find(filter)
-    .populate('user', 'firstName username telegramId')
-    .populate('task', 'title reward')
-    .sort({ createdAt: -1 })
-    .limit(200);
-  res.json({ success: true, completions: list });
-});
-
-router.post('/task-completions/:id/approve', async (req, res) => {
-  const completion = await TaskCompletion.findById(req.params.id);
-  if (!completion) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
-
-  if (completion.status !== 'approved') {
-    completion.status = 'approved';
-    completion.adminNote = (req.body && req.body.note) || '';
-    await completion.save();
-    await User.findByIdAndUpdate(completion.user, { $inc: { points: completion.reward } });
-  }
-
-  res.json({ success: true, completion });
-});
-
-router.post('/task-completions/:id/reject', async (req, res) => {
-  const completion = await TaskCompletion.findById(req.params.id);
-  if (!completion) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
-
-  completion.status = 'rejected';
-  completion.adminNote = (req.body && req.body.note) || '';
-  await completion.save();
-
-  res.json({ success: true, completion });
-});
-
-router.get('/task-completions/:id/proof', async (req, res) => {
-  const completion = await TaskCompletion.findById(req.params.id);
-  if (!completion || !completion.proofFileId) {
-    return res.status(404).json({ success: false, message: 'تصویری ثبت نشده.' });
-  }
-  if (!bot) return res.status(500).json({ success: false, message: 'ربات پیکربندی نشده.' });
-
-  try {
-    const link = await bot.getFileLink(completion.proofFileId);
-    return res.redirect(link);
-  } catch (error) {
-    return res.status(500).json({ success: false, message: 'دریافت تصویر ناموفق بود.' });
-  }
 });
 
 /* -------------------- WITHDRAWALS -------------------- */

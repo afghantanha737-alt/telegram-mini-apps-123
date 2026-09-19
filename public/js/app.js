@@ -934,9 +934,11 @@ async function submitWithdraw() {
 }
 window.submitWithdraw = submitWithdraw;
 
-/* ---- Exchange: Points -> GRAM ---- */
+/* ---- Exchange: Points <-> GRAM (bidirectional) ---- */
+let exchangeDirection = "points_to_gram"; // "points_to_gram" | "gram_to_points"
+
 function showExchange() {
-  if (state.points <= 0) {
+  if (state.points <= 0 && state.gramBalance <= 0) {
     toast(t("error_generic"), "warning");
     return;
   }
@@ -945,7 +947,7 @@ function showExchange() {
   const error = $("#exchangeError");
   if (input) input.value = "";
   if (error) error.textContent = "";
-  updateExchangePreview();
+  setExchangeDirection("points_to_gram");
   if (overlay) overlay.style.display = "flex";
 }
 window.showExchange = showExchange;
@@ -956,13 +958,47 @@ function hideExchange() {
 }
 window.hideExchange = hideExchange;
 
+function setExchangeDirection(direction) {
+  exchangeDirection = direction === "gram_to_points" ? "gram_to_points" : "points_to_gram";
+
+  const btnPTG = $("#exchangeDirPTG");
+  const btnGTP = $("#exchangeDirGTP");
+  if (btnPTG) btnPTG.classList.toggle("active", exchangeDirection === "points_to_gram");
+  if (btnGTP) btnGTP.classList.toggle("active", exchangeDirection === "gram_to_points");
+
+  const label = $("#exchangeAmountLabel");
+  const input = $("#exchangePoints");
+  const title = $("#exchangeTitle");
+  if (exchangeDirection === "points_to_gram") {
+    if (label) label.textContent = t("exchange_points_label");
+    if (input) input.setAttribute("placeholder", "مثلاً 1000");
+    if (title) title.textContent = t("exchange_modal_title");
+  } else {
+    if (label) label.textContent = t("exchange_gram_label");
+    if (input) input.setAttribute("placeholder", "مثلاً 0.5");
+    if (title) title.textContent = t("exchange_modal_title_reverse");
+  }
+
+  if (input) input.value = "";
+  const error = $("#exchangeError");
+  if (error) error.textContent = "";
+  updateExchangePreview();
+}
+window.setExchangeDirection = setExchangeDirection;
+
 function updateExchangePreview() {
   const input = $("#exchangePoints");
   const preview = $("#exchangePreview");
   if (!input || !preview) return;
-  const points = Number(input.value) || 0;
-  const gram = points * state.rate;
-  preview.textContent = `${t("exchange_result_label")}: ${formatNumber(gram, 6)} GRAM`;
+  const amount = Number(input.value) || 0;
+
+  if (exchangeDirection === "points_to_gram") {
+    const gram = amount * state.rate;
+    preview.textContent = `${t("exchange_result_label")}: ${formatNumber(gram, 6)} GRAM`;
+  } else {
+    const points = state.rate > 0 ? Math.floor(amount / state.rate) : 0;
+    preview.textContent = `${t("exchange_result_label_points")}: ${formatPoints(points)}`;
+  }
 }
 window.updateExchangePreview = updateExchangePreview;
 
@@ -971,19 +1007,26 @@ async function submitExchange() {
   const error = $("#exchangeError");
   const button = $("#submitExchange");
 
-  const points = Number(input?.value);
-  if (!points || points <= 0) {
+  const amount = Number(input?.value);
+  if (!amount || amount <= 0) {
     if (error) error.textContent = t("error_generic");
     return;
   }
-  if (points > state.points) {
+  if (exchangeDirection === "points_to_gram" && amount > state.points) {
+    if (error) error.textContent = t("error_generic");
+    return;
+  }
+  if (exchangeDirection === "gram_to_points" && amount > state.gramBalance) {
     if (error) error.textContent = t("error_generic");
     return;
   }
 
   if (button) button.disabled = true;
   try {
-    const result = await api("/api/points/exchange", { method: "POST", body: { points } });
+    const result = await api("/api/points/exchange", {
+      method: "POST",
+      body: { direction: exchangeDirection, amount }
+    });
     state.points = Number(result.points) ?? state.points;
     state.gramBalance = Number(result.gramBalance) ?? state.gramBalance;
     haptic("success");

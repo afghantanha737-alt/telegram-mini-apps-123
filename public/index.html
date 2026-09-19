@@ -156,7 +156,11 @@
       <button class="closeBtn" type="button" onclick="hideExchange()" aria-label="بستن">×</button>
     </div>
     <div class="withdrawBody">
-      <label class="fieldLabel">مقدار پوینت</label>
+      <div class="exchangeDirectionToggle">
+        <button type="button" class="exchangeDirectionBtn active" id="exchangeDirPTG" onclick="setExchangeDirection('points_to_gram')">Point → Gram</button>
+        <button type="button" class="exchangeDirectionBtn" id="exchangeDirGTP" onclick="setExchangeDirection('gram_to_points')">Gram → Point</button>
+      </div>
+      <label class="fieldLabel" id="exchangeAmountLabel">مقدار پوینت</label>
       <input id="exchangePoints" type="number" inputmode="numeric" placeholder="مثلاً 1000" oninput="updateExchangePreview()">
       <p id="exchangePreview" style="font-size:12px;color:var(--text-muted);margin:-4px 0 12px">معادل GRAM دریافتی: 0</p>
       <p id="exchangeError" class="captchaErr" role="alert"></p>

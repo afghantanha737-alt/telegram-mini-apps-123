@@ -99,6 +99,12 @@ html[data-theme="light"] #appHeader {
 }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .headerInfo { min-width: 0; }
+.brandEyebrow {
+  font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  background: linear-gradient(90deg, var(--primary-2), var(--primary));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  margin-bottom: 1px;
+}
 .greetName {
   max-width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-size: 14px; font-weight: 700; color: var(--text);

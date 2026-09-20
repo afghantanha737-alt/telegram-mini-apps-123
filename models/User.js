@@ -15,6 +15,8 @@ const userSchema = new mongoose.Schema(
     totalCheckins: { type: Number, default: 0, min: 0 },
     lastCheckIn: { type: Date, default: null },
     spinChances: { type: Number, default: 0, min: 0 },
+    adWatchesToday: { type: Number, default: 0, min: 0 },
+    lastAdWatchDate: { type: Date, default: null },
 
     referralCode: { type: String, required: true, unique: true, index: true },
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

@@ -1183,7 +1183,7 @@ function shareReferralLink() {
 }
 window.shareReferralLink = shareReferralLink;
 
-let profileView = "menu"; // menu | referral | leaderboard
+let profileView = "menu"; // menu | referral | leaderboard | about
 
 function setProfileView(view) {
   profileView = view;
@@ -1221,6 +1221,11 @@ function renderProfileMenu() {
           <div class="profileText">${t("menu_leaderboard")}</div>
           <div class="profileChevron">‹</div>
         </div>
+        <div class="profileItem" onclick="setProfileView('about')">
+          <div class="profileIcon">ℹ️</div>
+          <div class="profileText">${t("menu_about")}</div>
+          <div class="profileChevron">‹</div>
+        </div>
         <div class="profileItem" onclick="showTerms()">
           <div class="profileIcon">📜</div>
           <div class="profileText">${t("menu_terms")}</div>
@@ -1244,6 +1249,37 @@ function renderProfileMenu() {
           <div class="switchThumb"></div>
         </div>
       </div>
+    </div>
+  `;
+}
+
+function renderProfileAbout() {
+  return `
+    <div class="sectionHeader">
+      <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
+      <h2 class="sectionTitle">${t("about_title")}</h2>
+      <span></span>
+    </div>
+
+    <div class="card">
+      <div class="cardHeader">
+        <div class="cardTitle">${t("about_what_title")}</div>
+      </div>
+      <p class="cardSubtitle" style="line-height:1.9">${t("about_what_desc")}</p>
+    </div>
+
+    <div class="card">
+      <div class="cardHeader">
+        <div class="cardTitle">${t("about_earn_title")}</div>
+      </div>
+      <p class="cardSubtitle" style="line-height:1.9">${t("about_earn_desc")}</p>
+    </div>
+
+    <div class="card">
+      <div class="cardHeader">
+        <div class="cardTitle">${t("about_ads_title")}</div>
+      </div>
+      <p class="cardSubtitle" style="line-height:1.9">${t("about_ads_desc")}</p>
     </div>
   `;
 }
@@ -1337,6 +1373,8 @@ async function renderProfile() {
     content.innerHTML = renderProfileReferral();
   } else if (profileView === "leaderboard") {
     content.innerHTML = renderProfileLeaderboard();
+  } else if (profileView === "about") {
+    content.innerHTML = renderProfileAbout();
   } else {
     content.innerHTML = renderProfileMenu();
   }

@@ -483,31 +483,42 @@ function renderHome() {
   const levelProgress = Math.min(100, Math.max(0, ((state.points - previousLevel) / (nextLevel - previousLevel)) * 100));
 
   const featuredTasks = state.tasks.slice(0, 3);
+  const ringCircumference = 188.5; // 2 * PI * r(30)
+  const ringOffset = Math.max(0, ringCircumference - (ringCircumference * levelProgress) / 100);
 
   const content = $("#content");
   content.innerHTML = `
-    <section class="hero heroFlat">
-      <div class="heroFlatTop">
-        <span class="heroFlatLabel">${t("wallet_balance_title")}</span>
-        <span class="levelPillFlat">${t("level_label", { n: formatPoints(currentLevel) })}</span>
+    <section class="heroRingCard">
+      <div class="heroRingRow">
+        <svg class="heroRingSvg" width="72" height="72" viewBox="0 0 72 72">
+          <circle cx="36" cy="36" r="30" fill="none" stroke="var(--line-strong)" stroke-width="6"></circle>
+          <circle cx="36" cy="36" r="30" fill="none" stroke="var(--primary)" stroke-width="6" stroke-linecap="round"
+            stroke-dasharray="${ringCircumference}" stroke-dashoffset="${ringOffset}" transform="rotate(-90 36 36)"></circle>
+          <text x="36" y="32" text-anchor="middle" font-size="15" font-weight="900" fill="var(--text)">${formatPoints(state.points)}</text>
+          <text x="36" y="46" text-anchor="middle" font-size="8" fill="var(--text-muted)">${t("points_unit")}</text>
+        </svg>
+        <div class="heroRingInfo">
+          <span class="heroRingBadge">${t("level_label", { n: formatPoints(currentLevel) })}</span>
+          <p class="heroRingCaption">${t("home_ring_caption", { n: formatPoints(nextLevel - state.points) })}</p>
+        </div>
       </div>
-      <p class="heroFlatBalance">${formatPoints(state.points)} <span class="heroFlatUnit">${t("points_unit").toUpperCase()}</span></p>
-      <div class="progressTrack"><div class="progressBar" style="width:${levelProgress}%"></div></div>
-      <p class="heroFlatCaption">${formatPoints(state.points)} ${t("progress_label")} ${formatPoints(nextLevel)}</p>
+      <button class="heroRingBtn" type="button" onclick="navigate('daily')">
+        <span>▶</span> ${t("home_cta_daily")}
+      </button>
     </section>
 
     <div class="statsGrid">
-      <div class="statCard">
+      <div class="statCard tint-warning">
         <div class="statIcon">🔥</div>
         <div class="statValue">${formatPoints(state.streak)}</div>
         <div class="statLabel">${t("stat_streak")}</div>
       </div>
-      <div class="statCard">
+      <div class="statCard tint-success">
         <div class="statIcon">🎯</div>
         <div class="statValue">${formatPoints(state.totalCheckins)}</div>
         <div class="statLabel">${t("stat_checkins")}</div>
       </div>
-      <div class="statCard">
+      <div class="statCard tint-info">
         <div class="statIcon">👥</div>
         <div class="statValue">${formatPoints(state.invitedCount)}</div>
         <div class="statLabel">${t("stat_invited")}</div>
@@ -520,8 +531,8 @@ function renderHome() {
     </div>
 
     <div class="earningList">
-      <div class="earningItem" onclick="navigate('daily')">
-        <div class="earningIcon">◷</div>
+      <div class="earningItem ${state.canCheckIn ? "" : "isDone"}" onclick="navigate('daily')">
+        <div class="earningIcon ${state.canCheckIn ? "" : "tint-success"}">${state.canCheckIn ? "◷" : "✓"}</div>
         <div class="earningBody">
           <div class="earningTitle">${t("earn_daily_title")}</div>
           <div class="earningSub">${state.canCheckIn ? t("earn_daily_sub_available") : t("earn_daily_sub_done")}</div>
@@ -529,7 +540,7 @@ function renderHome() {
         <div class="earningArrow">‹</div>
       </div>
       <div class="earningItem" onclick="navigate('tasks')">
-        <div class="earningIcon">✓</div>
+        <div class="earningIcon tint-info">✓</div>
         <div class="earningBody">
           <div class="earningTitle">${t("earn_tasks_title")}</div>
           <div class="earningSub">${t("earn_tasks_sub", { n: formatPoints(state.tasks.length) })}</div>
@@ -537,7 +548,7 @@ function renderHome() {
         <div class="earningArrow">‹</div>
       </div>
       <div class="earningItem" onclick="navigate('profile')">
-        <div class="earningIcon">👥</div>
+        <div class="earningIcon tint-pink">👥</div>
         <div class="earningBody">
           <div class="earningTitle">${t("earn_referral_title")}</div>
           <div class="earningSub">${t("earn_referral_sub")}</div>
@@ -548,7 +559,7 @@ function renderHome() {
         const status = completionStatus(task._id);
         const subLabel = status === "approved" ? t("task_status_done") : status === "pending" ? t("task_status_pending") : t("task_status_todo");
         return `
-        <div class="earningItem" onclick="navigate('tasks')">
+        <div class="earningItem ${status === "approved" ? "isDone" : ""}" onclick="navigate('tasks')">
           <div class="earningIcon">🎁</div>
           <div class="earningBody">
             <div class="earningTitle">${escapeHTML(task.title)}</div>

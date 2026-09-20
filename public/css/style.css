@@ -25,6 +25,10 @@
   --danger-soft: rgba(239, 68, 68, 0.13);
   --gold: #f5c451;
   --gold-soft: rgba(245, 196, 81, 0.13);
+  --info: #38bdf8;
+  --info-soft: rgba(56, 189, 248, 0.14);
+  --pink: #ec4899;
+  --pink-soft: rgba(236, 72, 153, 0.14);
   --shadow: 0 18px 55px rgba(0, 0, 0, 0.32);
   --shadow-soft: 0 8px 28px rgba(0, 0, 0, 0.2);
   --radius-xl: 28px;
@@ -321,13 +325,40 @@ html[data-theme="light"] .hero {
 .heroFlatUnit { font-size: 12px; font-weight: 700; color: var(--text-muted); }
 .heroFlatCaption { margin: 8px 0 0; font-size: 11px; color: var(--text-muted); }
 
+/* HOME HERO — نسخه‌ی رینگ دایره‌ای (شیک) */
+.heroRingCard {
+  background: var(--primary-soft); border: none; padding: 18px; margin-bottom: 12px;
+  border-radius: var(--radius-lg);
+}
+.heroRingRow { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.heroRingSvg { flex: 0 0 72px; }
+.heroRingSvg text { font-family: inherit; }
+.heroRingInfo { flex: 1; min-width: 0; }
+.heroRingBadge {
+  display: inline-block; font-size: 11px; font-weight: 800; background: var(--surface-3);
+  color: var(--primary-2); padding: 4px 11px; border-radius: 999px; margin-bottom: 6px;
+}
+.heroRingCaption { margin: 0; font-size: 12px; color: var(--text-soft); line-height: 1.6; }
+.heroRingBtn {
+  width: 100%; border: none; border-radius: 999px; padding: 13px; font-size: 14px; font-weight: 800;
+  background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.heroRingBtn:active { transform: scale(.98); }
+.heroRingBtn:disabled { opacity: .55; }
+
 /* STATS GRID */
 .statsGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-bottom: 13px; }
 .statCard {
-  min-width: 0; padding: 13px 10px; text-align: center; border: 1px solid var(--line);
-  border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-soft);
+  min-width: 0; padding: 13px 10px; text-align: center; border: none;
+  border-radius: var(--radius-md); background: var(--surface);
 }
+.statCard.tint-warning { background: var(--warning-soft); }
+.statCard.tint-success { background: var(--success-soft); }
+.statCard.tint-info { background: var(--info-soft); }
 .statIcon { margin-bottom: 5px; font-size: 17px; }
+.statCard.tint-warning .statIcon { color: var(--warning); }
+.statCard.tint-success .statIcon { color: var(--success); }
+.statCard.tint-info .statIcon { color: var(--info); }
 .statValue { color: var(--text); font-size: 16px; font-weight: 900; }
 .statLabel { margin-top: 2px; color: var(--text-muted); font-size: 9px; }
 
@@ -359,6 +390,10 @@ html[data-theme="light"] .progressTrack { background: rgba(20,22,28,.08); }
   width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center;
   border-radius: 13px; background: var(--primary-soft); font-size: 19px;
 }
+.earningIcon.tint-success { background: var(--success-soft); }
+.earningIcon.tint-info { background: var(--info-soft); }
+.earningIcon.tint-pink { background: var(--pink-soft); }
+.earningItem.isDone { opacity: .55; }
 .earningBody { min-width: 0; flex: 1; }
 .earningTitle { font-size: 13px; font-weight: 700; color: var(--text); }
 .earningSub { margin-top: 2px; font-size: 10px; color: var(--text-muted); }

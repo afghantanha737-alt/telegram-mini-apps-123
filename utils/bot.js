@@ -80,4 +80,40 @@ async function isChatMember(chatId, telegramUserId) {
   return result.joined;
 }
 
-module.exports = { bot, isChatMember, checkChatMembership };
+/**
+ * ارسال امن یک پیام به یک کاربر مشخص (مثلاً برای اطلاع‌رسانی تایید/رد برداشت).
+ * خطاها را می‌بلعد و فقط true/false برمی‌گرداند تا هیچ‌وقت باعث خرابی جریان اصلی
+ * (مثل تایید برداشت در پنل ادمین) نشود — مثلاً اگر کاربر ربات را بلاک کرده باشد.
+ */
+async function notifyUser(telegramId, text, options = {}) {
+  if (!bot || !telegramId) return false;
+  try {
+    await bot.sendMessage(telegramId, text, options);
+    return true;
+  } catch (error) {
+    console.warn(`notifyUser failed for telegramId=${telegramId}:`, error.message || error);
+    return false;
+  }
+}
+
+/**
+ * ارسال دسته‌ای یک پیام به همه‌ی کاربران فعال (غیربن‌شده)، با رعایت محدودیت نرخ تلگرام.
+ * برای اطلاع‌رسانی رویدادهای عمومی مثل «تسک جدید اضافه شد» استفاده می‌شود.
+ * fire-and-forget است؛ منتظرش نمی‌مانیم تا پاسخ اصلی API کند نشود.
+ */
+async function broadcastToActiveUsers(User, text) {
+  if (!bot) return;
+  const users = await User.find({ isBanned: false }, 'telegramId');
+  const BATCH_SIZE = 20;
+  const DELAY_MS = 1100;
+
+  for (let i = 0; i < users.length; i += BATCH_SIZE) {
+    const batch = users.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(u => notifyUser(u.telegramId, text)));
+    if (i + BATCH_SIZE < users.length) {
+      await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+    }
+  }
+}
+
+module.exports = { bot, isChatMember, checkChatMembership, notifyUser, broadcastToActiveUsers };

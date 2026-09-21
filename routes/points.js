@@ -251,4 +251,31 @@ router.get('/withdrawals', auth, async (req, res) => {
   res.json({ success: true, withdrawals: list });
 });
 
+/**
+ * GET /api/points/public-history — فید عمومیِ پرداخت‌های واقعاً انجام‌شده (وضعیت paid)،
+ * برای شفافیت و اعتمادسازی. عمداً بدون اطلاعات هویتی کاربر (نه نام، نه یوزرنیم)؛
+ * فقط آدرس‌ها (کوتاه‌شده)، مبلغ، هش تراکنش و تاریخ. نیازی به لاگین ندارد.
+ */
+router.get('/public-history', async (req, res) => {
+  const list = await Withdrawal.find({ status: 'paid' })
+    .sort({ paidAt: -1 })
+    .limit(30)
+    .select('cryptoAmount token network address fromAddress txHash verified paidAt');
+
+  res.json({
+    success: true,
+    history: list.map(w => ({
+      type: 'withdrawal',
+      amount: w.cryptoAmount,
+      token: w.token,
+      network: w.network,
+      toAddress: w.address,
+      fromAddress: w.fromAddress,
+      txHash: w.txHash,
+      verified: w.verified,
+      date: w.paidAt
+    }))
+  });
+});
+
 module.exports = router;

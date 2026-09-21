@@ -7,6 +7,7 @@ const Withdrawal = require('../models/Withdrawal');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
 const { bot } = require('../utils/bot');
+const { verifyTonTransaction } = require('../utils/tonVerify');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -119,14 +120,62 @@ router.get('/withdrawals', async (req, res) => {
   res.json({ success: true, withdrawals: list });
 });
 
+/**
+ * POST /api/admin/withdrawals/:id/approve
+ * تأیید یک درخواست برداشت به‌شرط ورود Transaction Hash و بررسی موفق آن روی زنجیره.
+ * body: { txHash, note?, forceManualConfirm? }
+ * forceManualConfirm فقط وقتی لازم است که توکن Jetton باشد (مثل GRAM) — چون مبلغ/مقصد دقیق
+ * داخل payload رمزنگاری‌شده است و سیستم نمی‌تواند به‌تنهایی آن را کامل تایید کند؛ در این حالت
+ * ادمین باید جزئیات خام تراکنش (raw) را که در پاسخ خطا برگردانده می‌شود ببیند و صریحاً تایید کند.
+ */
 router.post('/withdrawals/:id/approve', async (req, res) => {
-  const w = await Withdrawal.findByIdAndUpdate(
-    req.params.id,
-    { status: 'approved', adminNote: (req.body && req.body.note) || '' },
-    { new: true }
-  );
-  if (!w) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
-  res.json({ success: true, withdrawal: w });
+  const txHash = String((req.body && req.body.txHash) || '').trim();
+  const forceManualConfirm = Boolean(req.body && req.body.forceManualConfirm);
+
+  if (!txHash) {
+    return res.status(400).json({ success: false, message: 'وارد کردن Transaction Hash الزامی است.' });
+  }
+
+  const withdrawal = await Withdrawal.findById(req.params.id);
+  if (!withdrawal) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
+  if (withdrawal.status !== 'pending') {
+    return res.status(400).json({ success: false, message: 'این درخواست قبلاً پردازش شده است.' });
+  }
+
+  const verification = await verifyTonTransaction({
+    txHash,
+    expectedAddress: withdrawal.address,
+    expectedAmount: withdrawal.cryptoAmount,
+    token: withdrawal.token
+  });
+
+  if (!verification.ok) {
+    return res.status(400).json({
+      success: false,
+      message: `تایید تراکنش روی زنجیره ناموفق بود: ${verification.reason}`,
+      code: 'VERIFICATION_FAILED'
+    });
+  }
+
+  if (verification.requiresManualAmountCheck && !forceManualConfirm) {
+    return res.status(409).json({
+      success: false,
+      message: verification.reason,
+      code: 'MANUAL_CONFIRM_REQUIRED',
+      raw: verification.raw
+    });
+  }
+
+  withdrawal.status = 'paid';
+  withdrawal.txHash = txHash;
+  withdrawal.verified = !verification.requiresManualAmountCheck;
+  withdrawal.verificationNote = verification.reason;
+  withdrawal.fromAddress = verification.fromAddress || '';
+  withdrawal.paidAt = new Date();
+  withdrawal.adminNote = (req.body && req.body.note) || withdrawal.adminNote;
+  await withdrawal.save();
+
+  res.json({ success: true, withdrawal });
 });
 
 router.post('/withdrawals/:id/reject', async (req, res) => {

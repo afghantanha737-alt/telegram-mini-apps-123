@@ -127,9 +127,8 @@
           <select id="withdrawFilter" onchange="loadWithdrawals()" style="width:auto;margin:0">
             <option value="">همه</option>
             <option value="pending" selected>در انتظار</option>
-            <option value="approved">تأیید شده</option>
             <option value="rejected">رد شده</option>
-            <option value="paid">پرداخت شده</option>
+            <option value="paid">پرداخت‌شده</option>
           </select>
         </div>
         <div id="withdrawalsList" style="margin-top:10px"></div>
@@ -202,7 +201,12 @@ async function api(path, options = {}) {
   });
   let data = {};
   try { data = await res.json(); } catch {}
-  if (!res.ok) throw new Error(data.message || "خطا در ارتباط با سرور");
+  if (!res.ok) {
+    const err = new Error(data.message || "خطا در ارتباط با سرور");
+    err.code = data.code;
+    err.raw = data.raw;
+    throw err;
+  }
   return data;
 }
 
@@ -400,7 +404,13 @@ async function deleteTask(id) {
 }
 
 /* ---------- WITHDRAWALS (نمایش بر اساس GRAM) ---------- */
-const STATUS_FA = { pending: "در انتظار", approved: "تأیید شده", rejected: "رد شده", paid: "پرداخت شده" };
+const STATUS_FA = { pending: "در انتظار", rejected: "رد شده", paid: "پرداخت‌شده" };
+
+function truncateMiddle(str, head = 8, tail = 6) {
+  const s = String(str || "");
+  if (s.length <= head + tail + 3) return s;
+  return `${s.slice(0, head)}…${s.slice(-tail)}`;
+}
 
 async function loadWithdrawals() {
   const container = document.getElementById("withdrawalsList");
@@ -414,21 +424,41 @@ async function loadWithdrawals() {
       return;
     }
     container.innerHTML = list.map(w => `
-      <div class="card" style="margin-bottom:10px">
+      <div class="card" style="margin-bottom:10px" id="wd-${w._id}">
         <div class="flexBetween" style="margin-bottom:8px">
           <b>${escapeHtml(w.user?.firstName || w.user?.username || "—")}</b>
           <span class="badge ${w.status}">${STATUS_FA[w.status] || w.status}</span>
         </div>
-        <div class="small" style="margin-bottom:6px">مقدار: <b style="color:var(--text)">${w.cryptoAmount} GRAM</b></div>
-        <label class="small" style="margin-bottom:4px">آدرس کامل کیف پول</label>
+        <div class="small" style="margin-bottom:6px">مقدار: <b style="color:var(--text)">${w.cryptoAmount} ${escapeHtml(w.token || "GRAM")}</b> · شبکه: ${escapeHtml(w.network || "TON")}</div>
+        <label class="small" style="margin-bottom:4px">آدرس مقصد (کیف‌پول کاربر)</label>
         <div style="display:flex;gap:6px;align-items:stretch;margin-bottom:8px">
           <input type="text" readonly value="${escapeHtml(w.address)}" style="margin:0;direction:ltr;font-family:monospace;font-size:11px" onclick="this.select()">
           <button class="secondary" style="white-space:nowrap" onclick="copyAddress('${escapeHtml(w.address).replaceAll("'", "\\'")}', this)">کپی</button>
         </div>
+
+        ${w.status === "paid" ? `
+          <div class="small" style="margin-bottom:4px">هش تراکنش (TxID)</div>
+          <div style="display:flex;gap:6px;align-items:stretch;margin-bottom:6px">
+            <input type="text" readonly value="${escapeHtml(w.txHash || "")}" style="margin:0;direction:ltr;font-family:monospace;font-size:11px" onclick="this.select()">
+            <button class="secondary" style="white-space:nowrap" onclick="copyAddress('${escapeHtml(w.txHash || "").replaceAll("'", "\\'")}', this)">کپی</button>
+          </div>
+          <div class="small">${w.verified ? "✅ به‌صورت خودکار روی زنجیره تایید شد" : "⚠️ تایید دستی توسط ادمین (Jetton)"}</div>
+          ${w.fromAddress ? `<div class="small" style="margin-top:2px">فرستنده: <span style="font-family:monospace">${escapeHtml(truncateMiddle(w.fromAddress))}</span></div>` : ""}
+        ` : ""}
+
         ${w.status === "pending" ? `
+          <div id="wd-approve-form-${w._id}" class="hidden" style="margin-bottom:8px;padding:10px;border:1px solid var(--line);border-radius:10px">
+            <label class="small" style="margin-bottom:4px">Transaction Hash (TxID) واقعی پرداخت</label>
+            <input type="text" id="wd-txhash-${w._id}" placeholder="مثلاً a1b2c3..." style="margin:0 0 8px;direction:ltr;font-family:monospace;font-size:12px">
+            <div id="wd-verify-msg-${w._id}" class="small" style="margin-bottom:8px"></div>
+            <div class="row">
+              <button class="success" onclick="submitApprove('${w._id}')">بررسی و تکمیل پرداخت</button>
+              <button class="secondary" onclick="hideApproveForm('${w._id}')">انصراف</button>
+            </div>
+          </div>
           <div class="row">
-            <button class="success" onclick="withdrawAction('${w._id}','approve')">تأیید</button>
-            <button class="danger" onclick="withdrawAction('${w._id}','reject')">رد</button>
+            <button class="success" onclick="showApproveForm('${w._id}')">تأیید (وارد کردن Hash)</button>
+            <button class="danger" onclick="withdrawReject('${w._id}')">رد</button>
           </div>
         ` : ""}
       </div>
@@ -438,10 +468,49 @@ async function loadWithdrawals() {
   }
 }
 
-async function withdrawAction(id, action) {
+function showApproveForm(id) {
+  document.getElementById(`wd-approve-form-${id}`)?.classList.remove("hidden");
+}
+
+function hideApproveForm(id) {
+  document.getElementById(`wd-approve-form-${id}`)?.classList.add("hidden");
+}
+
+async function submitApprove(id, forceManualConfirm = false) {
+  const input = document.getElementById(`wd-txhash-${id}`);
+  const msgBox = document.getElementById(`wd-verify-msg-${id}`);
+  const txHash = (input?.value || "").trim();
+
+  if (!txHash) {
+    if (msgBox) { msgBox.textContent = "وارد کردن Transaction Hash الزامی است."; msgBox.style.color = "var(--danger)"; }
+    return;
+  }
+
+  if (msgBox) { msgBox.textContent = "در حال بررسی تراکنش روی زنجیره..."; msgBox.style.color = "var(--text-muted)"; }
+
   try {
-    await api(`/api/admin/withdrawals/${id}/${action}`, { method: "POST", body: JSON.stringify({}) });
-    showMsg(action === "approve" ? "درخواست تأیید شد." : "درخواست رد شد.", "success");
+    await api(`/api/admin/withdrawals/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ txHash, forceManualConfirm })
+    });
+    showMsg("پرداخت با موفقیت تایید و ثبت شد.", "success");
+    loadWithdrawals();
+  } catch (error) {
+    if (error.code === "MANUAL_CONFIRM_REQUIRED") {
+      if (msgBox) {
+        msgBox.style.color = "var(--warning)";
+        msgBox.innerHTML = `⚠️ ${escapeHtml(error.message)}<br><button class="secondary" style="margin-top:6px" onclick="submitApprove('${id}', true)">تایید می‌کنم، دستی بررسی کردم — ثبت پرداخت</button>`;
+      }
+      return;
+    }
+    if (msgBox) { msgBox.textContent = error.message; msgBox.style.color = "var(--danger)"; }
+  }
+}
+
+async function withdrawReject(id) {
+  try {
+    await api(`/api/admin/withdrawals/${id}/reject`, { method: "POST", body: JSON.stringify({}) });
+    showMsg("درخواست رد شد.", "success");
     loadWithdrawals();
   } catch (error) {
     showMsg(error.message, "error");

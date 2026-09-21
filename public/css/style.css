@@ -491,6 +491,25 @@ html[data-theme="light"] .progressTrack { background: rgba(20,22,28,.08); }
 .historyItem:last-child { border-bottom: 0; }
 .historyMeta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 .historyAmount { font-weight: 800; font-size: 13px; }
+.historyTxRow {
+  display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 10.5px;
+  color: var(--text-muted); font-family: monospace; direction: ltr; justify-content: flex-end;
+}
+.historyTxRow .verifiedTick { color: var(--success); font-family: var(--font, inherit); }
+
+/* PUBLIC TX HISTORY CARD */
+.publicTxCard {
+  border-bottom: 1px solid var(--line); padding: 12px 0;
+}
+.publicTxCard:last-child { border-bottom: 0; }
+.publicTxTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.publicTxAmount { font-weight: 800; font-size: 14px; color: var(--text); }
+.publicTxStatus { font-size: 10px; font-weight: 800; color: var(--success); }
+.publicTxRow {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 11px; color: var(--text-muted); margin-top: 3px;
+}
+.publicTxRow span:last-child { font-family: monospace; direction: ltr; color: var(--text-soft); }
 
 /* REFERRAL / PROFILE LIST */
 .referralCodeBox {

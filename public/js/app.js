@@ -134,6 +134,11 @@ function formatPoints(value) {
 function formatNumber(value, decimals = 4) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: decimals }).format(Number(value) || 0);
 }
+function truncateMiddle(str, head = 6, tail = 6) {
+  const s = String(str || "");
+  if (s.length <= head + tail + 3) return s;
+  return `${s.slice(0, head)}…${s.slice(-tail)}`;
+}
 function getInitials(user) {
   const first = user?.first_name || user?.firstName || "";
   const last = user?.last_name || user?.lastName || "";
@@ -1081,8 +1086,19 @@ async function loadWalletHistory() {
 }
 
 const WITHDRAW_STATUS_UI = {
-  pending: { cls: "warning" }, approved: { cls: "success" }, rejected: { cls: "danger" }, paid: { cls: "success" }
+  pending: { cls: "warning" }, rejected: { cls: "danger" }, paid: { cls: "success" }
 };
+
+let publicHistory = [];
+async function loadPublicHistory() {
+  try {
+    const data = await api("/api/points/public-history");
+    publicHistory = Array.isArray(data?.history) ? data.history : [];
+  } catch (error) {
+    console.warn("Public history failed:", error);
+    publicHistory = [];
+  }
+}
 
 function renderWallet() {
   const content = $("#content");
@@ -1128,6 +1144,16 @@ function renderWallet() {
         <div class="loading" style="height:60px"></div>
       </div>
     </div>
+
+    <div class="card" id="publicHistoryCard">
+      <div class="cardHeader">
+        <div class="cardTitle">${t("wallet_public_history_title")}</div>
+      </div>
+      <p class="cardSubtitle" style="margin-bottom:10px">${t("wallet_public_history_desc")}</p>
+      <div id="publicHistoryList">
+        <div class="loading" style="height:60px"></div>
+      </div>
+    </div>
   `;
 
   loadWalletHistory().then(() => {
@@ -1142,12 +1168,38 @@ function renderWallet() {
       return `
         <div class="historyItem">
           <div>
-            <div class="historyAmount">${formatNumber(item.cryptoAmount, 6)} GRAM</div>
+            <div class="historyAmount">${formatNumber(item.cryptoAmount, 6)} ${escapeHTML(item.token || "GRAM")}</div>
             <div class="historyMeta">${timeAgo(item.createdAt)}</div>
+            ${item.status === "paid" && item.txHash ? `
+              <div class="historyTxRow">
+                <span class="verifiedTick">${item.verified ? "✅" : "⚠️"}</span>
+                <span>${escapeHTML(truncateMiddle(item.txHash))}</span>
+              </div>` : ""}
           </div>
-          <div class="badge ${statusInfo.cls}">${item.status}</div>
+          <div class="badge ${statusInfo.cls}">${t(`withdraw_status_${item.status}`)}</div>
         </div>`;
     }).join("");
+  });
+
+  loadPublicHistory().then(() => {
+    const list = $("#publicHistoryList");
+    if (!list) return;
+    if (publicHistory.length === 0) {
+      list.innerHTML = `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("wallet_public_history_empty")}</div></div>`;
+      return;
+    }
+    list.innerHTML = publicHistory.map(item => `
+      <div class="publicTxCard">
+        <div class="publicTxTop">
+          <span class="publicTxAmount">${formatNumber(item.amount, 6)} ${escapeHTML(item.token)}</span>
+          <span class="publicTxStatus">${item.verified ? "✅" : "⚠️"} ${t("history_status_completed")}</span>
+        </div>
+        <div class="publicTxRow"><span>${t("history_to_label")}</span><span>${escapeHTML(truncateMiddle(item.toAddress))}</span></div>
+        ${item.fromAddress ? `<div class="publicTxRow"><span>${t("history_from_label")}</span><span>${escapeHTML(truncateMiddle(item.fromAddress))}</span></div>` : ""}
+        ${item.txHash ? `<div class="publicTxRow"><span>${t("history_txid_label")}</span><span>${escapeHTML(truncateMiddle(item.txHash))}</span></div>` : ""}
+        <div class="publicTxRow"><span>${t("history_date_label")}</span><span style="font-family:inherit">${timeAgo(item.date)}</span></div>
+      </div>
+    `).join("");
   });
 }
 

@@ -6,7 +6,7 @@ const Task = require('../models/Task');
 const Withdrawal = require('../models/Withdrawal');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
-const { bot } = require('../utils/bot');
+const { bot, notifyUser, broadcastToActiveUsers } = require('../utils/bot');
 const { verifyTonTransaction } = require('../utils/tonVerify');
 
 const upload = multer({
@@ -95,7 +95,12 @@ router.post('/tasks', async (req, res) => {
     chatId,
     maxCompletions: finalMaxCompletions
   });
+
   res.json({ success: true, task });
+
+  // اطلاع‌رسانی تسک جدید به همه‌ی کاربران فعال؛ عمداً بدون await تا پاسخ به پنل ادمین معطل نماند
+  broadcastToActiveUsers(User, `🎯 تسک جدید اضافه شد!\n\n${title}\nپاداش: ${reward} پوینت\n\nهمین حالا از تب «تسک‌ها» انجامش بده.`)
+    .catch(error => console.warn('Task broadcast failed:', error.message || error));
 });
 
 router.put('/tasks/:id', async (req, res) => {
@@ -176,6 +181,15 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
   await withdrawal.save();
 
   res.json({ success: true, withdrawal });
+
+  // اطلاع‌رسانی به خود کاربر که پرداختش انجام شد
+  const payeeUser = await User.findById(withdrawal.user, 'telegramId');
+  if (payeeUser) {
+    notifyUser(
+      payeeUser.telegramId,
+      `✅ برداشت شما تایید و پرداخت شد!\n\nمبلغ: ${withdrawal.cryptoAmount} ${withdrawal.token}\nTxID: ${withdrawal.txHash}\n\nمی‌تونی تراکنش رو تو تاریخچه‌ی کیف‌پولت هم ببینی.`
+    ).catch(() => {});
+  }
 });
 
 router.post('/withdrawals/:id/reject', async (req, res) => {
@@ -191,6 +205,16 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
   await withdrawal.save();
 
   res.json({ success: true, withdrawal });
+
+  // اطلاع‌رسانی رد شدن درخواست به کاربر (پوینتش قبلاً در بالا برگردانده شده)
+  const requesterUser = await User.findById(withdrawal.user, 'telegramId');
+  if (requesterUser) {
+    const reasonLine = withdrawal.adminNote ? `\nدلیل: ${withdrawal.adminNote}` : '';
+    notifyUser(
+      requesterUser.telegramId,
+      `❌ درخواست برداشت شما رد شد و پوینت‌هایش به حسابت برگشت.${reasonLine}`
+    ).catch(() => {});
+  }
 });
 
 /* -------------------- USERS -------------------- */

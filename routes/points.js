@@ -42,11 +42,6 @@ router.get('/me', auth, async (req, res) => {
   const canCheckIn = !u.lastCheckIn || utcDayKey(u.lastCheckIn) < utcDayKey(new Date());
   const minWithdrawGram = Number((settings.minWithdrawPoints * settings.rate).toFixed(6));
 
-  // شمارش تماشای تبلیغ امروز؛ اگر روز عوض شده باشد صفر در نظر گرفته می‌شود (بدون نیاز به ذخیره فوری)
-  const adWatchesToday = (u.lastAdWatchDate && utcDayKey(u.lastAdWatchDate) === utcDayKey(new Date()))
-    ? u.adWatchesToday
-    : 0;
-
   res.json({
     success: true,
     points: u.points,
@@ -59,47 +54,7 @@ router.get('/me', auth, async (req, res) => {
     firstName: u.firstName,
     minWithdrawGram,
     nextResetAt: nextResetTimestamp(),
-    language: u.language,
-    adWatchesToday,
-    dailyAdWatchLimit: settings.dailyAdWatchLimit,
-    rewardAdPoints: settings.rewardAdPoints
-  });
-});
-
-/**
- * POST /api/points/watch-ad — پاداش تماشای تبلیغ روزانه (AdsGram Rewarded)
- * اعتماد سمت کلاینت: چون Reward URL سمت سرور AdsGram پیکربندی نشده،
- * اعتبارسنجی همین‌جا (بعد از resolve شدن پرامیس show در فرانت‌اند) با محدودیت روزانه انجام می‌شود
- * تا از سوءاستفاده‌ی ساده جلوگیری شود.
- */
-router.post('/watch-ad', auth, async (req, res) => {
-  const u = req.dbUser;
-  const settings = await Settings.getGlobal();
-  const todayKey = utcDayKey(new Date());
-
-  const alreadyToday = u.lastAdWatchDate && utcDayKey(u.lastAdWatchDate) === todayKey;
-  const currentCount = alreadyToday ? u.adWatchesToday : 0;
-
-  if (currentCount >= settings.dailyAdWatchLimit) {
-    return res.status(400).json({
-      success: false,
-      message: 'سقف تماشای تبلیغ امروز پر شده است.',
-      code: 'AD_LIMIT_REACHED'
-    });
-  }
-
-  u.points += settings.rewardAdPoints;
-  u.adWatchesToday = currentCount + 1;
-  u.lastAdWatchDate = new Date();
-  await u.save();
-
-  res.json({
-    success: true,
-    earned: settings.rewardAdPoints,
-    points: u.points,
-    adWatchesToday: u.adWatchesToday,
-    dailyAdWatchLimit: settings.dailyAdWatchLimit,
-    nextResetAt: nextResetTimestamp()
+    language: u.language
   });
 });
 

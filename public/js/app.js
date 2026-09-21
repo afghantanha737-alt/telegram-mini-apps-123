@@ -774,7 +774,7 @@ async function doSpin() {
 window.doSpin = doSpin;
 
 /* ================= ADSGRAM REWARDED AD ================= */
-const ADSGRAM_BLOCK_ID = "48866";
+const ADSGRAM_BLOCK_ID = "49002";
 let adsgramController = null;
 
 function getAdsgramController() {

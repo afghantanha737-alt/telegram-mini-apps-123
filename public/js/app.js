@@ -35,9 +35,6 @@ const state = {
   totalCheckins: 0,
   minWithdrawGram: 0,
   nextResetAt: 0,
-  adWatchesToday: 0,
-  dailyAdWatchLimit: 0,
-  rewardAdPoints: 0,
   referralCode: "",
   shareLink: "",
   invitedCount: 0,
@@ -424,9 +421,6 @@ async function loadUserData() {
   state.totalCheckins = Number(data?.totalCheckins) || 0;
   state.minWithdrawGram = Number(data?.minWithdrawGram) || 0;
   state.nextResetAt = Number(data?.nextResetAt) || 0;
-  state.adWatchesToday = Number(data?.adWatchesToday) || 0;
-  state.dailyAdWatchLimit = Number(data?.dailyAdWatchLimit) || 0;
-  state.rewardAdPoints = Number(data?.rewardAdPoints) || 0;
   if (data?.firstName) state.user = { ...(state.user || {}), first_name: data.firstName };
   updateHeader();
 }
@@ -773,53 +767,6 @@ async function doSpin() {
 }
 window.doSpin = doSpin;
 
-/* ================= ADSGRAM REWARDED AD ================= */
-const ADSGRAM_BLOCK_ID = "49002";
-let adsgramController = null;
-
-function getAdsgramController() {
-  if (adsgramController) return adsgramController;
-  if (window.Adsgram && typeof window.Adsgram.init === "function") {
-    adsgramController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
-  }
-  return adsgramController;
-}
-
-async function watchRewardedAd() {
-  const button = $("#watchAdBtn");
-  if (state.adWatchesToday >= state.dailyAdWatchLimit) {
-    toast(t("daily_ads_limit_toast"), "warning");
-    return;
-  }
-
-  const controller = getAdsgramController();
-  if (!controller) {
-    toast(t("error_generic"), "error");
-    return;
-  }
-
-  if (button) button.disabled = true;
-
-  try {
-    await controller.show();
-    // کاربر تبلیغ را تا انتها دید (یا در حالت Interstitial رد کرد) — حالا از سرور پاداش می‌گیریم
-    const result = await api("/api/points/watch-ad", { method: "POST" });
-    state.points = Number(result.points) || state.points;
-    state.adWatchesToday = Number(result.adWatchesToday) || state.adWatchesToday;
-    updateHeader();
-    haptic("success");
-    toast(t("daily_ads_reward_toast", { n: formatPoints(result.earned) }), "success");
-    renderDaily();
-  } catch (error) {
-    // یا کاربر تبلیغ را نیمه‌کاره بست (خطای AdsGram)، یا سقف روزانه پر شده (خطای سرور)
-    if (error && error.code) {
-      toast(translateServerMessage(error.code, error.message), "error");
-    }
-    if (button) button.disabled = state.adWatchesToday >= state.dailyAdWatchLimit;
-  }
-}
-window.watchRewardedAd = watchRewardedAd;
-
 function startResetCountdown() {
   clearInterval(countdownInterval);
   const el = $("#resetCountdown");
@@ -903,25 +850,6 @@ function renderDaily() {
       <button id="spinBtn" class="primaryBtn wheelSpinBtn" type="button" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">
         🎡 ${t("spin_button")}
       </button>
-    </div>
-
-    <div class="card">
-      <div class="cardHeader">
-        <div class="cardTitle">🎬 ${t("daily_ads_title")}</div>
-      </div>
-      <p class="cardSubtitle" style="margin-bottom:12px">${t("daily_ads_desc", { points: formatPoints(state.rewardAdPoints) })}</p>
-      <button
-        id="watchAdBtn"
-        class="primaryBtn"
-        type="button"
-        ${state.adWatchesToday >= state.dailyAdWatchLimit ? "disabled" : ""}
-        onclick="watchRewardedAd()"
-      >
-        ${state.adWatchesToday >= state.dailyAdWatchLimit ? t("daily_ads_limit_button") : t("daily_ads_button")}
-      </button>
-      <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--text-muted)">
-        ${t("daily_ads_remaining", { watched: formatPoints(state.adWatchesToday), limit: formatPoints(state.dailyAdWatchLimit) })}
-      </div>
     </div>
 
     <div class="streakBox">

@@ -70,6 +70,39 @@
 </div>
 
 <!-- TERMS & CONDITIONS MODAL -->
+<!-- ONBOARDING (راهنمای ورود اول) -->
+<div id="onboardingOverlay" class="overlay" style="display:none">
+  <div class="modalBox onboardingBox" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
+    <button class="closeBtn onboardingSkip" type="button" onclick="skipOnboarding()" aria-label="رد کردن">×</button>
+
+    <div id="onboardingStep0" class="onboardingStep">
+      <div class="onboardingEmoji">👋</div>
+      <h3 id="onboardingTitle" class="onboardingHeading">به Gramup خوش اومدی</h3>
+      <p class="onboardingText">یک مینی‌اپ ساده برای جمع‌آوری پوینت با انجام کارهای کوچیک، که قابل تبدیل به کوین واقعیه. تو ۳۰ ثانیه نشونت می‌دیم از کجا شروع کنی.</p>
+    </div>
+
+    <div id="onboardingStep1" class="onboardingStep" style="display:none">
+      <div class="onboardingEmoji">🎯</div>
+      <h3 class="onboardingHeading">چطور پوینت جمع کنی؟</h3>
+      <p class="onboardingText">از تب «تسک‌ها» با انجام کارهای مشخص‌شده، از تب «روزانه» با ورود متوالی هر روز، و از بخش «دعوت دوستان» با معرفی افراد جدید، پوینت به‌دست میاد.</p>
+    </div>
+
+    <div id="onboardingStep2" class="onboardingStep" style="display:none">
+      <div class="onboardingEmoji">💱</div>
+      <h3 class="onboardingHeading">تبدیل و برداشت</h3>
+      <p class="onboardingText">از تب «کیف‌پول» پوینت‌هاتو به GRAM تبدیل کن و درخواست برداشت بده. هر پرداخت واقعی، با تراکنش روی زنجیره قابل بررسیه — همه‌چیز شفاف.</p>
+    </div>
+
+    <div class="onboardingDots">
+      <span id="onboardingDot0" class="onboardingDot active"></span>
+      <span id="onboardingDot1" class="onboardingDot"></span>
+      <span id="onboardingDot2" class="onboardingDot"></span>
+    </div>
+
+    <button id="onboardingNextBtn" class="primaryBtn" type="button" onclick="onboardingNext()">بعدی</button>
+  </div>
+</div>
+
 <div id="termsOverlay" class="overlay" style="display:none">
   <div class="modalBox termsBox" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
     <div class="modalHeader">

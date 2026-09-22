@@ -8,6 +8,7 @@ const User = require('../models/User');
 const Settings = require('../models/Settings');
 const { bot, notifyUser, broadcastToActiveUsers } = require('../utils/bot');
 const { verifyTonTransaction } = require('../utils/tonVerify');
+const { recordLedger } = require('../utils/ledger');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -197,7 +198,20 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
   if (!withdrawal) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
 
   if (withdrawal.status === 'pending') {
-    await User.findByIdAndUpdate(withdrawal.user, { $inc: { points: withdrawal.pointsSpent } });
+    const refunded = await User.findByIdAndUpdate(
+      withdrawal.user,
+      { $inc: { points: withdrawal.pointsSpent } },
+      { new: true }
+    );
+    if (refunded) {
+      recordLedger({
+        user: refunded._id,
+        type: 'admin_adjust',
+        amount: withdrawal.pointsSpent,
+        description: 'بازگشت پوینت بابت رد درخواست برداشت',
+        balanceAfter: refunded.points
+      }).catch(() => {});
+    }
   }
 
   withdrawal.status = 'rejected';

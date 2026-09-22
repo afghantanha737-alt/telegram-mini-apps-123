@@ -2,7 +2,8 @@
 const express = require('express');
 const router = express.Router();
 const { requireTelegramAuth } = require('../utils/telegramAuth');
-const { checkChatMembership } = require('../utils/bot');
+const { checkChatMembership, notifyUser } = require('../utils/bot');
+const { recordLedger } = require('../utils/ledger');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
 const User = require('../models/User');
@@ -21,7 +22,7 @@ const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
  * موفق به آپدیت می‌شود و پاداش هرگز دوبار پرداخت نمی‌شود.
  */
 async function maybeAwardReferralBonus(userId) {
-  const user = await User.findById(userId).select('referredBy referralBonusAwarded');
+  const user = await User.findById(userId).select('referredBy referralBonusAwarded firstName username');
   if (!user || !user.referredBy || user.referralBonusAwarded) return;
 
   const approvedCount = await TaskCompletion.countDocuments({ user: userId, status: 'approved' });
@@ -33,7 +34,28 @@ async function maybeAwardReferralBonus(userId) {
   );
   if (!locked) return; // یک درخواست دیگر همین الان این را پردازش کرد
 
-  await User.findByIdAndUpdate(user.referredBy, { $inc: { points: REFERRAL_BONUS_POINTS } });
+  const referrer = await User.findByIdAndUpdate(
+    user.referredBy,
+    { $inc: { points: REFERRAL_BONUS_POINTS } },
+    { new: true }
+  );
+  if (!referrer) return;
+
+  const invitedName = user.firstName || user.username || 'دوستت';
+  await recordLedger({
+    user: referrer._id,
+    type: 'referral_bonus',
+    amount: REFERRAL_BONUS_POINTS,
+    description: `پاداش دعوت ${invitedName}`,
+    balanceAfter: referrer.points
+  });
+
+  // اطلاع‌رسانی فوری به دعوت‌کننده که پاداش ریفرالش آزاد شد — تا این لحظه
+  // کاربر فقط تعداد دعوت‌شده‌ها را می‌دید، نه اینکه دقیقاً کِی پاداش می‌گیرد.
+  notifyUser(
+    referrer.telegramId,
+    `🎉 تبریک! ${invitedName} تسک‌های لازم رو تکمیل کرد و ${REFERRAL_BONUS_POINTS} پوینت پاداش دعوت به حسابت اضافه شد.\nموجودی فعلی: ${referrer.points} پوینت.`
+  ).catch(() => {});
 }
 
 // GET /api/tasks
@@ -149,6 +171,14 @@ router.post('/:id/claim', auth, async (req, res) => {
 
     u.points += task.reward;
     await u.save();
+
+    recordLedger({
+      user: u._id,
+      type: 'task',
+      amount: task.reward,
+      description: task.title,
+      balanceAfter: u.points
+    }).catch(() => {});
 
     // بعد از ثبت موفق تسک، بررسی می‌کنیم آیا پاداش رفرال دعوت‌کننده
     // (در صورت وجود) باید همین حالا آزاد شود.

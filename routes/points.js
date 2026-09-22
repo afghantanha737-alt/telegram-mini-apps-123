@@ -2,8 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const { requireTelegramAuth } = require('../utils/telegramAuth');
+const { recordLedger } = require('../utils/ledger');
 const Settings = require('../models/Settings');
 const Withdrawal = require('../models/Withdrawal');
+const PointsLedger = require('../models/PointsLedger');
 
 const auth = requireTelegramAuth(process.env.BOT_TOKEN);
 
@@ -22,6 +24,12 @@ function utcDayKey(date) {
 function nextResetTimestamp() {
   const currentDayKey = utcDayKey(new Date());
   return (currentDayKey + 1) * 86400000; // شروع روز UTC بعدی، به میلی‌ثانیه
+}
+
+function truncateAddress(address) {
+  const s = String(address || '');
+  if (s.length <= 14) return s;
+  return `${s.slice(0, 6)}…${s.slice(-6)}`;
 }
 
 // چرخ‌گردون: ۶ خانه
@@ -86,6 +94,14 @@ router.post('/checkin', auth, async (req, res) => {
 
   await u.save();
 
+  recordLedger({
+    user: u._id,
+    type: 'checkin',
+    amount: earned,
+    description: `ورود روزانه (استریک ${u.streak})`,
+    balanceAfter: u.points
+  }).catch(() => {});
+
   res.json({
     success: true,
     earned,
@@ -117,6 +133,16 @@ router.post('/spin', auth, async (req, res) => {
   }
 
   await u.save();
+
+  if (segment.type === 'points' && segment.value > 0) {
+    recordLedger({
+      user: u._id,
+      type: 'spin',
+      amount: segment.value,
+      description: 'برد از گردونه شانس',
+      balanceAfter: u.points
+    }).catch(() => {});
+  }
 
   res.json({
     success: true,
@@ -156,6 +182,9 @@ router.post('/exchange', auth, async (req, res) => {
     u.gramBalance = Number((u.gramBalance + gramGained).toFixed(6));
     await u.save();
 
+    recordLedger({ user: u._id, type: 'exchange_out', currency: 'points', amount: -points, description: 'تبدیل پوینت به GRAM', balanceAfter: u.points }).catch(() => {});
+    recordLedger({ user: u._id, type: 'exchange_in', currency: 'gram', amount: gramGained, description: 'تبدیل پوینت به GRAM', balanceAfter: u.gramBalance }).catch(() => {});
+
     return res.json({
       success: true,
       direction,
@@ -190,6 +219,9 @@ router.post('/exchange', auth, async (req, res) => {
   u.gramBalance = Number((u.gramBalance - gramSpent).toFixed(6));
   u.points += pointsGained;
   await u.save();
+
+  recordLedger({ user: u._id, type: 'exchange_out', currency: 'gram', amount: -gramSpent, description: 'تبدیل GRAM به پوینت', balanceAfter: u.gramBalance }).catch(() => {});
+  recordLedger({ user: u._id, type: 'exchange_in', currency: 'points', amount: pointsGained, description: 'تبدیل GRAM به پوینت', balanceAfter: u.points }).catch(() => {});
 
   res.json({
     success: true,
@@ -237,6 +269,15 @@ router.post('/withdraw', auth, async (req, res) => {
     address: u.walletAddress
   });
 
+  recordLedger({
+    user: u._id,
+    type: 'withdraw',
+    currency: 'gram',
+    amount: -amount,
+    description: `درخواست برداشت به ${truncateAddress(u.walletAddress)}`,
+    balanceAfter: u.gramBalance
+  }).catch(() => {});
+
   res.json({
     success: true,
     message: 'درخواست برداشت ثبت شد و به‌زودی بررسی می‌شود.',
@@ -249,6 +290,30 @@ router.post('/withdraw', auth, async (req, res) => {
 router.get('/withdrawals', auth, async (req, res) => {
   const list = await Withdrawal.find({ user: req.dbUser._id }).sort({ createdAt: -1 }).limit(30);
   res.json({ success: true, withdrawals: list });
+});
+
+/**
+ * GET /api/points/history — تاریخچه‌ی شخصی کاربر: هر رویدادی که پوینت یا
+ * GRAM او را تغییر داده (تسک، ورود روزانه، گردونه، پاداش رفرال، تبدیل، برداشت...).
+ * صفحه‌بندی با cursor: برای گرفتن صفحه‌ی بعد، createdAt آخرین آیتم دریافتی
+ * را به‌عنوان ?before=... بفرست.
+ */
+router.get('/history', auth, async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 50);
+  const filter = { user: req.dbUser._id };
+
+  const before = req.query.before ? new Date(req.query.before) : null;
+  if (before && !Number.isNaN(before.getTime())) {
+    filter.createdAt = { $lt: before };
+  }
+
+  const items = await PointsLedger.find(filter).sort({ createdAt: -1 }).limit(limit);
+
+  res.json({
+    success: true,
+    history: items,
+    hasMore: items.length === limit
+  });
 });
 
 /**

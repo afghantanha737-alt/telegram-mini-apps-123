@@ -591,6 +591,17 @@ html[data-theme="light"] .progressTrack { background: rgba(20,22,28,.08); }
 .termsBody { max-height: 50vh; overflow-y: auto; padding-right: 4px; }
 .termsBody p { font-size: 12px; margin-bottom: 12px; }
 
+/* ONBOARDING */
+.onboardingBox { position: relative; text-align: center; padding-top: 40px; }
+.onboardingSkip { position: absolute; top: 16px; left: 16px; }
+.onboardingStep { padding: 10px 4px 24px; }
+.onboardingEmoji { font-size: 44px; margin-bottom: 14px; }
+.onboardingHeading { font-size: 17px; font-weight: 900; color: var(--text); margin-bottom: 10px; }
+.onboardingText { font-size: 13px; line-height: 1.9; color: var(--text-soft); }
+.onboardingDots { display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 16px; }
+.onboardingDot { width: 6px; height: 6px; border-radius: 50%; background: var(--line-strong); transition: all .2s var(--ease); }
+.onboardingDot.active { width: 20px; border-radius: 999px; background: var(--primary); }
+
 .captchaBox, .withdrawBox { text-align: center; }
 .captchaIcon { font-size: 36px; margin-bottom: 6px; }
 .captchaDescription { font-size: 11px; margin: 6px 0 14px; }

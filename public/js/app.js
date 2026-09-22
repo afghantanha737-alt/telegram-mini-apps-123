@@ -325,6 +325,18 @@ function hideTerms() {
 window.hideTerms = hideTerms;
 window.showTerms = showTerms;
 
+/* ================= PRIVACY POLICY ================= */
+function showPrivacy() {
+  const overlay = $("#privacyOverlay");
+  if (overlay) overlay.style.display = "flex";
+}
+function hidePrivacy() {
+  const overlay = $("#privacyOverlay");
+  if (overlay) overlay.style.display = "none";
+}
+window.showPrivacy = showPrivacy;
+window.hidePrivacy = hidePrivacy;
+
 /* ================= ONBOARDING ================= */
 const ONBOARDING_STEP_COUNT = 3;
 let onboardingStep = 0;
@@ -1341,6 +1353,11 @@ function renderProfileMenu() {
         <div class="profileItem" onclick="showTerms()">
           <div class="profileIcon">📜</div>
           <div class="profileText">${t("menu_terms")}</div>
+          <div class="profileChevron">‹</div>
+        </div>
+        <div class="profileItem" onclick="showPrivacy()">
+          <div class="profileIcon">🔒</div>
+          <div class="profileText">${t("menu_privacy")}</div>
           <div class="profileChevron">‹</div>
         </div>
         <div class="profileItem" onclick="showLanguageOverlay()">

@@ -124,7 +124,23 @@ const TRANSLATIONS = {
     toast_verify_needs_join: "هنوز عضویت شما تأیید نشد. اول عضو شو، بعد دوباره «بررسی» بزن.",
     toast_proof_sent: "اسکرین‌شات ثبت شد و در انتظار بررسی ادمین است.",
     retry_button: "تلاش دوباره",
-    error_title: "مشکلی پیش آمد"
+    error_title: "مشکلی پیش آمد",
+    task_hint_not_joined_with_link: "۱) روی «باز کردن لینک» بزن و عضو کانال/گروه شو.\n۲) بعد از عضویت، دوباره روی «بررسی عضویت» بزن.\nاگه قبلاً عضو شدی و بازم این پیام میاد، چند ثانیه صبر کن و دوباره امتحان کن.",
+    task_hint_not_joined_no_link: "اول باید در کانال یا گروه مربوطه عضو شوی، بعد دوباره روی «بررسی عضویت» بزن.",
+    task_hint_config_error_suffix: "این مشکل از تنظیمات تسکه، نه از تو — لطفاً به پشتیبانی اطلاع بده.",
+    menu_history: "تاریخچه‌ی تراکنش‌ها",
+    history_page_title: "تاریخچه‌ی تراکنش‌ها",
+    history_empty: "هنوز تراکنشی ثبت نشده است.",
+    history_load_more: "نمایش بیشتر",
+    history_loading: "در حال بارگذاری...",
+    history_type_task: "پاداش تسک",
+    history_type_checkin: "ورود روزانه",
+    history_type_spin: "برد از گردونه شانس",
+    history_type_referral_bonus: "پاداش دعوت دوست",
+    history_type_exchange_out: "تبدیل ارز (کسر)",
+    history_type_exchange_in: "تبدیل ارز (افزایش)",
+    history_type_withdraw: "درخواست برداشت",
+    history_type_admin_adjust: "اصلاح توسط ادمین"
   },
 
   ps: {
@@ -246,7 +262,23 @@ const TRANSLATIONS = {
     toast_verify_needs_join: "ستاسو غړیتوب لا تایید نه دی شوی. لومړی غړی شئ، بیا «بررسي» فشار ورکړئ.",
     toast_proof_sent: "سکرین‌شاټ ثبت شو او د اډمین تر بررسۍ لاندې دی.",
     retry_button: "بیا هڅه",
-    error_title: "ستونزه رامنځته شوه"
+    error_title: "ستونزه رامنځته شوه",
+    task_hint_not_joined_with_link: "۱) پر «لینک خلاصول» کلیک وکړئ او د کانال/ګروپ غړی شئ.\n۲) وروسته له غړیتوب، بیا پر «غړیتوب وګورئ» کلیک وکړئ.\nکه مخکې غړي شوي یاست او بیا هم دا پیغام راځي، لږه صبر وکړئ او بیا هڅه وکړئ.",
+    task_hint_not_joined_no_link: "لومړی باید په اړوند کانال یا ګروپ کې غړی شئ، بیا پر «غړیتوب وګورئ» کلیک وکړئ.",
+    task_hint_config_error_suffix: "دا ستونزه د دندې له تنظیماتو ده، نه ستاسو له طرفه — مهرباني وکړئ ملاتړ ته خبر ورکړئ.",
+    menu_history: "د راکړې ورکړې تاریخچه",
+    history_page_title: "د راکړې ورکړې تاریخچه",
+    history_empty: "تر اوسه هېڅ راکړه ورکړه نه ده ثبت شوې.",
+    history_load_more: "نور وښایاست",
+    history_loading: "بارول کیږي...",
+    history_type_task: "د دندې انعام",
+    history_type_checkin: "ورځنی ننوتل",
+    history_type_spin: "د ګردونې برد",
+    history_type_referral_bonus: "د بلنې انعام",
+    history_type_exchange_out: "بدلون (کمښت)",
+    history_type_exchange_in: "بدلون (زیاتوالی)",
+    history_type_withdraw: "د وتلو غوښتنه",
+    history_type_admin_adjust: "د اډمین لخوا اصلاح"
   },
 
   en: {
@@ -368,7 +400,23 @@ const TRANSLATIONS = {
     toast_verify_needs_join: "Your membership isn't verified yet. Join first, then tap Verify again.",
     toast_proof_sent: "Screenshot submitted and pending admin review.",
     retry_button: "Try again",
-    error_title: "Something went wrong"
+    error_title: "Something went wrong",
+    task_hint_not_joined_with_link: "1) Tap \"Open link\" and join the channel/group.\n2) After joining, tap \"Verify\" again.\nIf you already joined and still see this, wait a few seconds and try again.",
+    task_hint_not_joined_no_link: "You need to join the related channel or group first, then tap \"Verify\" again.",
+    task_hint_config_error_suffix: "This is a task setup issue, not something you did — please let support know.",
+    menu_history: "Transaction history",
+    history_page_title: "Transaction history",
+    history_empty: "No transactions yet.",
+    history_load_more: "Load more",
+    history_loading: "Loading...",
+    history_type_task: "Task reward",
+    history_type_checkin: "Daily check-in",
+    history_type_spin: "Spin wheel win",
+    history_type_referral_bonus: "Referral bonus",
+    history_type_exchange_out: "Exchange (out)",
+    history_type_exchange_in: "Exchange (in)",
+    history_type_withdraw: "Withdrawal request",
+    history_type_admin_adjust: "Admin adjustment"
   }
 };
 

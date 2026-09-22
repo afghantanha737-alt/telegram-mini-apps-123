@@ -517,6 +517,50 @@ async function loadTasks() {
   }
 }
 
+/* ================= TRANSACTION HISTORY (LEDGER) ================= */
+let historyList = [];
+let historyHasMore = false;
+let historyLoading = false;
+
+const LEDGER_TYPE_UI = {
+  task: { icon: "✅" },
+  checkin: { icon: "📅" },
+  spin: { icon: "🎡" },
+  referral_bonus: { icon: "👥" },
+  exchange_out: { icon: "⇄" },
+  exchange_in: { icon: "⇄" },
+  withdraw: { icon: "➤" },
+  admin_adjust: { icon: "🛠️" }
+};
+
+async function loadHistory(reset = true) {
+  if (historyLoading) return;
+  historyLoading = true;
+  try {
+    if (reset) historyList = [];
+    const before = reset || historyList.length === 0
+      ? ""
+      : `&before=${encodeURIComponent(historyList[historyList.length - 1].createdAt)}`;
+    const data = await api(`/api/points/history?limit=30${before}`);
+    const items = Array.isArray(data?.history) ? data.history : [];
+    historyList = reset ? items : historyList.concat(items);
+    historyHasMore = Boolean(data?.hasMore);
+  } catch (error) {
+    console.warn("History failed:", error);
+    if (reset) { historyList = []; historyHasMore = false; }
+  } finally {
+    historyLoading = false;
+  }
+}
+
+async function loadMoreHistory() {
+  const btn = $("#historyLoadMoreBtn");
+  if (btn) { btn.disabled = true; btn.textContent = t("history_loading"); }
+  await loadHistory(false);
+  renderProfile();
+}
+window.loadMoreHistory = loadMoreHistory;
+
 async function loadLeaderboard() {
   try {
     const data = await api("/api/leaderboard/top");
@@ -643,6 +687,14 @@ function openTaskLinkOnly(url) {
 }
 window.openTaskLinkOnly = openTaskLinkOnly;
 
+/**
+ * راهنمای پایدار زیر هر تسک، بعد از تلاش ناموفق برای تایید — کلید taskId.
+ * بر خلاف toast (که بعد از ۲.۸ ثانیه محو می‌شود)، این راهنما تا اقدام بعدی
+ * کاربر (یا موفقیت تسک) روی صفحه باقی می‌ماند، تا واقعاً بداند چه کاری
+ * باید انجام بدهد، نه فقط اینکه «رد شد».
+ */
+const taskHints = {};
+
 /** تسک‌های تلگرامی: بررسی خودکار عضویت با API ربات */
 async function verifyTelegramTask(taskId) {
   const button = document.querySelector(`[data-verify="${taskId}"]`);
@@ -652,21 +704,32 @@ async function verifyTelegramTask(taskId) {
     const result = await api(`/api/tasks/${taskId}/claim`, { method: "POST" });
     haptic("success");
     toast(result.message, "success");
+    delete taskHints[taskId];
     state.points = Number(result.points) || state.points;
     await loadTasks();
     updateHeader();
     renderTasks();
   } catch (error) {
     haptic("error");
+    const task = state.tasks.find(item => String(item._id) === String(taskId));
+
     if (error.code === "NOT_JOINED") {
       toast(t("toast_verify_needs_join"), "warning");
+      taskHints[taskId] = {
+        type: "warning",
+        message: task && task.url ? t("task_hint_not_joined_with_link") : t("task_hint_not_joined_no_link")
+      };
     } else if (error.code === "VERIFY_CONFIG_ERROR") {
       // خطای واقعی تنظیمات (chatId اشتباه، ربات بدون دسترسی و ...) — پیام دقیق را نشان بده
       toast(error.message, "error");
+      taskHints[taskId] = { type: "error", message: `${error.message} ${t("task_hint_config_error_suffix")}` };
     } else {
-      toast(translateServerMessage(error.code, error.message), "error");
+      const message = translateServerMessage(error.code, error.message);
+      toast(message, "error");
+      taskHints[taskId] = { type: "error", message };
     }
     if (button) { button.disabled = false; button.textContent = t("task_action_verify"); }
+    renderTasks();
   }
 }
 window.verifyTelegramTask = verifyTelegramTask;
@@ -707,8 +770,10 @@ function renderTasks() {
             </div>`;
         }
 
+        const hint = status === "todo" ? taskHints[task._id] : null;
+
         return `
-        <div class="taskItem">
+        <div class="taskItem" style="flex-wrap:wrap">
           <div class="taskIcon">${icon}</div>
           <div class="taskBody">
             <div class="taskTitle">${escapeHTML(task.title)}</div>
@@ -716,6 +781,7 @@ function renderTasks() {
             <div class="taskReward">+${formatPoints(task.reward)} ${t("points_unit")}</div>
           </div>
           ${actionHtml}
+          ${hint ? `<div class="taskHint ${hint.type}" style="flex-basis:100%">${escapeHTML(hint.message)}</div>` : ""}
         </div>`;
       }).join("")}
     </div>
@@ -1307,10 +1373,11 @@ function shareReferralLink() {
 }
 window.shareReferralLink = shareReferralLink;
 
-let profileView = "menu"; // menu | referral | leaderboard | about
+let profileView = "menu"; // menu | referral | leaderboard | about | history
 
 function setProfileView(view) {
   profileView = view;
+  if (view === "history") { historyList = []; historyHasMore = false; }
   renderProfile();
 }
 window.setProfileView = setProfileView;
@@ -1343,6 +1410,11 @@ function renderProfileMenu() {
         <div class="profileItem" onclick="setProfileView('leaderboard')">
           <div class="profileIcon">🏆</div>
           <div class="profileText">${t("menu_leaderboard")}</div>
+          <div class="profileChevron">‹</div>
+        </div>
+        <div class="profileItem" onclick="setProfileView('history')">
+          <div class="profileIcon">🧾</div>
+          <div class="profileText">${t("menu_history")}</div>
           <div class="profileChevron">‹</div>
         </div>
         <div class="profileItem" onclick="setProfileView('about')">
@@ -1492,11 +1564,52 @@ function renderProfileLeaderboard() {
   `;
 }
 
+function renderProfileHistory() {
+  const rows = historyList.map(item => {
+    const isPositive = Number(item.amount) >= 0;
+    const unit = item.currency === "gram" ? "GRAM" : t("points_unit");
+    const amountText = `${isPositive ? "+" : ""}${item.currency === "gram" ? formatNumber(item.amount, 6) : formatPoints(item.amount)} ${unit}`;
+    const icon = (LEDGER_TYPE_UI[item.type] || {}).icon || "🔸";
+    const desc = item.description || t(`history_type_${item.type}`);
+
+    return `
+      <div class="ledgerRow">
+        <div class="ledgerIcon">${icon}</div>
+        <div class="ledgerBody">
+          <div class="ledgerDesc">${escapeHTML(desc)}</div>
+          <div class="historyMeta">${timeAgo(item.createdAt)}</div>
+        </div>
+        <div class="ledgerAmount ${isPositive ? "positive" : "negative"}">${amountText}</div>
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="sectionHeader">
+      <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
+      <h2 class="sectionTitle">${t("history_page_title")}</h2>
+      <span></span>
+    </div>
+
+    <div class="card" style="padding:0">
+      ${historyList.length === 0
+        ? `<div class="emptyState"><div class="emptyIcon">🧾</div><div class="emptyDesc">${t("history_empty")}</div></div>`
+        : rows
+      }
+    </div>
+
+    ${historyHasMore ? `<button class="loadMoreBtn" id="historyLoadMoreBtn" type="button" onclick="loadMoreHistory()">${t("history_load_more")}</button>` : ""}
+  `;
+}
+
 async function renderProfile() {
   const content = $("#content");
   if (profileView === "leaderboard" && state.leaderboard.length === 0) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadLeaderboard();
+  }
+  if (profileView === "history" && historyList.length === 0 && !historyLoading) {
+    content.innerHTML = `<div class="loading" style="height:300px"></div>`;
+    await loadHistory(true);
   }
   if (profileView === "referral") {
     content.innerHTML = renderProfileReferral();
@@ -1504,6 +1617,8 @@ async function renderProfile() {
     content.innerHTML = renderProfileLeaderboard();
   } else if (profileView === "about") {
     content.innerHTML = renderProfileAbout();
+  } else if (profileView === "history") {
+    content.innerHTML = renderProfileHistory();
   } else {
     content.innerHTML = renderProfileMenu();
   }

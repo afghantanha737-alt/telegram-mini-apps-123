@@ -320,9 +320,58 @@ function hideTerms() {
   const overlay = $("#termsOverlay");
   if (overlay) overlay.style.display = "none";
   localStorage.setItem("termsAccepted", "1");
+  maybeShowOnboarding();
 }
 window.hideTerms = hideTerms;
 window.showTerms = showTerms;
+
+/* ================= ONBOARDING ================= */
+const ONBOARDING_STEP_COUNT = 3;
+let onboardingStep = 0;
+
+function onboardingSeen() {
+  return localStorage.getItem("onboardingSeen") === "1";
+}
+
+function maybeShowOnboarding() {
+  if (onboardingSeen()) return;
+  onboardingStep = 0;
+  const overlay = $("#onboardingOverlay");
+  if (overlay) overlay.style.display = "flex";
+  renderOnboardingStep();
+}
+
+function renderOnboardingStep() {
+  for (let i = 0; i < ONBOARDING_STEP_COUNT; i++) {
+    const step = $(`#onboardingStep${i}`);
+    const dot = $(`#onboardingDot${i}`);
+    if (step) step.style.display = i === onboardingStep ? "block" : "none";
+    if (dot) dot.classList.toggle("active", i === onboardingStep);
+  }
+  const nextBtn = $("#onboardingNextBtn");
+  if (nextBtn) nextBtn.textContent = onboardingStep === ONBOARDING_STEP_COUNT - 1 ? "بزنیم بریم! 🚀" : "بعدی";
+}
+
+function onboardingNext() {
+  if (onboardingStep >= ONBOARDING_STEP_COUNT - 1) {
+    finishOnboarding();
+    return;
+  }
+  onboardingStep += 1;
+  renderOnboardingStep();
+}
+window.onboardingNext = onboardingNext;
+
+function finishOnboarding() {
+  const overlay = $("#onboardingOverlay");
+  if (overlay) overlay.style.display = "none";
+  localStorage.setItem("onboardingSeen", "1");
+}
+
+function skipOnboarding() {
+  finishOnboarding();
+}
+window.skipOnboarding = skipOnboarding;
 
 /* ================= CAPTCHA ================= */
 function captchaPassed() {
@@ -1498,6 +1547,8 @@ async function boot() {
 
   if (!termsAccepted()) {
     showTerms();
+  } else {
+    maybeShowOnboarding();
   }
 
   state.initialized = true;

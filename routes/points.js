@@ -34,10 +34,10 @@ function truncateAddress(address) {
 
 // چرخ‌گردون: ۶ خانه
 const SPIN_SEGMENTS = [
-  { type: 'points', value: 2 },
-  { type: 'points', value: 5 },
-  { type: 'points', value: 15 },
   { type: 'points', value: 20 },
+  { type: 'points', value: 40 },
+  { type: 'points', value: 50 },
+  { type: 'points', value: 100 },
   { type: 'empty', value: 0 },
   { type: 'spin', value: 1 }
 ];

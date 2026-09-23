@@ -9,6 +9,10 @@ const Settings = require('../models/Settings');
 const { bot, notifyUser, broadcastToActiveUsers } = require('../utils/bot');
 const { verifyTonTransaction } = require('../utils/tonVerify');
 const { recordLedger } = require('../utils/ledger');
+const { recordAdminLog } = require('../utils/adminLog');
+const AdminLog = require('../models/AdminLog');
+const TaskCompletion = require('../models/TaskCompletion');
+const PointsLedger = require('../models/PointsLedger');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -22,6 +26,8 @@ function requireAdmin(req, res, next) {
   if (!process.env.ADMIN_KEY || key !== process.env.ADMIN_KEY) {
     return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
   }
+  // نامی که ادمین موقع ورود تایپ کرده (اختیاری) — فقط برای لاگ فعالیت، نه احراز هویت واقعی
+  req.adminActor = String(req.headers['x-admin-name'] || '').trim() || 'ادمین';
   next();
 }
 
@@ -72,8 +78,23 @@ router.post('/verify-chat', async (req, res) => {
 });
 
 /* -------------------- TASKS -------------------- */
+/**
+ * GET /api/admin/tasks?search=...&type=...&status=active|inactive
+ * جستجو روی عنوان/توضیحات، فیلتر روی نوع و وضعیت فعال/غیرفعال.
+ */
 router.get('/tasks', async (req, res) => {
-  const tasks = await Task.find().sort({ createdAt: -1 });
+  const { search, type, status } = req.query;
+  const filter = {};
+
+  if (search) {
+    const regex = new RegExp(String(search).trim(), 'i');
+    filter.$or = [{ title: regex }, { description: regex }, { chatId: regex }];
+  }
+  if (type) filter.type = type;
+  if (status === 'active') filter.isActive = true;
+  if (status === 'inactive') filter.isActive = false;
+
+  const tasks = await Task.find(filter).sort({ createdAt: -1 });
   res.json({ success: true, tasks });
 });
 
@@ -99,6 +120,14 @@ router.post('/tasks', async (req, res) => {
 
   res.json({ success: true, task });
 
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'task_create',
+    targetType: 'task',
+    targetId: task._id,
+    details: `«${title}» — پاداش ${reward} پوینت`
+  });
+
   // اطلاع‌رسانی تسک جدید به همه‌ی کاربران فعال؛ عمداً بدون await تا پاسخ به پنل ادمین معطل نماند
   broadcastToActiveUsers(User, `🎯 تسک جدید اضافه شد!\n\n${title}\nپاداش: ${reward} پوینت\n\nهمین حالا از تب «تسک‌ها» انجامش بده.`)
     .catch(error => console.warn('Task broadcast failed:', error.message || error));
@@ -108,11 +137,27 @@ router.put('/tasks/:id', async (req, res) => {
   const task = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
   if (!task) return res.status(404).json({ success: false, message: 'تسک پیدا نشد.' });
   res.json({ success: true, task });
+
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'task_update',
+    targetType: 'task',
+    targetId: task._id,
+    details: `«${task.title}» ویرایش شد`
+  });
 });
 
 router.delete('/tasks/:id', async (req, res) => {
-  await Task.findByIdAndDelete(req.params.id);
+  const task = await Task.findByIdAndDelete(req.params.id);
   res.json({ success: true });
+
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'task_delete',
+    targetType: 'task',
+    targetId: req.params.id,
+    details: task ? `«${task.title}» حذف شد (پاداش بود: ${task.reward} پوینت، chatId: ${task.chatId || '—'})` : 'تسک (که قبلاً هم پیدا نشد) حذف شد'
+  });
 });
 
 /* -------------------- WITHDRAWALS -------------------- */
@@ -183,6 +228,14 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
 
   res.json({ success: true, withdrawal });
 
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'withdrawal_approve',
+    targetType: 'withdrawal',
+    targetId: withdrawal._id,
+    details: `${withdrawal.cryptoAmount} ${withdrawal.token} — TxID: ${txHash}`
+  });
+
   // اطلاع‌رسانی به خود کاربر که پرداختش انجام شد
   const payeeUser = await User.findById(withdrawal.user, 'telegramId');
   if (payeeUser) {
@@ -220,6 +273,14 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
 
   res.json({ success: true, withdrawal });
 
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'withdrawal_reject',
+    targetType: 'withdrawal',
+    targetId: withdrawal._id,
+    details: withdrawal.adminNote ? `دلیل: ${withdrawal.adminNote}` : ''
+  });
+
   // اطلاع‌رسانی رد شدن درخواست به کاربر (پوینتش قبلاً در بالا برگردانده شده)
   const requesterUser = await User.findById(withdrawal.user, 'telegramId');
   if (requesterUser) {
@@ -232,19 +293,52 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
 });
 
 /* -------------------- USERS -------------------- */
+/**
+ * GET /api/admin/users?search=...&status=banned|active&sort=points|newest
+ * جستجو روی نام/یوزرنیم/آیدی تلگرام، فیلتر روی وضعیت بن، مرتب‌سازی.
+ */
 router.get('/users', async (req, res) => {
-  const users = await User.find().select('-__v').sort({ createdAt: -1 }).limit(200);
+  const { search, status, sort } = req.query;
+  const filter = {};
+
+  if (search) {
+    const regex = new RegExp(String(search).trim(), 'i');
+    filter.$or = [{ firstName: regex }, { lastName: regex }, { username: regex }, { telegramId: regex }, { referralCode: regex }];
+  }
+  if (status === 'banned') filter.isBanned = true;
+  if (status === 'active') filter.isBanned = false;
+
+  const sortMap = { points: { points: -1 }, invited: { invitedCount: -1 }, newest: { createdAt: -1 }, oldest: { createdAt: 1 } };
+  const sortBy = sortMap[sort] || sortMap.newest;
+
+  const users = await User.find(filter).select('-__v').sort(sortBy).limit(200);
   res.json({ success: true, users });
 });
 
 router.post('/users/:id/ban', async (req, res) => {
   const user = await User.findByIdAndUpdate(req.params.id, { isBanned: true }, { new: true });
   res.json({ success: true, user });
+
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'user_ban',
+    targetType: 'user',
+    targetId: req.params.id,
+    details: user ? (user.firstName || user.username || user.telegramId) : ''
+  });
 });
 
 router.post('/users/:id/unban', async (req, res) => {
   const user = await User.findByIdAndUpdate(req.params.id, { isBanned: false }, { new: true });
   res.json({ success: true, user });
+
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'user_unban',
+    targetType: 'user',
+    targetId: req.params.id,
+    details: user ? (user.firstName || user.username || user.telegramId) : ''
+  });
 });
 
 /* -------------------- SETTINGS -------------------- */
@@ -258,6 +352,104 @@ router.put('/settings', async (req, res) => {
   Object.assign(settings, req.body || {});
   await settings.save();
   res.json({ success: true, settings });
+
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'settings_update',
+    targetType: 'settings',
+    details: Object.keys(req.body || {}).join(', ')
+  });
+});
+
+/* -------------------- STATS (داشبورد آمار) -------------------- */
+/**
+ * GET /api/admin/stats — خلاصه‌ی امروز + روند ۷ روز اخیر، برای داشبورد گرافیکی.
+ */
+router.get('/stats', async (req, res) => {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const sevenDaysAgo = new Date(startOfToday);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // شامل خود امروز = ۷ روز
+
+  const [
+    newUsersToday,
+    tasksCompletedToday,
+    totalUsers,
+    bannedUsers,
+    totalReferred,
+    convertedReferred,
+    pendingWithdrawals,
+    paidTodayAgg,
+    newUsersTrend,
+    tasksTrend
+  ] = await Promise.all([
+    User.countDocuments({ createdAt: { $gte: startOfToday } }),
+    TaskCompletion.countDocuments({ status: 'approved', createdAt: { $gte: startOfToday } }),
+    User.countDocuments({}),
+    User.countDocuments({ isBanned: true }),
+    User.countDocuments({ referredBy: { $ne: null } }),
+    User.countDocuments({ referredBy: { $ne: null }, referralBonusAwarded: true }),
+    Withdrawal.countDocuments({ status: 'pending' }),
+    Withdrawal.aggregate([
+      { $match: { status: 'paid', paidAt: { $gte: startOfToday } } },
+      { $group: { _id: '$token', total: { $sum: '$cryptoAmount' } } }
+    ]),
+    User.aggregate([
+      { $match: { createdAt: { $gte: sevenDaysAgo } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } }
+    ]),
+    TaskCompletion.aggregate([
+      { $match: { status: 'approved', createdAt: { $gte: sevenDaysAgo } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } }
+    ])
+  ]);
+
+  // پر کردن روزهای بدون داده با صفر، تا نمودار ۷ ستون کامل داشته باشد
+  function buildTrend(aggResult) {
+    const map = new Map(aggResult.map(r => [r._id, r.count]));
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(startOfToday);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      days.push({ date: key, count: map.get(key) || 0 });
+    }
+    return days;
+  }
+
+  const referralConversionRate = totalReferred > 0 ? Math.round((convertedReferred / totalReferred) * 1000) / 10 : 0;
+
+  res.json({
+    success: true,
+    stats: {
+      newUsersToday,
+      tasksCompletedToday,
+      totalUsers,
+      bannedUsers,
+      totalReferred,
+      convertedReferred,
+      referralConversionRate,
+      pendingWithdrawals,
+      paidToday: paidTodayAgg,
+      newUsersTrend: buildTrend(newUsersTrend),
+      tasksTrend: buildTrend(tasksTrend)
+    }
+  });
+});
+
+/* -------------------- ADMIN ACTIVITY LOG -------------------- */
+/**
+ * GET /api/admin/logs?action=...&targetType=...&limit=100
+ */
+router.get('/logs', async (req, res) => {
+  const { action, targetType } = req.query;
+  const filter = {};
+  if (action) filter.action = action;
+  if (targetType) filter.targetType = targetType;
+
+  const limit = Math.min(Number(req.query.limit) || 100, 300);
+  const logs = await AdminLog.find(filter).sort({ createdAt: -1 }).limit(limit);
+  res.json({ success: true, logs });
 });
 
 /* -------------------- BROADCAST (پیام همگانی) -------------------- */
@@ -283,6 +475,13 @@ router.post('/broadcast', upload.single('image'), async (req, res) => {
     success: true,
     message: `ارسال برای ${users.length} کاربر آغاز شد. این کار در پس‌زمینه ادامه می‌یابد.`,
     totalRecipients: users.length
+  });
+
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'broadcast_send',
+    targetType: 'broadcast',
+    details: `${users.length} گیرنده — ${text.slice(0, 80)}${text.length > 80 ? '…' : ''}`
   });
 
   for (let i = 0; i < users.length; i += BATCH_SIZE) {

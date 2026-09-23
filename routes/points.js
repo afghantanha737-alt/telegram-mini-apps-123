@@ -36,7 +36,7 @@ function truncateAddress(address) {
 const SPIN_SEGMENTS = [
   { type: 'points', value: 20 },
   { type: 'points', value: 40 },
-  { type: 'points', value: 50 },
+  { type: 'points', value: 60 },
   { type: 'points', value: 100 },
   { type: 'empty', value: 0 },
   { type: 'spin', value: 1 }

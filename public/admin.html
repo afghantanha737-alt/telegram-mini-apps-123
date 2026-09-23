@@ -16,6 +16,7 @@
   h1{font-size:20px;margin:0 0 4px}
   .sub{color:var(--muted);font-size:12px;margin-bottom:20px}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:16px}
+  .statsGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
   .row{display:flex;gap:8px;flex-wrap:wrap}
   input,select,textarea{
     background:var(--surface2);border:1px solid var(--line);color:var(--text);
@@ -61,6 +62,8 @@
     <p class="sub">کلید ADMIN_KEY که در Environment سرور تنظیم کردی را وارد کن.</p>
     <label>ADMIN_KEY</label>
     <input id="adminKeyInput" type="password" placeholder="کلید ادمین">
+    <label>نام شما (اختیاری — برای لاگ فعالیت)</label>
+    <input id="adminNameInput" placeholder="مثلاً امیر">
     <button onclick="login()">ورود</button>
     <div id="loginMsg" style="font-size:12px;margin-top:8px;color:var(--danger)"></div>
   </div>
@@ -75,14 +78,31 @@
     </div>
 
     <div class="tabs">
+      <button data-tab="stats" onclick="switchTab('stats')">آمار</button>
       <button data-tab="tasks" onclick="switchTab('tasks')">تسک‌ها</button>
       <button data-tab="withdrawals" onclick="switchTab('withdrawals')">برداشت‌ها</button>
       <button data-tab="users" onclick="switchTab('users')">کاربران</button>
       <button data-tab="broadcast" onclick="switchTab('broadcast')">پیام همگانی</button>
+      <button data-tab="logs" onclick="switchTab('logs')">لاگ فعالیت</button>
       <button data-tab="settings" onclick="switchTab('settings')">تنظیمات</button>
     </div>
 
     <div id="msg"></div>
+
+    <!-- STATS -->
+    <div id="tab-stats" class="tabContent hidden">
+      <div class="statsGrid" id="statsGrid">
+        <div class="empty">در حال بارگذاری...</div>
+      </div>
+      <div class="card">
+        <b>کاربران جدید — ۷ روز اخیر</b>
+        <div id="chartNewUsers" style="margin-top:12px"></div>
+      </div>
+      <div class="card">
+        <b>تسک‌های تکمیل‌شده — ۷ روز اخیر</b>
+        <div id="chartTasksDone" style="margin-top:12px"></div>
+      </div>
+    </div>
 
     <!-- TASKS -->
     <div id="tab-tasks" class="tabContent">
@@ -114,7 +134,22 @@
       </div>
 
       <div class="card">
-        <b>لیست تسک‌ها</b>
+        <div class="flexBetween"><b>لیست تسک‌ها</b></div>
+        <div class="row" style="margin-top:10px">
+          <input id="taskSearch" placeholder="جستجو در عنوان/توضیحات/chatId..." style="flex:2;min-width:160px;margin:0" oninput="debouncedLoadTasks()">
+          <select id="taskTypeFilter" onchange="loadTasks()" style="flex:1;min-width:110px;margin:0">
+            <option value="">همه نوع‌ها</option>
+            <option value="channel">کانال</option>
+            <option value="group">گروه</option>
+            <option value="link">لینک</option>
+            <option value="custom">سفارشی</option>
+          </select>
+          <select id="taskStatusFilter" onchange="loadTasks()" style="flex:1;min-width:110px;margin:0">
+            <option value="">همه وضعیت‌ها</option>
+            <option value="active">فعال</option>
+            <option value="inactive">غیرفعال</option>
+          </select>
+        </div>
         <div id="tasksList" style="margin-top:10px"></div>
       </div>
     </div>
@@ -138,7 +173,21 @@
     <!-- USERS -->
     <div id="tab-users" class="tabContent hidden">
       <div class="card">
-        <b>کاربران</b>
+        <div class="flexBetween"><b>کاربران</b></div>
+        <div class="row" style="margin-top:10px">
+          <input id="userSearch" placeholder="جستجو با نام/یوزرنیم/آیدی تلگرام..." style="flex:2;min-width:160px;margin:0" oninput="debouncedLoadUsers()">
+          <select id="userStatusFilter" onchange="loadUsers()" style="flex:1;min-width:110px;margin:0">
+            <option value="">همه</option>
+            <option value="active">فعال</option>
+            <option value="banned">مسدود</option>
+          </select>
+          <select id="userSortFilter" onchange="loadUsers()" style="flex:1;min-width:110px;margin:0">
+            <option value="newest">جدیدترین</option>
+            <option value="oldest">قدیمی‌ترین</option>
+            <option value="points">بیشترین پوینت</option>
+            <option value="invited">بیشترین دعوت</option>
+          </select>
+        </div>
         <div id="usersList" style="margin-top:10px"></div>
       </div>
     </div>
@@ -155,6 +204,28 @@
         <input id="broadcastImage" type="file" accept="image/*">
         <button onclick="sendBroadcast()">ارسال به همه کاربران</button>
         <div id="broadcastMsg" class="small" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- LOGS -->
+    <div id="tab-logs" class="tabContent hidden">
+      <div class="card">
+        <div class="flexBetween">
+          <b>لاگ فعالیت ادمین</b>
+          <select id="logFilter" onchange="loadLogs()" style="width:auto;margin:0">
+            <option value="">همه اکشن‌ها</option>
+            <option value="task_create">افزودن تسک</option>
+            <option value="task_update">ویرایش تسک</option>
+            <option value="task_delete">حذف تسک</option>
+            <option value="withdrawal_approve">تایید برداشت</option>
+            <option value="withdrawal_reject">رد برداشت</option>
+            <option value="user_ban">مسدود کردن کاربر</option>
+            <option value="user_unban">رفع مسدودی کاربر</option>
+            <option value="settings_update">تغییر تنظیمات</option>
+            <option value="broadcast_send">پیام همگانی</option>
+          </select>
+        </div>
+        <div id="logsList" style="margin-top:10px"></div>
       </div>
     </div>
 
@@ -182,6 +253,7 @@
 "use strict";
 
 let ADMIN_KEY = localStorage.getItem("adminKey") || "";
+let ADMIN_NAME = localStorage.getItem("adminName") || "";
 
 function showMsg(text, type) {
   const el = document.getElementById("msg");
@@ -196,6 +268,7 @@ async function api(path, options = {}) {
     headers: {
       "Content-Type": "application/json",
       "x-admin-key": ADMIN_KEY,
+      "x-admin-name": ADMIN_NAME,
       ...(options.headers || {})
     }
   });
@@ -213,7 +286,7 @@ async function api(path, options = {}) {
 async function apiUpload(path, formData) {
   const res = await fetch(path, {
     method: "POST",
-    headers: { "x-admin-key": ADMIN_KEY },
+    headers: { "x-admin-key": ADMIN_KEY, "x-admin-name": ADMIN_NAME },
     body: formData
   });
   let data = {};
@@ -224,14 +297,17 @@ async function apiUpload(path, formData) {
 
 async function login() {
   const key = document.getElementById("adminKeyInput").value.trim();
+  const name = document.getElementById("adminNameInput").value.trim();
   if (!key) return;
   ADMIN_KEY = key;
+  ADMIN_NAME = name;
   try {
     await api("/api/admin/settings");
     localStorage.setItem("adminKey", key);
+    localStorage.setItem("adminName", name);
     document.getElementById("loginBox").classList.add("hidden");
     document.getElementById("panel").classList.remove("hidden");
-    switchTab("tasks");
+    switchTab("stats");
   } catch (error) {
     document.getElementById("loginMsg").textContent = "کلید نادرست است یا سرور در دسترس نیست.";
   }
@@ -248,21 +324,120 @@ function switchTab(tab) {
   document.querySelectorAll(".tabContent").forEach(el => el.classList.add("hidden"));
   document.querySelectorAll(".tabs button").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
   document.getElementById("tab-" + tab).classList.remove("hidden");
+  if (tab === "stats") loadStats();
   if (tab === "tasks") loadTasks();
   if (tab === "withdrawals") loadWithdrawals();
   if (tab === "users") loadUsers();
+  if (tab === "logs") loadLogs();
   if (tab === "settings") loadSettings();
 }
 
+/* ---------- STATS (داشبورد آمار) ---------- */
+function renderBarChart(days, color) {
+  const max = Math.max(1, ...days.map(d => d.count));
+  const weekdays = ["ی", "د", "س", "چ", "پ", "ج", "ش"];
+  return `
+    <div style="display:flex;align-items:flex-end;gap:8px;height:110px">
+      ${days.map(d => {
+        const h = Math.round((d.count / max) * 90) + 4;
+        const dow = weekdays[new Date(d.date + "T00:00:00").getDay()];
+        return `
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+            <div class="small" style="font-weight:700">${d.count}</div>
+            <div style="width:100%;max-width:28px;height:${h}px;background:${color};border-radius:6px 6px 0 0"></div>
+            <div class="small">${dow}</div>
+          </div>`;
+      }).join("")}
+    </div>`;
+}
+
+async function loadStats() {
+  const grid = document.getElementById("statsGrid");
+  grid.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  try {
+    const data = await api("/api/admin/stats");
+    const s = data.stats;
+
+    const paidTodayText = (s.paidToday || []).length
+      ? s.paidToday.map(p => `${p.total} ${p._id}`).join(" · ")
+      : "۰";
+
+    grid.innerHTML = `
+      <div class="card" style="margin-bottom:0"><div class="small">کاربر جدید امروز</div><div style="font-size:22px;font-weight:800">${s.newUsersToday}</div></div>
+      <div class="card" style="margin-bottom:0"><div class="small">تسک تکمیل‌شده امروز</div><div style="font-size:22px;font-weight:800">${s.tasksCompletedToday}</div></div>
+      <div class="card" style="margin-bottom:0"><div class="small">نرخ تبدیل ریفرال</div><div style="font-size:22px;font-weight:800">٪${s.referralConversionRate}</div><div class="small">${s.convertedReferred} از ${s.totalReferred} دعوت‌شده</div></div>
+      <div class="card" style="margin-bottom:0"><div class="small">کل کاربران</div><div style="font-size:22px;font-weight:800">${s.totalUsers}</div><div class="small">${s.bannedUsers} مسدود</div></div>
+      <div class="card" style="margin-bottom:0"><div class="small">برداشت در انتظار</div><div style="font-size:22px;font-weight:800">${s.pendingWithdrawals}</div></div>
+      <div class="card" style="margin-bottom:0"><div class="small">پرداخت‌شده امروز</div><div style="font-size:18px;font-weight:800">${paidTodayText}</div></div>
+    `;
+
+    document.getElementById("chartNewUsers").innerHTML = renderBarChart(s.newUsersTrend, "var(--accent, #6366f1)");
+    document.getElementById("chartTasksDone").innerHTML = renderBarChart(s.tasksTrend, "var(--success, #22c55e)");
+  } catch (error) {
+    grid.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+/* ---------- ADMIN ACTIVITY LOG ---------- */
+const ACTION_FA = {
+  task_create: "➕ افزودن تسک", task_update: "✏️ ویرایش تسک", task_delete: "🗑️ حذف تسک",
+  withdrawal_approve: "✅ تایید برداشت", withdrawal_reject: "❌ رد برداشت",
+  user_ban: "🚫 مسدود کردن کاربر", user_unban: "♻️ رفع مسدودی کاربر",
+  settings_update: "⚙️ تغییر تنظیمات", broadcast_send: "📢 پیام همگانی"
+};
+
+async function loadLogs() {
+  const container = document.getElementById("logsList");
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  const action = document.getElementById("logFilter")?.value || "";
+  const params = new URLSearchParams();
+  if (action) params.set("action", action);
+
+  try {
+    const data = await api(`/api/admin/logs${params.toString() ? "?" + params.toString() : ""}`);
+    const logs = data.logs || [];
+    if (logs.length === 0) {
+      container.innerHTML = '<div class="empty">هنوز لاگی ثبت نشده.</div>';
+      return;
+    }
+    container.innerHTML = logs.map(l => `
+      <div style="padding:10px 0;border-bottom:1px solid var(--line)">
+        <div class="flexBetween">
+          <b>${ACTION_FA[l.action] || l.action}</b>
+          <span class="small">${new Date(l.createdAt).toLocaleString("fa-IR")}</span>
+        </div>
+        <div class="small" style="margin-top:2px">توسط: ${escapeHtml(l.actor)}</div>
+        ${l.details ? `<div class="small" style="margin-top:2px">${escapeHtml(l.details)}</div>` : ""}
+      </div>
+    `).join("");
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
 /* ---------- TASKS ---------- */
+let taskSearchDebounce = null;
+function debouncedLoadTasks() {
+  clearTimeout(taskSearchDebounce);
+  taskSearchDebounce = setTimeout(loadTasks, 350);
+}
+
 async function loadTasks() {
   const container = document.getElementById("tasksList");
   container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  const search = document.getElementById("taskSearch")?.value.trim() || "";
+  const type = document.getElementById("taskTypeFilter")?.value || "";
+  const status = document.getElementById("taskStatusFilter")?.value || "";
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (type) params.set("type", type);
+  if (status) params.set("status", status);
+
   try {
-    const data = await api("/api/admin/tasks");
+    const data = await api(`/api/admin/tasks${params.toString() ? "?" + params.toString() : ""}`);
     const tasks = data.tasks || [];
     if (tasks.length === 0) {
-      container.innerHTML = '<div class="empty">هنوز تسکی ثبت نشده.</div>';
+      container.innerHTML = `<div class="empty">${search || type || status ? "با این فیلتر چیزی پیدا نشد." : "هنوز تسکی ثبت نشده."}</div>`;
       return;
     }
     container.innerHTML = `
@@ -518,14 +693,28 @@ async function withdrawReject(id) {
 }
 
 /* ---------- USERS ---------- */
+let userSearchDebounce = null;
+function debouncedLoadUsers() {
+  clearTimeout(userSearchDebounce);
+  userSearchDebounce = setTimeout(loadUsers, 350);
+}
+
 async function loadUsers() {
   const container = document.getElementById("usersList");
   container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  const search = document.getElementById("userSearch")?.value.trim() || "";
+  const status = document.getElementById("userStatusFilter")?.value || "";
+  const sort = document.getElementById("userSortFilter")?.value || "";
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (status) params.set("status", status);
+  if (sort) params.set("sort", sort);
+
   try {
-    const data = await api("/api/admin/users");
+    const data = await api(`/api/admin/users${params.toString() ? "?" + params.toString() : ""}`);
     const users = data.users || [];
     if (users.length === 0) {
-      container.innerHTML = '<div class="empty">کاربری یافت نشد.</div>';
+      container.innerHTML = `<div class="empty">${search || status ? "با این فیلتر کاربری پیدا نشد." : "کاربری یافت نشد."}</div>`;
       return;
     }
     container.innerHTML = `
@@ -654,7 +843,7 @@ if (ADMIN_KEY) {
   api("/api/admin/settings").then(() => {
     document.getElementById("loginBox").classList.add("hidden");
     document.getElementById("panel").classList.remove("hidden");
-    switchTab("tasks");
+    switchTab("stats");
   }).catch(() => {
     localStorage.removeItem("adminKey");
   });

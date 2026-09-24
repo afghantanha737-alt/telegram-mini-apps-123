@@ -50,8 +50,17 @@ router.get('/me', auth, async (req, res) => {
   const canCheckIn = !u.lastCheckIn || utcDayKey(u.lastCheckIn) < utcDayKey(new Date());
   const minWithdrawGram = Number((settings.minWithdrawPoints * settings.rate).toFixed(6));
 
+  // مجموع پوینتی که کاربر تا امروز «کسب» کرده (بدون احتساب تبدیل GRAM→پوینت و اصلاح دستی ادمین)
+  const earnedAgg = await PointsLedger.aggregate([
+    { $match: { user: u._id, currency: 'points', amount: { $gt: 0 }, type: { $nin: ['exchange_in', 'admin_adjust'] } } },
+    { $group: { _id: null, total: { $sum: '$amount' } } }
+  ]);
+  const totalEarnedPoints = earnedAgg.length ? earnedAgg[0].total : 0;
+
   res.json({
     success: true,
+    totalEarnedPoints,
+    gramUsdPrice: settings.gramUsdPrice || 0,
     points: u.points,
     gramBalance: u.gramBalance,
     rate: settings.rate,

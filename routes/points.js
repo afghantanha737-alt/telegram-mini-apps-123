@@ -37,6 +37,8 @@ function truncateAddress(address) {
 }
 
 // چرخ‌گردون: ۶ خانه
+const crypto = require('crypto');
+
 const SPIN_SEGMENTS = [
   { type: 'points', value: 20 },
   { type: 'points', value: 40 },
@@ -45,6 +47,8 @@ const SPIN_SEGMENTS = [
   { type: 'empty', value: 0 },
   { type: 'spin', value: 1 }
 ];
+
+const { PAID_SPIN_WEIGHTS, pickWeightedIndex } = require('../utils/spin');
 
 // GET /api/points/me
 router.get('/me', auth, async (req, res) => {
@@ -65,6 +69,7 @@ router.get('/me', auth, async (req, res) => {
     success: true,
     totalEarnedPoints,
     gramUsdPrice: settings.gramUsdPrice || 0,
+    spinCostPoints: settings.spinCostPoints || 30,
     points: u.points,
     gramBalance: u.gramBalance,
     rate: settings.rate,
@@ -129,25 +134,50 @@ router.post('/checkin', auth, async (req, res) => {
 });
 
 // POST /api/points/spin — چرخاندن گردونه شانس
+// body.paid=true → با پوینت (هزینه‌ی spinCostPoints)؛ وگرنه از شانس‌های رایگان استریک
 router.post('/spin', auth, async (req, res) => {
-  // atomic: شانس فقط اگر واقعاً موجود باشد کم می‌شود؛ درخواست‌های هم‌زمان نمی‌توانند یک شانس را چندبار خرج کنند.
-  const claimed = await User.findOneAndUpdate(
-    { _id: req.dbUser._id, spinChances: { $gt: 0 } },
-    { $inc: { spinChances: -1 } },
-    { new: true }
-  );
-  if (!claimed) {
-    return res.status(400).json({ success: false, message: 'شانس چرخ‌گردون نداری.', code: 'NO_SPINS' });
+  const paid = Boolean(req.body && req.body.paid);
+  const settings = await Settings.getGlobal();
+  const cost = Math.max(1, Math.floor(settings.spinCostPoints || 30));
+
+  let claimed;
+  if (paid) {
+    // atomic: پوینت فقط اگر کافی باشد کم می‌شود؛ درخواست‌های هم‌زمان نمی‌توانند بیشتر از موجودی خرج کنند
+    claimed = await User.findOneAndUpdate(
+      { _id: req.dbUser._id, points: { $gte: cost } },
+      { $inc: { points: -cost } },
+      { new: true }
+    );
+    if (!claimed) {
+      return res.status(400).json({ success: false, message: `برای چرخاندن گردونه حداقل ${cost} پوینت لازم است.`, code: 'INSUFFICIENT_BALANCE' });
+    }
+    recordLedger({
+      user: claimed._id,
+      type: 'spin',
+      amount: -cost,
+      description: 'هزینه‌ی چرخاندن گردونه شانس',
+      balanceAfter: claimed.points
+    }).catch(() => {});
+  } else {
+    // atomic: شانس فقط اگر واقعاً موجود باشد کم می‌شود؛ درخواست‌های هم‌زمان نمی‌توانند یک شانس را چندبار خرج کنند.
+    claimed = await User.findOneAndUpdate(
+      { _id: req.dbUser._id, spinChances: { $gt: 0 } },
+      { $inc: { spinChances: -1 } },
+      { new: true }
+    );
+    if (!claimed) {
+      return res.status(400).json({ success: false, message: 'شانس چرخ‌گردون نداری.', code: 'NO_SPINS' });
+    }
   }
 
-  const segmentIndex = Math.floor(Math.random() * SPIN_SEGMENTS.length);
+  const segmentIndex = paid ? pickWeightedIndex(PAID_SPIN_WEIGHTS) : crypto.randomInt(0, SPIN_SEGMENTS.length);
   const segment = SPIN_SEGMENTS[segmentIndex];
 
   let updated = claimed;
   if (segment.type === 'points') {
     updated = await User.findByIdAndUpdate(claimed._id, { $inc: { points: segment.value } }, { new: true });
   } else if (segment.type === 'spin') {
-    updated = await User.findByIdAndUpdate(claimed._id, { $inc: { spinChances: 1 } }, { new: true }); // شانس دوباره
+    updated = await User.findByIdAndUpdate(claimed._id, { $inc: { spinChances: 1 } }, { new: true }); // شانس دوباره (رایگان)
   }
 
   if (segment.type === 'points' && segment.value > 0) {
@@ -162,11 +192,13 @@ router.post('/spin', auth, async (req, res) => {
 
   res.json({
     success: true,
+    paid,
     segmentIndex,
     type: segment.type,
     value: segment.value,
     points: updated.points,
-    spinChances: updated.spinChances
+    spinChances: updated.spinChances,
+    spinCostPoints: cost
   });
 });
 

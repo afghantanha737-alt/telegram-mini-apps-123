@@ -576,7 +576,8 @@ router.put('/settings', async (req, res) => {
     minWithdrawPoints: v => v >= 0,
     dailyCheckInPoints: v => v >= 0,
     streakBonusPoints: v => v >= 0,
-    gramUsdPrice: v => v >= 0
+    gramUsdPrice: v => v >= 0,
+    spinCostPoints: v => v >= 1
   };
   const changes = {};
   for (const [key, isOk] of Object.entries(rules)) {

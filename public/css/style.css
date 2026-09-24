@@ -950,3 +950,122 @@ html[data-theme="dark"] .gate-error { color: #fbbf24; }
 .wheelPaidBtn { width: 100%; margin-top: 10px; min-height: 46px; font-size: 14px; font-weight: 800; border-radius: 999px; }
 .wheelPaidBtn:disabled { opacity: .55; }
 .wheelPaidHint { margin: 8px 6px 0; font-size: 11.5px; line-height: 1.5; color: var(--text-muted); }
+
+/* =========================================================
+   GRAMUP — Turbo-style pages: tasks, daily/wheel, wallet, profile
+   (same sizes/colors as the home page; uses the same tokens)
+========================================================= */
+.tbPillOrange { background: rgba(245, 158, 11, .15); color: #b45309; }
+html[data-theme="dark"] .tbPillOrange { color: #fbbf24; }
+.tbPillSm { padding: 5px 10px; font-size: 11.5px; text-transform: none; letter-spacing: 0; }
+.tbColBlue { color: #2f9bf0; }
+.tbIconBlue { background: #fff; border: 2px dashed #2dd4bf; padding: 5px; }
+.tbIconBlue svg { width: 100%; height: 100%; }
+
+/* --- shared --- */
+.card {
+  margin-bottom: 14px; padding: 16px; border: 0; border-radius: 24px; box-shadow: var(--tb-card-shadow);
+}
+.card::after { display: none; }
+.cardTitle { font-size: 16px; font-weight: 800; letter-spacing: -.2px; }
+.cardSubtitle { font-size: 12px; }
+.sectionHeader { margin: 2px 4px 12px; }
+.sectionTitle { font-size: 18px; font-weight: 800; letter-spacing: -.2px; }
+.sectionMore {
+  padding: 7px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+  color: #7c3aed; background: rgba(124, 58, 237, .10);
+}
+html[data-theme="dark"] .sectionMore { color: #c4b5fd; background: rgba(167, 139, 250, .16); }
+.badge { padding: 6px 11px; font-size: 11.5px; font-weight: 700; }
+.primaryBtn, .secondaryBtn, .dangerBtn { min-height: 46px; border-radius: 999px; font-size: 15px; font-weight: 700; }
+.primaryBtn { background: var(--tb-grad); box-shadow: 0 8px 20px rgba(168, 45, 224, .28); }
+.secondaryBtn { background: transparent; border: 2px solid var(--line-strong); }
+.emptyTitle { font-size: 14px; }
+.emptyDesc { font-size: 12.5px; }
+
+/* --- tasks --- */
+.taskList { gap: 12px; }
+.taskItem { padding: 14px; gap: 12px; border: 0; border-radius: 24px; box-shadow: var(--tb-card-shadow); background: var(--tb-card); }
+.taskIcon { width: 46px; height: 46px; flex: 0 0 46px; border-radius: 50%; font-size: 21px;
+  background: linear-gradient(135deg, rgba(124, 58, 237, .16), rgba(47, 155, 240, .18)); }
+.taskTitle { font-size: 15px; font-weight: 800; line-height: 1.4; }
+.taskDesc { margin-top: 3px; font-size: 12.5px; line-height: 1.5; }
+.taskReward {
+  display: inline-flex; margin-top: 8px; padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 800;
+  color: #059669; background: rgba(16, 185, 129, .13);
+}
+html[data-theme="dark"] .taskReward { color: #34d399; }
+.taskAction { min-height: 38px; padding: 0 16px; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--tb-grad); box-shadow: 0 6px 14px rgba(168, 45, 224, .25); }
+.taskAction.done { background: rgba(16, 185, 129, .14); color: #059669; box-shadow: none; }
+.taskAction.pending { background: rgba(245, 158, 11, .16); color: #b45309; box-shadow: none; }
+.taskItem .taskAction[style*="surface-3"] { background: transparent !important; border: 2px solid var(--line-strong); box-shadow: none; }
+.taskHint { border-radius: 16px; font-size: 12.5px; }
+
+/* --- daily + wheel --- */
+.dailyGrid { gap: 6px; }
+.dayCell { border: 0; border-radius: 16px; background: rgba(124, 58, 237, .07); font-size: 10.5px; font-weight: 700; }
+.dayCell.filled { background: #10b981; color: #fff; }
+.dayCell.today { border: 2px solid #7c3aed; box-shadow: none; background: #fff; color: #7c3aed; }
+html[data-theme="dark"] .dayCell.today { background: rgba(167, 139, 250, .14); color: #c4b5fd; border-color: #a78bfa; }
+.dayNum { font-size: 14px; font-weight: 800; }
+.streakBox {
+  padding: 16px; margin-bottom: 14px; gap: 14px; border: 0; border-radius: 24px; box-shadow: var(--tb-card-shadow);
+  background: linear-gradient(135deg, rgba(245, 158, 11, .16), rgba(245, 158, 11, .04)), var(--tb-card);
+}
+.streakFire { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; background: #fff; font-size: 27px; box-shadow: 0 6px 16px rgba(245, 158, 11, .25); }
+html[data-theme="dark"] .streakFire { background: rgba(255, 255, 255, .08); }
+.streakValue { font-size: 26px; line-height: 1.1; letter-spacing: -.5px; }
+.streakLabel { font-size: 12px; line-height: 1.5; }
+.wheelSpinBtn { min-height: 46px; }
+
+/* --- wallet --- */
+.tbWalletGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.tbWalletCard { padding: 18px 12px 16px; border-radius: 24px; text-align: center; background: var(--tb-card); box-shadow: var(--tb-card-shadow); }
+.tbWalletIcon { width: 46px; height: 46px; margin: 0 auto 10px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
+.tbWalletIcon svg { width: 24px; height: 24px; }
+.tbWalletIcon.tbIconBlue svg { width: 100%; height: 100%; }
+.tbWalletValue { margin: 4px 0 6px; font-size: 24px; line-height: 1.1; font-weight: 800; letter-spacing: -.6px; color: var(--text); word-break: break-all; direction: ltr; }
+.tbWalletActions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.tbAct {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px 12px; border-radius: 22px;
+  font-size: 13px; font-weight: 700; color: var(--text); background: var(--tb-card); box-shadow: var(--tb-card-shadow);
+  transition: transform .15s ease;
+}
+.tbAct:active { transform: scale(.96); }
+.tbActIcon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #7c3aed; background: rgba(124, 58, 237, .11); }
+.tbActIcon svg { width: 19px; height: 19px; }
+.tbActPrimary { color: #fff; background: var(--tb-grad); box-shadow: 0 8px 20px rgba(168, 45, 224, .3); }
+.tbActPrimary .tbActIcon { color: #fff; background: rgba(255, 255, 255, .22); }
+html[data-theme="dark"] .tbActIcon { color: #c4b5fd; background: rgba(167, 139, 250, .16); }
+.historyItem { padding: 12px 0; }
+.historyAmount { font-size: 15px; font-weight: 800; }
+.historyMeta { font-size: 12px; }
+.publicTxCard { padding: 12px 0; }
+.publicTxAmount { font-size: 15px; }
+.publicTxStatus { font-size: 11.5px; }
+.publicTxRow { font-size: 12px; }
+
+/* --- profile --- */
+.profileHeaderCard { gap: 14px; padding: 16px; margin-bottom: 14px; }
+.profileAvatarLg { width: 64px; height: 64px; flex: 0 0 64px; border: 3px solid #fff; box-shadow: 0 0 0 3px rgba(124, 58, 237, .35), 0 8px 20px rgba(124, 58, 237, .25); }
+html[data-theme="dark"] .profileAvatarLg { border-color: rgba(255, 255, 255, .15); }
+.profileHeadInfo { min-width: 0; }
+.profileNameLg { margin-bottom: 8px; font-size: 20px; font-weight: 800; letter-spacing: -.3px; }
+.profileItem { padding: 11px 0; gap: 12px; }
+.profileIcon { width: 42px; height: 42px; flex: 0 0 42px; border-radius: 50%; font-size: 18px; background: linear-gradient(135deg, rgba(124, 58, 237, .13), rgba(47, 155, 240, .15)); }
+.profileText { font-size: 15px; font-weight: 700; }
+.profileChevron { font-size: 20px; color: #a78bfa; }
+.switchTrack[aria-checked="true"] { background: var(--tb-grad); }
+.referralCodeBox { border: 2px dashed rgba(124, 58, 237, .4); border-radius: 20px; background: rgba(124, 58, 237, .06); }
+.referralCodeText { font-size: 18px; color: #7c3aed; }
+html[data-theme="dark"] .referralCodeText { color: #c4b5fd; }
+.copyBtn { border-radius: 999px; padding: 8px 14px; font-size: 13px; font-weight: 700; }
+.leaderboardItem { margin-bottom: 10px; padding: 12px 14px; border: 0; border-radius: 22px; background: var(--tb-card); box-shadow: var(--tb-card-shadow); }
+.leaderboardItem.me { border: 0; box-shadow: 0 0 0 2.5px #7c3aed, 0 10px 26px rgba(124, 58, 237, .18); }
+.rankBadge { width: 36px; height: 36px; border-radius: 50%; font-size: 14px; font-weight: 800; }
+.leaderName { font-size: 15px; font-weight: 800; }
+.leaderPoints { font-size: 14px; font-weight: 800; color: #b45309; }
+.ledgerRow { padding: 12px 14px; }
+.ledgerIcon { border-radius: 50%; }
+.ledgerAmount { font-size: 13.5px; }
+.loadMoreBtn { border-radius: 999px; font-weight: 700; }

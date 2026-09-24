@@ -38,6 +38,7 @@ const state = {
   referralCode: "",
   shareLink: "",
   invitedCount: 0,
+  gateActive: false,
   totalEarnedPoints: 0,
   gramUsdPrice: 0,
   invited: [],
@@ -210,6 +211,16 @@ async function api(url, options = {}) {
   }
 
   if (!response.ok) {
+    // هر endpoint محافظت‌شده اگر عضویت اجباری را رد کند، صفحه‌ی عضویت اجباری باز می‌شود
+    // (مثلاً وقتی کاربر وسط استفاده از یک کانال خارج شده باشد)
+    if (data?.code === "MEMBERSHIP_REQUIRED" || data?.code === "MEMBERSHIP_UNAVAILABLE") {
+      showMembershipGate({
+        required: true,
+        verified: false,
+        unavailable: data.code === "MEMBERSHIP_UNAVAILABLE",
+        channels: Array.isArray(data.channels) ? data.channels : []
+      });
+    }
     const err = new Error(data?.message || t("error_generic"));
     err.code = data?.code || null;
     throw err;
@@ -318,6 +329,192 @@ async function navigate(tab) {
   await renderCurrentTab();
 }
 window.navigate = navigate;
+
+
+/* ================= MANDATORY CHANNEL MEMBERSHIP GATE =================
+   وضعیت عضویت هرگز در کلاینت ذخیره یا باور نمی‌شود؛ هر بار از سرور (که از خود تلگرام
+   می‌پرسد) گرفته می‌شود. سرور علاوه بر این، همه‌ی APIهای محافظت‌شده را هم بلاک می‌کند. */
+let gateData = null;
+let gateBusy = false;
+let lastGateCheckAt = 0;
+
+function gateSafeUrl(url) {
+  return /^https:\/\/(t|telegram)\.me\//i.test(String(url || "")) ? String(url) : "";
+}
+
+function gateOpenLink(url) {
+  const safe = gateSafeUrl(url);
+  if (!safe) return;
+  try {
+    if (tg && typeof tg.openTelegramLink === "function") { tg.openTelegramLink(safe); return; }
+  } catch (e) { /* fallback below */ }
+  window.open(safe, "_blank", "noopener");
+}
+
+const GATE_PLANE = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.5 4.4 2.9 11.6c-.9.35-.9 1 0 1.3l4.7 1.5 1.8 5.5c.2.6.4.8.9.8s.6-.2.9-.5l2.3-2.2 4.6 3.4c.9.5 1.5.2 1.7-.8L23 5.8c.3-1.2-.4-1.8-1.5-1.4zM8.8 13.5l9.5-6c.4-.3.8-.1.5.2l-7.8 7.1-.3 3.3-1.9-4.6z"/></svg>';
+
+function ensureGateElement() {
+  let el = document.getElementById("membershipGate");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "membershipGate";
+    el.className = "gateOverlay";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-modal", "true");
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function gateMessage(data) {
+  const channels = data.channels || [];
+  const anyNotJoined = channels.some(c => c.state === "not_joined");
+  const anyError = channels.some(c => c.state === "error");
+  if (data.verified) return { type: "ok", text: t("gate_all_ok") };
+  if (anyNotJoined) return { type: "warn", text: t("gate_missing") };
+  if (data.unavailable || anyError) return { type: "error", text: anyError ? t("gate_config_error") : t("gate_unavailable") };
+  return { type: "warn", text: t("gate_missing") };
+}
+
+function renderMembershipGate(override) {
+  const el = ensureGateElement();
+  const data = gateData || { channels: [] };
+  const msg = override || gateMessage(data);
+  const channels = data.channels || [];
+
+  const cards = channels.map((c, i) => {
+    const joined = c.state === "joined";
+    const errored = c.state === "error";
+    const pill = joined
+      ? `<span class="gatePill gateOk">✓ ${t("gate_joined")}</span>`
+      : errored
+        ? `<span class="gatePill gateWarnPill">! ${t("gate_error")}</span>`
+        : `<span class="gatePill gateBad">✕ ${t("gate_not_joined")}</span>`;
+    const handle = c.username ? `@${escapeHTML(c.username)}` : "";
+    const canJoin = !joined && gateSafeUrl(c.url);
+    return `
+      <div class="gateCard">
+        <div class="gateCardTop">
+          <div class="gateChIcon">${GATE_PLANE}</div>
+          <div class="gateChInfo">
+            <div class="gateChName">${escapeHTML(c.name)}</div>
+            ${handle ? `<div class="gateChUser">${handle}</div>` : ""}
+          </div>
+          ${pill}
+        </div>
+        ${canJoin ? `<button type="button" class="gateJoinBtn" data-join="${i}">${GATE_PLANE}<span>${t("gate_join")}</span></button>` : ""}
+      </div>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="gateInner">
+      <div class="gateBrand">
+        <img src="img/logo.svg" alt="Gramup">
+        <div class="brandName">Gram<span>up</span></div>
+      </div>
+      <div class="gateHero">${GATE_PLANE}</div>
+      <h1 class="gateTitle">${t("gate_title")}</h1>
+      <p class="gateDesc">${t("gate_desc")}</p>
+      <div class="gateList">${cards}</div>
+      <div id="gateMsg" class="gateMsg gate-${msg.type}" role="status">${escapeHTML(msg.text)}</div>
+      <button type="button" id="gateCheckBtn" class="gateCheckBtn">${gateBusy ? t("gate_checking") : (data.fetchFailed || data.unavailable ? t("gate_retry") : t("gate_check"))}</button>
+    </div>`;
+
+  el.querySelectorAll("[data-join]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      haptic("selection");
+      const channel = channels[Number(btn.dataset.join)];
+      if (channel) gateOpenLink(channel.url); // فقط لینک را باز می‌کند؛ عضو حساب نمی‌شود
+    });
+  });
+  const check = el.querySelector("#gateCheckBtn");
+  if (check) {
+    check.disabled = gateBusy;
+    check.addEventListener("click", gateCheck);
+  }
+}
+
+function showMembershipGate(data) {
+  gateData = data;
+  state.gateActive = true;
+  document.body.classList.add("is-gated");
+  try { if (tg && tg.BackButton && tg.BackButton.hide) tg.BackButton.hide(); } catch (e) { /* ignore */ }
+  renderMembershipGate();
+}
+
+function hideMembershipGate() {
+  state.gateActive = false;
+  gateData = null;
+  document.body.classList.remove("is-gated");
+  const el = document.getElementById("membershipGate");
+  if (el) el.remove();
+}
+
+function fetchMembership(fresh) {
+  return fresh
+    ? api("/api/required-channels/check-membership", { method: "POST", body: {} })
+    : api("/api/required-channels");
+}
+
+/** true = اجازه‌ی ورود؛ false = صفحه‌ی عضویت اجباری نمایش داده شد */
+async function enforceMembership() {
+  lastGateCheckAt = Date.now();
+  try {
+    const data = await fetchMembership(false);
+    if (data.verified) {
+      if (state.gateActive) hideMembershipGate();
+      return true;
+    }
+    showMembershipGate(data);
+    return false;
+  } catch (error) {
+    // اگر نتوانستیم عضویت را بررسی کنیم، اجازه‌ی ورود نمی‌دهیم
+    if (!state.gateActive) {
+      showMembershipGate({ required: true, verified: false, unavailable: true, fetchFailed: true, channels: [] });
+    }
+    return false;
+  }
+}
+
+async function gateCheck() {
+  if (gateBusy) return;
+  gateBusy = true;
+  const btn = document.getElementById("gateCheckBtn");
+  if (btn) { btn.disabled = true; btn.textContent = t("gate_checking"); }
+  haptic("selection");
+
+  try {
+    const data = await fetchMembership(true);
+    gateData = data;
+    if (data.verified) {
+      gateBusy = false;
+      renderMembershipGate({ type: "ok", text: t("gate_all_ok") });
+      const done = document.getElementById("gateCheckBtn");
+      if (done) done.disabled = true;
+      haptic("success");
+      await new Promise(resolve => setTimeout(resolve, 700));
+      hideMembershipGate();
+      state.initialized = true;
+      await navigate(state.activeTab || "home");
+      return;
+    }
+    gateBusy = false;
+    renderMembershipGate();
+  } catch (error) {
+    gateBusy = false;
+    gateData = { ...(gateData || {}), channels: (gateData && gateData.channels) || [], unavailable: true, verified: false, fetchFailed: !(gateData && gateData.channels && gateData.channels.length) };
+    renderMembershipGate({ type: "error", text: t("gate_unavailable") });
+  } finally {
+    gateBusy = false;
+  }
+}
+
+// کاربر وقتی به برنامه برمی‌گردد (مثلاً بعد از رفتن به کانال یا بازگشت از پس‌زمینه) دوباره بررسی می‌شود
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || !state.initialized || state.gateActive) return;
+  if (Date.now() - lastGateCheckAt < 15000) return;
+  enforceMembership();
+});
 
 /* ================= TERMS ================= */
 function termsAccepted() {
@@ -1633,6 +1830,7 @@ async function renderCurrentTab() {
     }
   } catch (error) {
     console.error("Render tab failed:", error);
+    if (state.gateActive) return; // صفحه‌ی عضویت اجباری باز است؛ خطا رویش نوشته نشود
     $("#content").innerHTML = `
       <div class="card emptyState">
         <div class="emptyIcon">⚠️</div>
@@ -1670,6 +1868,11 @@ async function boot() {
   }
 
   state.initialized = true;
+
+  // عضویت اجباری: هر بار که مینی‌اپ باز می‌شود، عضویت «فعلی» کاربر از تلگرام بررسی می‌شود
+  const allowed = await enforceMembership();
+  if (!allowed) return;
+
   await navigate("home");
 }
 

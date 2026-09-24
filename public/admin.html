@@ -272,6 +272,8 @@
         <input id="setRate" type="number" step="0.000001">
         <label>قیمت هر ۱ GRAM به دلار (برای نمایش ≈ USD؛ صفر = مخفی)</label>
         <input id="setGramUsd" type="number" step="0.0001" min="0">
+        <label>هزینه‌ی چرخاندن گردونه با پوینت (پیش‌فرض ۳۰؛ برای اینکه ضرر نکنید کمتر از ۲۶ نگذارید)</label>
+        <input id="setSpinCost" type="number" min="1" step="1">
         <label>حداقل پوینت برای برداشت</label>
         <input id="setMinWithdraw" type="number">
         <label>پاداش ورود روزانه (پایه)</label>
@@ -822,6 +824,7 @@ async function loadSettings() {
     const s = data.settings || {};
     document.getElementById("setRate").value = s.rate ?? "";
     document.getElementById("setGramUsd").value = s.gramUsdPrice ?? 0;
+    document.getElementById("setSpinCost").value = s.spinCostPoints ?? 30;
     document.getElementById("setMinWithdraw").value = s.minWithdrawPoints ?? "";
     document.getElementById("setDaily").value = s.dailyCheckInPoints ?? "";
     document.getElementById("setStreakBonus").value = s.streakBonusPoints ?? "";
@@ -834,6 +837,7 @@ async function saveSettings() {
   const body = {
     rate: Number(document.getElementById("setRate").value),
     gramUsdPrice: Number(document.getElementById("setGramUsd").value) || 0,
+    spinCostPoints: Number(document.getElementById("setSpinCost").value) || 30,
     minWithdrawPoints: Number(document.getElementById("setMinWithdraw").value),
     dailyCheckInPoints: Number(document.getElementById("setDaily").value),
     streakBonusPoints: Number(document.getElementById("setStreakBonus").value)

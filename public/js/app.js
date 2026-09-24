@@ -925,8 +925,13 @@ function renderTasks() {
     return;
   }
 
+  const doneCount = state.tasks.filter(task => completionStatus(task._id) === "approved").length;
+
   content.innerHTML = `
-    <div class="sectionHeader"><h2 class="sectionTitle">${t("tasks_title")}</h2></div>
+    <div class="sectionHeader">
+      <h2 class="sectionTitle">${t("tasks_title")}</h2>
+      <span class="tbPill tbPillPurple">${formatPoints(doneCount)} / ${formatPoints(state.tasks.length)}</span>
+    </div>
     <div class="taskList">
       ${state.tasks.map(task => {
         const status = completionStatus(task._id);
@@ -969,11 +974,11 @@ const WHEEL_SIZE = 260;
 const WHEEL_CENTER = WHEEL_SIZE / 2;
 
 const SPIN_SEGMENTS_UI = [
-  { icon: "🪎", value: "20", color1: "#8b5cf6", color2: "#6d28d9" },
-  { icon: "🪎", value: "40", color1: "#a78bfa", color2: "#7c3aed" },
-  { icon: "🪎", value: "60", color1: "#f5c451", color2: "#c98a12" },
-  { icon: "🪎", value: "100", color1: "#22c55e", color2: "#15803d" },
-  { icon: "🪎", value: "0", color1: "#3a3f4d", color2: "#1e2028" },
+  { icon: "🪙", value: "20", color1: "#8b5cf6", color2: "#6d28d9" },
+  { icon: "🪙", value: "40", color1: "#a78bfa", color2: "#7c3aed" },
+  { icon: "🪙", value: "60", color1: "#f5c451", color2: "#c98a12" },
+  { icon: "🪙", value: "100", color1: "#22c55e", color2: "#15803d" },
+  { icon: "🪙", value: "0", color1: "#3a3f4d", color2: "#1e2028" },
   { icon: "🎡", value: "+1", color1: "#38bdf8", color2: "#0284c7" }
 ];
 
@@ -1420,36 +1425,45 @@ async function loadPublicHistory() {
   }
 }
 
+const TB_ICONS = {
+  coin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.3c-.4-.9-1.4-1.4-2.5-1.4-1.4 0-2.5.8-2.5 1.9 0 2.6 5 1.4 5 4.2 0 1.1-1.1 1.9-2.5 1.9-1.1 0-2.1-.5-2.5-1.4M12 6.5v1.4M12 16.1v1.4"/></svg>',
+  gem: '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#2f9bf0"/><path d="M20 24h24l6 8-18 20L14 32z" fill="#fff"/><path d="M32 30v10M27 35h10" stroke="#2f9bf0" stroke-width="3" stroke-linecap="round"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  exchange: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4 3 8l4 4M3 8h15M17 20l4-4-4-4M21 16H6"/></svg>',
+  out: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>'
+};
+
 function renderWallet() {
   const content = $("#content");
 
   content.innerHTML = `
     <div class="sectionHeader"><h2 class="sectionTitle">${t("wallet_title")}</h2></div>
 
-    <div class="walletBalanceGrid">
-      <div class="walletBalanceCard gold">
-        <div class="walletBalanceIcon">🪙</div>
-        <div class="walletBalanceLabel">${t("wallet_points_card_title")}</div>
-        <div class="walletBalanceValue">${formatPoints(state.points)}</div>
+    <div class="tbWalletGrid">
+      <div class="tbWalletCard">
+        <div class="tbWalletIcon tbIconOrange">${TB_ICONS.coin}</div>
+        <div class="tbStatLabel tbColOrange">${t("wallet_points_card_title")}</div>
+        <div class="tbWalletValue">${formatPoints(state.points)}</div>
       </div>
-      <div class="walletBalanceCard blue">
-        <div class="walletBalanceIcon">💎</div>
-        <div class="walletBalanceLabel">${t("wallet_gram_card_title")}</div>
-        <div class="walletBalanceValue">${formatNumber(state.gramBalance, 6)}</div>
+      <div class="tbWalletCard">
+        <div class="tbWalletIcon tbIconBlue">${TB_ICONS.gem}</div>
+        <div class="tbStatLabel tbColBlue">${t("wallet_gram_card_title")}</div>
+        <div class="tbWalletValue">${formatNumber(state.gramBalance, 6)}</div>
+        ${state.gramUsdPrice > 0 ? `<span class="tbPill tbPillGreen tbPillSm">≈ $${formatFixed(state.gramBalance * state.gramUsdPrice, 3)}</span>` : ""}
       </div>
     </div>
 
-    <div class="walletActionsGrid">
-      <button class="walletActionBtn" type="button" onclick="showDeposit()">
-        <span class="walletActionIcon">＋</span>
+    <div class="tbWalletActions">
+      <button class="tbAct" type="button" onclick="showDeposit()">
+        <span class="tbActIcon">${TB_ICONS.plus}</span>
         <span>${t("wallet_deposit_button")}</span>
       </button>
-      <button class="walletActionBtn" type="button" onclick="showExchange()">
-        <span class="walletActionIcon">⇄</span>
+      <button class="tbAct" type="button" onclick="showExchange()">
+        <span class="tbActIcon">${TB_ICONS.exchange}</span>
         <span>${t("wallet_exchange_button")}</span>
       </button>
-      <button class="walletActionBtn" type="button" onclick="showWithdraw()">
-        <span class="walletActionIcon">➤</span>
+      <button class="tbAct tbActPrimary" type="button" onclick="showWithdraw()">
+        <span class="tbActIcon">${TB_ICONS.out}</span>
         <span>${t("wallet_withdraw_button")}</span>
       </button>
     </div>
@@ -1594,9 +1608,12 @@ function renderProfileMenu() {
       <div class="profileAvatarLg">
         ${user.photo_url ? `<img src="${escapeHTML(user.photo_url)}" alt="">` : escapeHTML(getInitials(user))}
       </div>
-      <div>
+      <div class="profileHeadInfo">
         <div class="profileNameLg">${escapeHTML(firstName)}</div>
-        <div class="profileSubLg">${formatPoints(state.points)} ${t("points_unit")} • ${formatPoints(state.invitedCount)}</div>
+        <div class="tbPills">
+          <span class="tbPill tbPillPurple tbPillSm">${t("tb_points_chip", { n: formatPoints(state.points) })}</span>
+          <span class="tbPill tbPillOrange tbPillSm">${formatPoints(state.invitedCount)} ${t("tb_referrals")}</span>
+        </div>
       </div>
     </div>
 
@@ -1734,7 +1751,7 @@ function renderProfileLeaderboard() {
   const rows = state.leaderboard.map((person, index) => {
     const rank = index + 1;
     const rankClass = rank === 1 ? "top1" : rank === 2 ? "top2" : rank === 3 ? "top3" : "";
-    const isMe = state.user && String(person.telegramId) === String(state.user.telegramId);
+    const isMe = Boolean(person.isMe);
     return `
       <div class="leaderboardItem ${isMe ? "me" : ""}">
         <div class="rankBadge ${rankClass}">${formatPoints(rank)}</div>

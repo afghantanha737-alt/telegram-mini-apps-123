@@ -38,6 +38,8 @@ const state = {
   referralCode: "",
   shareLink: "",
   invitedCount: 0,
+  totalEarnedPoints: 0,
+  gramUsdPrice: 0,
   invited: [],
   referralMinTasks: 2,
   tasks: [],
@@ -67,12 +69,19 @@ const THEME_KEY = "miniAppTheme";
 
 function getTheme() {
   const saved = localStorage.getItem(THEME_KEY);
-  return saved === "light" || saved === "dark" ? saved : "dark";
+  return saved === "light" || saved === "dark" ? saved : "light";
 }
 function applyTheme(theme) {
   const finalTheme = theme === "light" ? "light" : "dark";
   document.documentElement.dataset.theme = finalTheme;
   localStorage.setItem(THEME_KEY, finalTheme);
+  try {
+    const chrome = finalTheme === "light" ? "#faf5ff" : "#050609";
+    if (tg && tg.setHeaderColor) tg.setHeaderColor(chrome);
+    if (tg && tg.setBackgroundColor) tg.setBackgroundColor(chrome);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", chrome);
+  } catch (e) { /* ignore */ }
   updateThemeUI();
 }
 function toggleTheme() {
@@ -133,6 +142,9 @@ function formatPoints(value) {
 }
 function formatNumber(value, decimals = 4) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: decimals }).format(Number(value) || 0);
+}
+function formatFixed(value, decimals = 3) {
+  return new Intl.NumberFormat("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(Number(value) || 0);
 }
 function truncateMiddle(str, head = 6, tail = 6) {
   const s = String(str || "");
@@ -252,15 +264,14 @@ function updateHeader() {
   const firstName = user.first_name || user.firstName || "";
 
   const avatar = $("#avatar");
-  const greet = $("#greetName");
-  const points = $("#pointsDisplay");
+  const idLine = $("#userIdLine");
 
   if (avatar) {
     avatar.textContent = getInitials(user);
     if (user.photo_url) avatar.innerHTML = `<img src="${escapeHTML(user.photo_url)}" alt="">`;
   }
-  if (greet) greet.textContent = t("greet_hello", { name: escapeHTML(firstName) });
-  if (points) points.textContent = `${formatPoints(state.points)} ${t("points_unit")}`;
+  const uid = user.id || user.telegramId || "";
+  if (idLine) idLine.textContent = uid ? `ID ${uid}` : "";
 }
 
 function applyDirection() {
@@ -487,6 +498,8 @@ async function loadUserData() {
   state.totalCheckins = Number(data?.totalCheckins) || 0;
   state.minWithdrawGram = Number(data?.minWithdrawGram) || 0;
   state.nextResetAt = Number(data?.nextResetAt) || 0;
+  state.totalEarnedPoints = Number(data?.totalEarnedPoints) || 0;
+  state.gramUsdPrice = Number(data?.gramUsdPrice) || 0;
   if (data?.firstName) state.user = { ...(state.user || {}), first_name: data.firstName };
   updateHeader();
 }
@@ -581,99 +594,63 @@ function completionStatus(taskId) {
 }
 
 function renderHome() {
-  const nextLevel = Math.max(100, (Math.floor(state.points / 100) + 1) * 100);
-  const currentLevel = Math.floor(state.points / 100) + 1;
-  const previousLevel = (currentLevel - 1) * 100;
-  const levelProgress = Math.min(100, Math.max(0, ((state.points - previousLevel) / (nextLevel - previousLevel)) * 100));
-
-  const featuredTasks = state.tasks.slice(0, 3);
-  const ringCircumference = 188.5; // 2 * PI * r(30)
-  const ringOffset = Math.max(0, ringCircumference - (ringCircumference * levelProgress) / 100);
+  const approvedTasks = state.completions.filter(c => c.status === "approved").length;
+  const usd = state.gramBalance * state.gramUsdPrice;
+  const usdPill = state.gramUsdPrice > 0
+    ? `<span class="tbPill tbPillGreen">≈ $${formatFixed(usd, 3)} USD</span>`
+    : "";
 
   const content = $("#content");
   content.innerHTML = `
-    <section class="heroRingCard">
-      <div class="heroRingRow">
-        <svg class="heroRingSvg" width="72" height="72" viewBox="0 0 72 72">
-          <circle cx="36" cy="36" r="30" fill="none" stroke="var(--line-strong)" stroke-width="6"></circle>
-          <circle cx="36" cy="36" r="30" fill="none" stroke="var(--primary)" stroke-width="6" stroke-linecap="round"
-            stroke-dasharray="${ringCircumference}" stroke-dashoffset="${ringOffset}" transform="rotate(-90 36 36)"></circle>
-          <text x="36" y="32" text-anchor="middle" font-size="15" font-weight="900" fill="var(--text)">${formatPoints(state.points)}</text>
-          <text x="36" y="46" text-anchor="middle" font-size="8" fill="var(--text-muted)">${t("points_unit")}</text>
-        </svg>
-        <div class="heroRingInfo">
-          <span class="heroRingBadge">${t("level_label", { n: formatPoints(currentLevel) })}</span>
-          <p class="heroRingCaption">${t("home_ring_caption", { n: formatPoints(nextLevel - state.points) })}</p>
+    <section class="tbCard tbBalance">
+      <div class="tbBalanceTop">
+        <div class="tbBalanceInfo">
+          <div class="tbLabel">${t("tb_total_balance")}</div>
+          <div class="tbAmount"><span class="tbAmountNum">${formatFixed(state.gramBalance, 3)}</span><span class="tbAmountUnit">GRAM</span></div>
+          <div class="tbPills">
+            ${usdPill}
+            <span class="tbPill tbPillPurple">${t("tb_points_chip", { n: formatPoints(state.points) })}</span>
+          </div>
         </div>
+        <div class="tbGemRing"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#2f9bf0"/><path d="M20 24h24l6 8-18 20L14 32z" fill="#fff"/><path d="M32 30v10M27 35h10" stroke="#2f9bf0" stroke-width="3" stroke-linecap="round"/></svg></div>
       </div>
-      <button class="heroRingBtn" type="button" onclick="navigate('daily')">
-        <span>▶</span> ${t("home_cta_daily")}
-      </button>
+      <div class="tbActions">
+        <button class="tbBtnPrimary" type="button" onclick="showWithdraw()"><span class="tbBtnIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span>${t("tb_withdraw")}</button>
+        <button class="tbBtnGhost" type="button" onclick="openHistory()"><span class="tbBtnIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7.5V12l3 2"/></svg></span>${t("tb_history")}</button>
+      </div>
     </section>
 
-    <div class="statsGrid">
-      <div class="statCard tint-warning">
-        <div class="statIcon">🔥</div>
-        <div class="statValue">${formatPoints(state.streak)}</div>
-        <div class="statLabel">${t("stat_streak")}</div>
+    <div class="tbSectionHead">
+      <h2 class="tbSectionTitle">${t("tb_your_progress")} <span class="tbSpark">✨</span></h2>
+      <button class="tbLink" type="button" onclick="navigate('profile')">${t("tb_view_all")} <span class="tbLinkArrow">→</span></button>
+    </div>
+
+    <div class="tbStats">
+      <div class="tbStat">
+        <div class="tbStatIcon tbIconMint"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#2f9bf0"/><path d="M20 24h24l6 8-18 20L14 32z" fill="#fff"/><path d="M32 30v10M27 35h10" stroke="#2f9bf0" stroke-width="3" stroke-linecap="round"/></svg></div>
+        <div class="tbStatLabel tbColGreen">${t("tb_earned")}</div>
+        <div class="tbStatValue">${formatPoints(state.totalEarnedPoints)}</div>
       </div>
-      <div class="statCard tint-success">
-        <div class="statIcon">🎯</div>
-        <div class="statValue">${formatPoints(state.totalCheckins)}</div>
-        <div class="statLabel">${t("stat_checkins")}</div>
+      <div class="tbStat">
+        <div class="tbStatIcon tbIconOrange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2A6.5 6.5 0 0 1 21.5 20"/></svg></div>
+        <div class="tbStatLabel tbColOrange">${t("tb_referrals")}</div>
+        <div class="tbStatValue">${formatPoints(state.invitedCount)}</div>
       </div>
-      <div class="statCard tint-info">
-        <div class="statIcon">👥</div>
-        <div class="statValue">${formatPoints(state.invitedCount)}</div>
-        <div class="statLabel">${t("stat_invited")}</div>
+      <div class="tbStat">
+        <div class="tbStatIcon tbIconPurple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17.5" rx="2.5"/><path d="M9 3.5h6v3H9z"/><path d="m9 13.5 2 2 4-4"/></svg></div>
+        <div class="tbStatLabel tbColPurple">${t("tb_tasks")}</div>
+        <div class="tbStatValue">${formatPoints(approvedTasks)}</div>
       </div>
     </div>
 
-    <div class="sectionHeader">
-      <h2 class="sectionTitle">${t("section_quick_earn")}</h2>
-      <button class="sectionMore" type="button" onclick="navigate('tasks')">${t("section_view_all")}</button>
-    </div>
-
-    <div class="earningList">
-      <div class="earningItem ${state.canCheckIn ? "" : "isDone"}" onclick="navigate('daily')">
-        <div class="earningIcon ${state.canCheckIn ? "" : "tint-success"}">${state.canCheckIn ? "◷" : "✓"}</div>
-        <div class="earningBody">
-          <div class="earningTitle">${t("earn_daily_title")}</div>
-          <div class="earningSub">${state.canCheckIn ? t("earn_daily_sub_available") : t("earn_daily_sub_done")}</div>
-        </div>
-        <div class="earningArrow">‹</div>
+    <section class="tbExplore">
+      <div class="tbExploreText">
+        <h3 class="tbExploreTitle">${t("tb_explore_title")}</h3>
+        <p class="tbExploreDesc">${t("tb_explore_desc")}</p>
+        <button class="tbBtnDark" type="button" onclick="navigate('tasks')">${t("tb_view_tasks")} <span class="tbBtnIcon tbFlip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button>
       </div>
-      <div class="earningItem" onclick="navigate('tasks')">
-        <div class="earningIcon tint-info">✓</div>
-        <div class="earningBody">
-          <div class="earningTitle">${t("earn_tasks_title")}</div>
-          <div class="earningSub">${t("earn_tasks_sub", { n: formatPoints(state.tasks.length) })}</div>
-        </div>
-        <div class="earningArrow">‹</div>
-      </div>
-      <div class="earningItem" onclick="navigate('profile')">
-        <div class="earningIcon tint-pink">👥</div>
-        <div class="earningBody">
-          <div class="earningTitle">${t("earn_referral_title")}</div>
-          <div class="earningSub">${t("earn_referral_sub")}</div>
-        </div>
-        <div class="earningArrow">‹</div>
-      </div>
-      ${featuredTasks.map(task => {
-        const status = completionStatus(task._id);
-        const subLabel = status === "approved" ? t("task_status_done") : status === "pending" ? t("task_status_pending") : t("task_status_todo");
-        return `
-        <div class="earningItem ${status === "approved" ? "isDone" : ""}" onclick="navigate('tasks')">
-          <div class="earningIcon">🎁</div>
-          <div class="earningBody">
-            <div class="earningTitle">${escapeHTML(task.title)}</div>
-            <div class="earningSub">${subLabel}</div>
-          </div>
-          <div class="earningReward">+${formatPoints(task.reward)}</div>
-          <div class="earningArrow">‹</div>
-        </div>`;
-      }).join("")}
-    </div>
+      <div class="tbExploreGem"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#2f9bf0"/><path d="M20 24h24l6 8-18 20L14 32z" fill="#fff"/><path d="M32 30v10M27 35h10" stroke="#2f9bf0" stroke-width="3" stroke-linecap="round"/></svg></div>
+    </section>
   `;
 }
 
@@ -1374,6 +1351,13 @@ function shareReferralLink() {
 window.shareReferralLink = shareReferralLink;
 
 let profileView = "menu"; // menu | referral | leaderboard | about | history
+let pendingProfileView = null;
+
+function openHistory() {
+  pendingProfileView = "history";
+  navigate("profile");
+}
+window.openHistory = openHistory;
 
 function setProfileView(view) {
   profileView = view;
@@ -1641,7 +1625,9 @@ async function renderCurrentTab() {
       await loadUserData();
       renderWallet();
     } else if (state.activeTab === "profile") {
-      profileView = "menu";
+      profileView = pendingProfileView || "menu";
+      pendingProfileView = null;
+      if (profileView === "history") { historyList = []; historyHasMore = false; }
       await Promise.all([loadUserData(), loadReferralData()]);
       renderProfile();
     }

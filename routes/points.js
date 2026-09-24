@@ -392,8 +392,9 @@ router.get('/public-history', async (req, res) => {
       amount: w.cryptoAmount,
       token: w.token,
       network: w.network,
-      toAddress: w.address,
-      fromAddress: w.fromAddress,
+      // فقط آدرس کوتاه‌شده به بیرون داده می‌شود (مطابق سیاست حریم خصوصی)؛ آدرس کامل کیف‌پول کاربر عمومی نمی‌شود
+      toAddress: truncateAddress(w.address),
+      fromAddress: truncateAddress(w.fromAddress),
       txHash: w.txHash,
       verified: w.verified,
       date: w.paidAt

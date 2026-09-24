@@ -634,9 +634,11 @@ router.put('/settings', async (req, res) => {
  */
 router.get('/stats', async (req, res) => {
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const sevenDaysAgo = new Date(startOfToday);
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // شامل خود امروز = ۷ روز
+  // همه‌چیز بر پایه‌ی روز UTC است (همان مبنای ریست روزانه و $dateToString در MongoDB)،
+  // تا نمودار به منطقه‌ی زمانی سرور وابسته نباشد.
+  const DAY_MS = 86400000;
+  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const sevenDaysAgo = new Date(startOfToday.getTime() - 6 * DAY_MS); // شامل خود امروز = ۷ روز
 
   const [
     newUsersToday,
@@ -676,8 +678,7 @@ router.get('/stats', async (req, res) => {
     const map = new Map(aggResult.map(r => [r._id, r.count]));
     const days = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(startOfToday);
-      d.setDate(d.getDate() - i);
+      const d = new Date(startOfToday.getTime() - i * DAY_MS);
       const key = d.toISOString().slice(0, 10);
       days.push({ date: key, count: map.get(key) || 0 });
     }

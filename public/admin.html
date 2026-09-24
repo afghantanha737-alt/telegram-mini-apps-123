@@ -273,7 +273,21 @@
         <label>قیمت هر ۱ GRAM به دلار (برای نمایش ≈ USD؛ صفر = مخفی)</label>
         <input id="setGramUsd" type="number" step="0.0001" min="0">
         <label>هزینه‌ی چرخاندن گردونه با پوینت (پیش‌فرض ۳۰؛ برای اینکه ضرر نکنید کمتر از ۲۶ نگذارید)</label>
-        <input id="setSpinCost" type="number" min="1" step="1">
+        <input id="setSpinCost" type="number" min="1" step="1" oninput="updateSpinPreview()">
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:4px 0 12px;background:var(--surface2)">
+          <b style="font-size:13px">🎡 شانس گردونه هنگام چرخش با پوینت</b>
+          <p class="small" style="margin:6px 0 10px">برای هر خانه یک عدد صحیح بنویسید؛ درصد شانس = عدد ÷ مجموع همه‌ی عددها. (چرخش‌های رایگان استریک همیشه شانس مساوی دارند.)</p>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0 10px">
+            <div><label>خانه‌ی ۲۰ پوینت</label><input id="setW0" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+            <div><label>خانه‌ی ۴۰ پوینت</label><input id="setW1" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+            <div><label>خانه‌ی ۶۰ پوینت</label><input id="setW2" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+            <div><label>خانه‌ی ۱۰۰ پوینت</label><input id="setW3" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+            <div><label>خانه‌ی پوچ</label><input id="setW4" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+            <div><label>خانه‌ی شانس دوباره (چرخش رایگان)</label><input id="setW5" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+          </div>
+          <div id="spinPreview" class="small" style="line-height:1.9"></div>
+          <button type="button" class="secondary" onclick="resetSpinWeights()" style="margin-top:8px">بازگشت به مقادیر پیش‌فرض</button>
+        </div>
         <label>حداقل پوینت برای برداشت</label>
         <input id="setMinWithdraw" type="number">
         <label>پاداش ورود روزانه (پایه)</label>
@@ -818,6 +832,51 @@ async function sendBroadcast() {
 }
 
 /* ---------- SETTINGS ---------- */
+let spinModel = {
+  segments: [{ type: "points", value: 20 }, { type: "points", value: 40 }, { type: "points", value: 60 }, { type: "points", value: 100 }, { type: "empty", value: 0 }, { type: "spin", value: 1 }],
+  freeSpinValue: 44,
+  defaultWeights: [30, 20, 8, 2, 30, 10]
+};
+
+function readSpinWeights() {
+  return [0, 1, 2, 3, 4, 5].map(i => Number(document.getElementById("setW" + i).value));
+}
+
+// پیش‌نمایش زنده: درصد هر خانه + میانگین جایزه‌ی هر چرخش نسبت به هزینه (همان فرمول سرور)
+function updateSpinPreview() {
+  const box = document.getElementById("spinPreview");
+  if (!box) return;
+  const weights = readSpinWeights();
+  const cost = Number(document.getElementById("setSpinCost").value) || 30;
+  const valid = weights.length === 6 && weights.every(w => Number.isInteger(w) && w >= 0 && w <= 1000);
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (!valid || total <= 0) {
+    box.innerHTML = '<span style="color:var(--danger)">هر ۶ عدد باید صحیح، بین ۰ تا ۱۰۰۰ و مجموعشان بیشتر از صفر باشد.</span>';
+    return;
+  }
+  const labels = ["۲۰ پوینت", "۴۰ پوینت", "۶۰ پوینت", "۱۰۰ پوینت", "پوچ", "شانس دوباره"];
+  const percents = weights.map(w => ((w / total) * 100).toFixed(1).replace(/\.0$/, ""));
+  let expected = 0;
+  spinModel.segments.forEach((seg, i) => {
+    const p = weights[i] / total;
+    if (seg.type === "points") expected += p * seg.value;
+    else if (seg.type === "spin") expected += p * spinModel.freeSpinValue;
+  });
+  const diff = expected - cost;
+  const ok = expected < cost;
+  box.innerHTML =
+    labels.map((l, i) => `${l}: <b>${percents[i]}٪</b>`).join(" &nbsp;|&nbsp; ") +
+    `<br>میانگین جایزه‌ی هر چرخش: <b>${expected.toFixed(1)}</b> پوینت — هزینه: <b>${cost}</b> پوینت<br>` +
+    (ok
+      ? `<span style="color:var(--success)">✓ به نفع سیستم: ${(-diff).toFixed(1)} پوینت در هر چرخش (${((1 - expected / cost) * 100).toFixed(0)}٪)</span>`
+      : `<span style="color:var(--danger)">✕ به ضرر شما: کاربران در هر چرخش ${diff.toFixed(1)} پوینت سود می‌کنند؛ سرور اجازه‌ی ذخیره نمی‌دهد.</span>`);
+}
+
+function resetSpinWeights() {
+  (spinModel.defaultWeights || [30, 20, 8, 2, 30, 10]).forEach((w, i) => { document.getElementById("setW" + i).value = w; });
+  updateSpinPreview();
+}
+
 async function loadSettings() {
   try {
     const data = await api("/api/admin/settings");
@@ -825,6 +884,12 @@ async function loadSettings() {
     document.getElementById("setRate").value = s.rate ?? "";
     document.getElementById("setGramUsd").value = s.gramUsdPrice ?? 0;
     document.getElementById("setSpinCost").value = s.spinCostPoints ?? 30;
+    spinModel = data.spinModel || spinModel;
+    (s.paidSpinWeights || spinModel.defaultWeights || []).forEach((w, i) => {
+      const el = document.getElementById("setW" + i);
+      if (el) el.value = w;
+    });
+    updateSpinPreview();
     document.getElementById("setMinWithdraw").value = s.minWithdrawPoints ?? "";
     document.getElementById("setDaily").value = s.dailyCheckInPoints ?? "";
     document.getElementById("setStreakBonus").value = s.streakBonusPoints ?? "";
@@ -838,6 +903,7 @@ async function saveSettings() {
     rate: Number(document.getElementById("setRate").value),
     gramUsdPrice: Number(document.getElementById("setGramUsd").value) || 0,
     spinCostPoints: Number(document.getElementById("setSpinCost").value) || 30,
+    paidSpinWeights: [0, 1, 2, 3, 4, 5].map(i => Number(document.getElementById("setW" + i).value)),
     minWithdrawPoints: Number(document.getElementById("setMinWithdraw").value),
     dailyCheckInPoints: Number(document.getElementById("setDaily").value),
     streakBonusPoints: Number(document.getElementById("setStreakBonus").value)

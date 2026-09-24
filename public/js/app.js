@@ -298,6 +298,13 @@ function applyStaticTranslations() {
     const label = button.querySelector(".tabLabel");
     if (label) label.textContent = t(`nav_${button.dataset.tab}`);
   });
+
+  // متن‌های ثابت داخل index.html (راهنما، قوانین، حریم خصوصی، کپچا، مودال‌ها) با data-i18n ترجمه می‌شوند
+  $$("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  $$("[data-i18n-html]").forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); }); // فقط رشته‌های داخلی خودمان (i18n.js)
+  $$("[data-i18n-ph]").forEach(el => { el.setAttribute("placeholder", t(el.dataset.i18nPh)); });
+  $$("[data-i18n-aria]").forEach(el => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
+  renderOnboardingStep();
   updateThemeUI();
   updateHeader();
 }
@@ -570,7 +577,7 @@ function renderOnboardingStep() {
     if (dot) dot.classList.toggle("active", i === onboardingStep);
   }
   const nextBtn = $("#onboardingNextBtn");
-  if (nextBtn) nextBtn.textContent = onboardingStep === ONBOARDING_STEP_COUNT - 1 ? "بزنیم بریم! 🚀" : "بعدی";
+  if (nextBtn) nextBtn.textContent = onboardingStep === ONBOARDING_STEP_COUNT - 1 ? t("ob_start") : t("ob_next");
 }
 
 function onboardingNext() {
@@ -625,9 +632,9 @@ async function submitCaptcha() {
   const value = Number(answer.value);
 
   if (value !== state.captchaA + state.captchaB) {
-    if (error) error.textContent = "پاسخ صحیح نیست. دوباره تلاش کن.";
     haptic("error");
-    createCaptcha();
+    createCaptcha(); // سوال جدید می‌سازد و پیام خطا را پاک می‌کند؛ پس پیام باید بعد از آن نوشته شود
+    if (error) error.textContent = t("captcha_wrong");
     return;
   }
 
@@ -1312,11 +1319,11 @@ function setExchangeDirection(direction) {
   const title = $("#exchangeTitle");
   if (exchangeDirection === "points_to_gram") {
     if (label) label.textContent = t("exchange_points_label");
-    if (input) input.setAttribute("placeholder", "مثلاً 1000");
+    if (input) input.setAttribute("placeholder", t("exchange_points_ph"));
     if (title) title.textContent = t("exchange_modal_title");
   } else {
     if (label) label.textContent = t("exchange_gram_label");
-    if (input) input.setAttribute("placeholder", "مثلاً 0.5");
+    if (input) input.setAttribute("placeholder", t("withdraw_amount_ph"));
     if (title) title.textContent = t("exchange_modal_title_reverse");
   }
 

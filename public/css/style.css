@@ -878,3 +878,70 @@ html[data-theme="dark"] .tbBtnDark { background: #f8fafc; color: #0f172a; }
   .tbAmountNum { font-size: 30px; }
   .tbExploreDesc { font-size: 13px; }
 }
+
+/* =========================================================
+   MANDATORY CHANNEL MEMBERSHIP GATE
+========================================================= */
+body.is-gated { overflow: hidden; }
+body.is-gated .bottomNav { display: none; }
+.gateOverlay {
+  position: fixed; inset: 0; z-index: 450; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: var(--bg);
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  animation: pageEnter .3s var(--ease);
+}
+html[data-theme="light"] .gateOverlay {
+  background:
+    radial-gradient(circle at 85% -5%, rgba(192, 38, 211, .10), transparent 38%),
+    linear-gradient(180deg, #fcf8ff 0%, #f6effd 55%, #efe4fa 100%);
+}
+.gateInner { width: min(100%, 520px); margin: 0 auto; padding: 16px 17px 32px; }
+.gateBrand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.gateBrand img { width: 40px; height: 40px; border-radius: 12px; box-shadow: 0 5px 14px rgba(124, 58, 237, .25); }
+.gateBrand .brandName { font-size: 19px; }
+.gateHero {
+  width: 72px; height: 72px; margin: 6px auto 14px; border-radius: 50%; display: grid; place-items: center;
+  color: #fff; background: linear-gradient(135deg, #2aabee, #7c3aed);
+  box-shadow: 0 12px 28px rgba(76, 110, 245, .35), 0 0 0 8px rgba(124, 58, 237, .08);
+}
+.gateHero svg { width: 34px; height: 34px; margin-inline-end: 3px; }
+.gateTitle { margin: 0 0 6px; text-align: center; font-size: 22px; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
+.gateDesc { margin: 0 auto 18px; max-width: 340px; text-align: center; font-size: 14px; line-height: 1.55; color: var(--text-soft); }
+.gateList { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.gateCard { background: var(--tb-card); border-radius: 22px; padding: 14px; box-shadow: var(--tb-card-shadow); }
+.gateCardTop { display: flex; align-items: center; gap: 11px; }
+.gateChIcon {
+  width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; display: grid; place-items: center;
+  color: #fff; background: #2aabee; box-shadow: 0 6px 14px rgba(42, 171, 238, .35);
+}
+.gateChIcon svg { width: 22px; height: 22px; margin-inline-end: 2px; }
+.gateChInfo { min-width: 0; flex: 1; }
+.gateChName { font-size: 16px; font-weight: 800; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gateChUser { margin-top: 1px; font-size: 12.5px; font-weight: 600; color: var(--text-muted); direction: ltr; text-align: start; }
+.gatePill { flex: 0 0 auto; padding: 6px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 800; white-space: nowrap; }
+.gateOk { background: rgba(16, 185, 129, .14); color: #059669; }
+.gateBad { background: rgba(239, 68, 68, .12); color: #dc2626; }
+.gateWarnPill { background: rgba(245, 158, 11, .16); color: #b45309; }
+html[data-theme="dark"] .gateOk { color: #34d399; }
+html[data-theme="dark"] .gateBad { color: #f87171; }
+html[data-theme="dark"] .gateWarnPill { color: #fbbf24; }
+.gateJoinBtn {
+  width: 100%; margin-top: 12px; min-height: 42px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 14px; font-weight: 800; color: #fff; background: var(--tb-grad); box-shadow: 0 6px 16px rgba(168, 45, 224, .28);
+  transition: transform .15s ease;
+}
+.gateJoinBtn:active { transform: scale(.98); }
+.gateJoinBtn svg { width: 17px; height: 17px; }
+.gateMsg { margin-bottom: 12px; padding: 11px 14px; border-radius: 16px; font-size: 13.5px; font-weight: 700; text-align: center; line-height: 1.5; }
+.gate-ok { background: rgba(16, 185, 129, .14); color: #047857; }
+.gate-warn { background: rgba(124, 58, 237, .10); color: #6d28d9; }
+.gate-error { background: rgba(245, 158, 11, .16); color: #b45309; }
+html[data-theme="dark"] .gate-ok { color: #34d399; }
+html[data-theme="dark"] .gate-warn { color: #c4b5fd; }
+html[data-theme="dark"] .gate-error { color: #fbbf24; }
+.gateCheckBtn {
+  width: 100%; min-height: 54px; border-radius: 999px; font-size: 16px; font-weight: 800; letter-spacing: .3px; color: #fff;
+  background: var(--tb-grad); box-shadow: 0 10px 24px rgba(168, 45, 224, .32); transition: transform .15s ease, opacity .2s ease;
+}
+.gateCheckBtn:active:not(:disabled) { transform: scale(.98); }
+.gateCheckBtn:disabled { opacity: .6; }

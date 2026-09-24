@@ -32,6 +32,7 @@ const state = {
   streak: 0,
   canCheckIn: false,
   spinChances: 0,
+  spinCostPoints: 30,
   totalCheckins: 0,
   minWithdrawGram: 0,
   nextResetAt: 0,
@@ -692,6 +693,7 @@ async function loadUserData() {
   state.streak = Number(data?.streak) || 0;
   state.canCheckIn = Boolean(data?.canCheckIn);
   state.spinChances = Number(data?.spinChances) || 0;
+  state.spinCostPoints = Number(data?.spinCostPoints) || 30;
   state.totalCheckins = Number(data?.totalCheckins) || 0;
   state.minWithdrawGram = Number(data?.minWithdrawGram) || 0;
   state.nextResetAt = Number(data?.nextResetAt) || 0;
@@ -1031,28 +1033,41 @@ function spinWheelTargetRotation(index) {
   return wheelRotation;
 }
 
-async function doSpin() {
-  const button = $("#spinBtn");
-  if (state.spinChances <= 0) {
+function refreshSpinButtons(spinning = false) {
+  const free = $("#spinBtn");
+  const paid = $("#paidSpinBtn");
+  if (free) free.disabled = spinning || state.spinChances <= 0;
+  if (paid) paid.disabled = spinning || state.points < state.spinCostPoints;
+}
+
+async function doSpin(paid = false) {
+  paid = paid === true;
+  if (!paid && state.spinChances <= 0) {
     toast(t("spin_no_chances"), "warning");
     return;
   }
-  if (button) button.disabled = true;
+  if (paid && state.points < state.spinCostPoints) {
+    toast(t("spin_paid_not_enough", { n: formatPoints(state.spinCostPoints) }), "warning");
+    return;
+  }
+  refreshSpinButtons(true);
 
   try {
-    const result = await api("/api/points/spin", { method: "POST" });
+    // هزینه/شانس در سرور کم می‌شود؛ نتیجه‌ی چرخش هم فقط از سرور می‌آید
+    const result = await api("/api/points/spin", { method: "POST", body: { paid } });
     const disc = $("#wheelDisc");
     const rotation = spinWheelTargetRotation(result.segmentIndex);
     if (disc) disc.style.transform = `rotate(${rotation}deg)`;
 
     setTimeout(() => {
-      state.points = Number(result.points) || state.points;
+      state.points = Number(result.points) || 0;
       state.spinChances = Number(result.spinChances) || 0;
+      state.spinCostPoints = Number(result.spinCostPoints) || state.spinCostPoints;
       updateHeader();
 
       const chancesEl = $("#spinChancesValue");
       if (chancesEl) chancesEl.textContent = formatPoints(state.spinChances);
-      if (button) button.disabled = state.spinChances <= 0;
+      refreshSpinButtons(false);
 
       if (result.type === "points") {
         haptic("success");
@@ -1068,7 +1083,7 @@ async function doSpin() {
   } catch (error) {
     haptic("error");
     toast(translateServerMessage(error.code, error.message), "error");
-    if (button) button.disabled = false;
+    refreshSpinButtons(false);
   }
 }
 window.doSpin = doSpin;
@@ -1156,6 +1171,10 @@ function renderDaily() {
       <button id="spinBtn" class="primaryBtn wheelSpinBtn" type="button" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">
         🎡 ${t("spin_button")}
       </button>
+      <button id="paidSpinBtn" class="secondaryBtn wheelPaidBtn" type="button" ${state.points < state.spinCostPoints ? "disabled" : ""} onclick="doSpin(true)">
+        🪙 ${t("spin_paid_button", { n: formatPoints(state.spinCostPoints) })}
+      </button>
+      <p class="wheelPaidHint">${t("spin_paid_hint", { n: formatPoints(state.spinCostPoints) })}</p>
     </div>
 
     <div class="streakBox">

@@ -1,9 +1,11 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
+require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth } = require('../utils/telegramAuth');
 const { recordLedger } = require('../utils/ledger');
 const Settings = require('../models/Settings');
+const User = require('../models/User');
 const Withdrawal = require('../models/Withdrawal');
 const PointsLedger = require('../models/PointsLedger');
 
@@ -86,37 +88,39 @@ router.post('/checkin', auth, async (req, res) => {
   }
 
   const wasYesterday = u.lastCheckIn && utcDayKey(u.lastCheckIn) === todayKey - 1;
-  u.streak = wasYesterday ? u.streak + 1 : 1;
-
-  const bonus = Math.min(u.streak, 30) * settings.streakBonusPoints;
+  const newStreak = wasYesterday ? u.streak + 1 : 1;
+  const bonus = Math.min(newStreak, 30) * settings.streakBonusPoints;
   const earned = settings.dailyCheckInPoints + bonus;
+  const gotSpin = newStreak > 0 && newStreak % 7 === 0;
 
-  u.points += earned;
-  u.totalCheckins += 1;
-  u.lastCheckIn = new Date();
+  const inc = { points: earned, totalCheckins: 1 };
+  if (gotSpin) inc.spinChances = 1;
 
-  let gotSpin = false;
-  if (u.streak > 0 && u.streak % 7 === 0) {
-    u.spinChances += 1;
-    gotSpin = true;
+  // atomic: فقط اگر lastCheckIn هنوز همان مقداری باشد که خواندیم، اعمال می‌شود.
+  // پس دو درخواست هم‌زمان نمی‌توانند هر دو پاداش روز را بگیرند.
+  const updated = await User.findOneAndUpdate(
+    { _id: u._id, lastCheckIn: u.lastCheckIn || null },
+    { $set: { streak: newStreak, lastCheckIn: new Date() }, $inc: inc },
+    { new: true }
+  );
+  if (!updated) {
+    return res.status(400).json({ success: false, message: 'امروز قبلاً ورود روزانه ثبت شده است.', code: 'ALREADY_CHECKED_IN' });
   }
 
-  await u.save();
-
   recordLedger({
-    user: u._id,
+    user: updated._id,
     type: 'checkin',
     amount: earned,
-    description: `ورود روزانه (استریک ${u.streak})`,
-    balanceAfter: u.points
+    description: `ورود روزانه (استریک ${updated.streak})`,
+    balanceAfter: updated.points
   }).catch(() => {});
 
   res.json({
     success: true,
     earned,
-    points: u.points,
-    streak: u.streak,
-    spinChances: u.spinChances,
+    points: updated.points,
+    streak: updated.streak,
+    spinChances: updated.spinChances,
     gotSpin,
     nextResetAt: nextResetTimestamp()
   });
@@ -124,32 +128,33 @@ router.post('/checkin', auth, async (req, res) => {
 
 // POST /api/points/spin — چرخاندن گردونه شانس
 router.post('/spin', auth, async (req, res) => {
-  const u = req.dbUser;
-
-  if (u.spinChances <= 0) {
+  // atomic: شانس فقط اگر واقعاً موجود باشد کم می‌شود؛ درخواست‌های هم‌زمان نمی‌توانند یک شانس را چندبار خرج کنند.
+  const claimed = await User.findOneAndUpdate(
+    { _id: req.dbUser._id, spinChances: { $gt: 0 } },
+    { $inc: { spinChances: -1 } },
+    { new: true }
+  );
+  if (!claimed) {
     return res.status(400).json({ success: false, message: 'شانس چرخ‌گردون نداری.', code: 'NO_SPINS' });
   }
-
-  u.spinChances -= 1;
 
   const segmentIndex = Math.floor(Math.random() * SPIN_SEGMENTS.length);
   const segment = SPIN_SEGMENTS[segmentIndex];
 
+  let updated = claimed;
   if (segment.type === 'points') {
-    u.points += segment.value;
+    updated = await User.findByIdAndUpdate(claimed._id, { $inc: { points: segment.value } }, { new: true });
   } else if (segment.type === 'spin') {
-    u.spinChances += 1; // شانس دوباره: عملاً چیزی از دست نمی‌دهد
+    updated = await User.findByIdAndUpdate(claimed._id, { $inc: { spinChances: 1 } }, { new: true }); // شانس دوباره
   }
-
-  await u.save();
 
   if (segment.type === 'points' && segment.value > 0) {
     recordLedger({
-      user: u._id,
+      user: updated._id,
       type: 'spin',
       amount: segment.value,
       description: 'برد از گردونه شانس',
-      balanceAfter: u.points
+      balanceAfter: updated.points
     }).catch(() => {});
   }
 
@@ -158,10 +163,12 @@ router.post('/spin', auth, async (req, res) => {
     segmentIndex,
     type: segment.type,
     value: segment.value,
-    points: u.points,
-    spinChances: u.spinChances
+    points: updated.points,
+    spinChances: updated.spinChances
   });
 });
+
+const round6 = n => Number(Number(n).toFixed(6));
 
 /**
  * POST /api/points/exchange — تبدیل دوطرفه پوینت <-> موجودی GRAM
@@ -175,46 +182,47 @@ router.post('/exchange', auth, async (req, res) => {
   const body = req.body || {};
   const direction = body.direction === 'gram_to_points' ? 'gram_to_points' : 'points_to_gram';
 
+  if (!settings.rate || settings.rate <= 0) {
+    return res.status(400).json({ success: false, message: 'نرخ تبدیل نامعتبر است.', code: 'INVALID_RATE' });
+  }
+
   if (direction === 'points_to_gram') {
     const points = Math.floor(Number(body.amount != null ? body.amount : body.points) || 0);
 
-    if (!points || points <= 0) {
+    if (!Number.isFinite(points) || points <= 0) {
       return res.status(400).json({ success: false, message: 'مقدار پوینت نامعتبر است.', code: 'INVALID_AMOUNT' });
     }
-    if (points > u.points) {
+
+    const gramGained = round6(points * settings.rate);
+
+    // atomic: کسر و اضافه در یک عملیات، فقط اگر موجودی کافی باشد
+    const updated = await User.findOneAndUpdate(
+      { _id: u._id, points: { $gte: points } },
+      { $inc: { points: -points, gramBalance: gramGained } },
+      { new: true }
+    );
+    if (!updated) {
       return res.status(400).json({ success: false, message: 'موجودی پوینت کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
     }
 
-    const gramGained = Number((points * settings.rate).toFixed(6));
-
-    u.points -= points;
-    u.gramBalance = Number((u.gramBalance + gramGained).toFixed(6));
-    await u.save();
-
-    recordLedger({ user: u._id, type: 'exchange_out', currency: 'points', amount: -points, description: 'تبدیل پوینت به GRAM', balanceAfter: u.points }).catch(() => {});
-    recordLedger({ user: u._id, type: 'exchange_in', currency: 'gram', amount: gramGained, description: 'تبدیل پوینت به GRAM', balanceAfter: u.gramBalance }).catch(() => {});
+    recordLedger({ user: u._id, type: 'exchange_out', currency: 'points', amount: -points, description: 'تبدیل پوینت به GRAM', balanceAfter: updated.points }).catch(() => {});
+    recordLedger({ user: u._id, type: 'exchange_in', currency: 'gram', amount: gramGained, description: 'تبدیل پوینت به GRAM', balanceAfter: updated.gramBalance }).catch(() => {});
 
     return res.json({
       success: true,
       direction,
       message: `${points} پوینت به ${gramGained} GRAM تبدیل شد.`,
-      points: u.points,
-      gramBalance: u.gramBalance,
+      points: updated.points,
+      gramBalance: updated.gramBalance,
       gramGained
     });
   }
 
   // direction === 'gram_to_points'
-  const gram = Number(body.amount || 0);
+  const gram = round6(body.amount || 0);
 
-  if (!gram || gram <= 0) {
+  if (!Number.isFinite(gram) || gram <= 0) {
     return res.status(400).json({ success: false, message: 'مقدار GRAM نامعتبر است.', code: 'INVALID_AMOUNT' });
-  }
-  if (gram > u.gramBalance) {
-    return res.status(400).json({ success: false, message: 'موجودی GRAM کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
-  }
-  if (!settings.rate || settings.rate <= 0) {
-    return res.status(400).json({ success: false, message: 'نرخ تبدیل نامعتبر است.', code: 'INVALID_RATE' });
   }
 
   const pointsGained = Math.floor(gram / settings.rate);
@@ -223,21 +231,26 @@ router.post('/exchange', auth, async (req, res) => {
     return res.status(400).json({ success: false, message: 'مقدار GRAM برای تبدیل بسیار کم است.', code: 'INVALID_AMOUNT' });
   }
 
-  const gramSpent = Number((pointsGained * settings.rate).toFixed(6));
+  const gramSpent = round6(pointsGained * settings.rate);
 
-  u.gramBalance = Number((u.gramBalance - gramSpent).toFixed(6));
-  u.points += pointsGained;
-  await u.save();
+  const updated = await User.findOneAndUpdate(
+    { _id: u._id, gramBalance: { $gte: gramSpent } },
+    { $inc: { gramBalance: -gramSpent, points: pointsGained } },
+    { new: true }
+  );
+  if (!updated) {
+    return res.status(400).json({ success: false, message: 'موجودی GRAM کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
+  }
 
-  recordLedger({ user: u._id, type: 'exchange_out', currency: 'gram', amount: -gramSpent, description: 'تبدیل GRAM به پوینت', balanceAfter: u.gramBalance }).catch(() => {});
-  recordLedger({ user: u._id, type: 'exchange_in', currency: 'points', amount: pointsGained, description: 'تبدیل GRAM به پوینت', balanceAfter: u.points }).catch(() => {});
+  recordLedger({ user: u._id, type: 'exchange_out', currency: 'gram', amount: -gramSpent, description: 'تبدیل GRAM به پوینت', balanceAfter: updated.gramBalance }).catch(() => {});
+  recordLedger({ user: u._id, type: 'exchange_in', currency: 'points', amount: pointsGained, description: 'تبدیل GRAM به پوینت', balanceAfter: updated.points }).catch(() => {});
 
   res.json({
     success: true,
     direction,
     message: `${gramSpent} GRAM به ${pointsGained} پوینت تبدیل شد.`,
-    points: u.points,
-    gramBalance: u.gramBalance,
+    points: updated.points,
+    gramBalance: updated.gramBalance,
     pointsGained
   });
 });
@@ -247,13 +260,14 @@ router.post('/withdraw', auth, async (req, res) => {
   const u = req.dbUser;
   const settings = await Settings.getGlobal();
   const { gram, address } = req.body || {};
-  const amount = Number(gram);
-  const minWithdrawGram = Number((settings.minWithdrawPoints * settings.rate).toFixed(6));
+  const amount = round6(gram);
+  const walletAddress = String(address || '').trim();
+  const minWithdrawGram = round6(settings.minWithdrawPoints * settings.rate);
 
-  if (!amount || amount <= 0) {
+  if (!Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ success: false, message: 'مقدار GRAM نامعتبر است.', code: 'INVALID_AMOUNT' });
   }
-  if (!address || String(address).trim().length < 6) {
+  if (!/^[A-Za-z0-9_\-:+/=.]{6,120}$/.test(walletAddress)) {
     return res.status(400).json({ success: false, message: 'آدرس کیف پول نامعتبر است.', code: 'INVALID_ADDRESS' });
   }
   if (amount < minWithdrawGram) {
@@ -263,34 +277,44 @@ router.post('/withdraw', auth, async (req, res) => {
       code: 'BELOW_MIN_WITHDRAW'
     });
   }
-  if (amount > u.gramBalance) {
+
+  // atomic: موجودی فقط در صورت کافی بودن کم می‌شود (جلوگیری از برداشت دوباره با درخواست هم‌زمان)
+  const updated = await User.findOneAndUpdate(
+    { _id: u._id, gramBalance: { $gte: amount } },
+    { $inc: { gramBalance: -amount }, $set: { walletAddress } },
+    { new: true }
+  );
+  if (!updated) {
     return res.status(400).json({ success: false, message: 'موجودی GRAM کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
   }
 
-  u.gramBalance = Number((u.gramBalance - amount).toFixed(6));
-  u.walletAddress = String(address).trim();
-  await u.save();
-
-  const withdrawal = await Withdrawal.create({
-    user: u._id,
-    pointsSpent: settings.rate > 0 ? Math.round(amount / settings.rate) : 0,
-    cryptoAmount: amount,
-    address: u.walletAddress
-  });
+  let withdrawal;
+  try {
+    withdrawal = await Withdrawal.create({
+      user: u._id,
+      pointsSpent: settings.rate > 0 ? Math.round(amount / settings.rate) : 0,
+      cryptoAmount: amount,
+      address: walletAddress
+    });
+  } catch (error) {
+    // اگر ثبت درخواست شکست خورد، مبلغ کسرشده را برگردان تا کاربر ضرر نکند
+    await User.findByIdAndUpdate(u._id, { $inc: { gramBalance: amount } });
+    throw error;
+  }
 
   recordLedger({
     user: u._id,
     type: 'withdraw',
     currency: 'gram',
     amount: -amount,
-    description: `درخواست برداشت به ${truncateAddress(u.walletAddress)}`,
-    balanceAfter: u.gramBalance
+    description: `درخواست برداشت به ${truncateAddress(walletAddress)}`,
+    balanceAfter: updated.gramBalance
   }).catch(() => {});
 
   res.json({
     success: true,
     message: 'درخواست برداشت ثبت شد و به‌زودی بررسی می‌شود.',
-    gramBalance: u.gramBalance,
+    gramBalance: updated.gramBalance,
     withdrawalId: withdrawal._id
   });
 });

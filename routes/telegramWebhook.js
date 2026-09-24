@@ -1,6 +1,8 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
+require('../utils/asyncHandler').wrapRouter(router);
+const { isValidAdminKey } = require('../utils/adminKey');
 const { bot } = require('../utils/bot');
 const User = require('../models/User');
 const { generateReferralCode } = require('../utils/telegramAuth');
@@ -82,6 +84,10 @@ router.post('/webhook', async (req, res) => {
 
 // GET /api/telegram/set-webhook — یک‌بار برای تنظیم وبهوک صدا بزنید
 router.get('/set-webhook', async (req, res) => {
+  const adminKey = req.headers['x-admin-key'] || req.query.key;
+  if (!isValidAdminKey(typeof adminKey === 'string' ? adminKey : '')) {
+    return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز. کلید ادمین لازم است (?key=ADMIN_KEY).' });
+  }
   if (!bot || !APP_URL) {
     return res.status(400).json({ success: false, message: 'BOT_TOKEN یا APP_URL تنظیم نشده است.' });
   }

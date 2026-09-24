@@ -1,6 +1,7 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
+require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth } = require('../utils/telegramAuth');
 const User = require('../models/User');
 const TaskCompletion = require('../models/TaskCompletion');

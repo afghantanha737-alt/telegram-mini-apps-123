@@ -1,6 +1,7 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
+require('../utils/asyncHandler').wrapRouter(router);
 const multer = require('multer');
 const Task = require('../models/Task');
 const Withdrawal = require('../models/Withdrawal');
@@ -13,6 +14,9 @@ const { recordAdminLog } = require('../utils/adminLog');
 const AdminLog = require('../models/AdminLog');
 const TaskCompletion = require('../models/TaskCompletion');
 const PointsLedger = require('../models/PointsLedger');
+const { isValidAdminKey } = require('../utils/adminKey');
+
+const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -23,7 +27,7 @@ function requireAdmin(req, res, next) {
   // تگ <img> نمی‌تواند هدر سفارشی بفرستد، پس برای مسیر نمایش تصویر
   // اجازه می‌دهیم کلید از query هم بیاید (؟key=...).
   const key = req.headers['x-admin-key'] || req.query.key;
-  if (!process.env.ADMIN_KEY || key !== process.env.ADMIN_KEY) {
+  if (!isValidAdminKey(typeof key === 'string' ? key : '')) {
     return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
   }
   // نامی که ادمین موقع ورود تایپ کرده (اختیاری) — فقط برای لاگ فعالیت، نه احراز هویت واقعی
@@ -87,7 +91,7 @@ router.get('/tasks', async (req, res) => {
   const filter = {};
 
   if (search) {
-    const regex = new RegExp(String(search).trim(), 'i');
+    const regex = new RegExp(escapeRegex(String(search).trim()), 'i');
     filter.$or = [{ title: regex }, { description: regex }, { chatId: regex }];
   }
   if (type) filter.type = type;
@@ -134,7 +138,32 @@ router.post('/tasks', async (req, res) => {
 });
 
 router.put('/tasks/:id', async (req, res) => {
-  const task = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  const body = req.body || {};
+  const allowed = ['title', 'description', 'type', 'verifyType', 'chatId', 'url', 'reward', 'maxCompletions', 'isActive'];
+  const update = {};
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(body, key)) update[key] = body[key];
+  }
+  if ('reward' in update) {
+    update.reward = Number(update.reward);
+    if (!Number.isFinite(update.reward) || update.reward < 0) {
+      return res.status(400).json({ success: false, message: 'مقدار پاداش نامعتبر است.' });
+    }
+  }
+  if ('maxCompletions' in update && update.maxCompletions !== null && update.maxCompletions !== '') {
+    update.maxCompletions = Number(update.maxCompletions);
+    if (!Number.isFinite(update.maxCompletions) || update.maxCompletions < 1) {
+      return res.status(400).json({ success: false, message: 'ظرفیت تسک نامعتبر است.' });
+    }
+  } else if ('maxCompletions' in update) {
+    update.maxCompletions = null;
+  }
+  let task;
+  try {
+    task = await Task.findByIdAndUpdate(req.params.id, { $set: update }, { new: true, runValidators: true });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: 'اطلاعات تسک نامعتبر است.' });
+  }
   if (!task) return res.status(404).json({ success: false, message: 'تسک پیدا نشد.' });
   res.json({ success: true, task });
 
@@ -187,7 +216,7 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
     return res.status(400).json({ success: false, message: 'وارد کردن Transaction Hash الزامی است.' });
   }
 
-  const withdrawal = await Withdrawal.findById(req.params.id);
+  let withdrawal = await Withdrawal.findById(req.params.id);
   if (!withdrawal) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
   if (withdrawal.status !== 'pending') {
     return res.status(400).json({ success: false, message: 'این درخواست قبلاً پردازش شده است.' });
@@ -217,14 +246,32 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
     });
   }
 
-  withdrawal.status = 'paid';
-  withdrawal.txHash = txHash;
-  withdrawal.verified = !verification.requiresManualAmountCheck;
-  withdrawal.verificationNote = verification.reason;
-  withdrawal.fromAddress = verification.fromAddress || '';
-  withdrawal.paidAt = new Date();
-  withdrawal.adminNote = (req.body && req.body.note) || withdrawal.adminNote;
-  await withdrawal.save();
+  // یک TxID نباید برای دو برداشت متفاوت ثبت شود
+  const duplicate = await Withdrawal.findOne({ txHash, status: 'paid', _id: { $ne: withdrawal._id } });
+  if (duplicate) {
+    return res.status(400).json({ success: false, message: 'این TxID قبلاً برای برداشت دیگری ثبت شده است.', code: 'DUPLICATE_TX' });
+  }
+
+  // atomic: فقط اگر هنوز pending باشد پرداخت‌شده می‌شود (جلوگیری از تایید/رد هم‌زمان)
+  const paid = await Withdrawal.findOneAndUpdate(
+    { _id: withdrawal._id, status: 'pending' },
+    {
+      $set: {
+        status: 'paid',
+        txHash,
+        verified: !verification.requiresManualAmountCheck,
+        verificationNote: verification.reason,
+        fromAddress: verification.fromAddress || '',
+        paidAt: new Date(),
+        adminNote: (req.body && req.body.note) || withdrawal.adminNote
+      }
+    },
+    { new: true }
+  );
+  if (!paid) {
+    return res.status(400).json({ success: false, message: 'این درخواست قبلاً پردازش شده است.' });
+  }
+  withdrawal = paid;
 
   res.json({ success: true, withdrawal });
 
@@ -247,29 +294,35 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
 });
 
 router.post('/withdrawals/:id/reject', async (req, res) => {
-  const withdrawal = await Withdrawal.findById(req.params.id);
-  if (!withdrawal) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
+  const existing = await Withdrawal.findById(req.params.id);
+  if (!existing) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
 
-  if (withdrawal.status === 'pending') {
-    const refunded = await User.findByIdAndUpdate(
-      withdrawal.user,
-      { $inc: { points: withdrawal.pointsSpent } },
-      { new: true }
-    );
-    if (refunded) {
-      recordLedger({
-        user: refunded._id,
-        type: 'admin_adjust',
-        amount: withdrawal.pointsSpent,
-        description: 'بازگشت پوینت بابت رد درخواست برداشت',
-        balanceAfter: refunded.points
-      }).catch(() => {});
-    }
+  // atomic: فقط درخواست pending رد می‌شود؛ پرداخت‌شده یا قبلاً ردشده دوباره پردازش نمی‌شود
+  const withdrawal = await Withdrawal.findOneAndUpdate(
+    { _id: existing._id, status: 'pending' },
+    { $set: { status: 'rejected', adminNote: (req.body && req.body.note) || '' } },
+    { new: true }
+  );
+  if (!withdrawal) {
+    return res.status(400).json({ success: false, message: 'این درخواست قبلاً پردازش شده است و قابل رد کردن نیست.' });
   }
 
-  withdrawal.status = 'rejected';
-  withdrawal.adminNote = (req.body && req.body.note) || '';
-  await withdrawal.save();
+  // مبلغ در زمان درخواست از «موجودی GRAM» کسر شده، پس همان ارز برگردانده می‌شود
+  const refunded = await User.findByIdAndUpdate(
+    withdrawal.user,
+    { $inc: { gramBalance: withdrawal.cryptoAmount } },
+    { new: true }
+  );
+  if (refunded) {
+    recordLedger({
+      user: refunded._id,
+      type: 'admin_adjust',
+      currency: 'gram',
+      amount: withdrawal.cryptoAmount,
+      description: 'بازگشت GRAM بابت رد درخواست برداشت',
+      balanceAfter: refunded.gramBalance
+    }).catch(() => {});
+  }
 
   res.json({ success: true, withdrawal });
 
@@ -281,13 +334,13 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
     details: withdrawal.adminNote ? `دلیل: ${withdrawal.adminNote}` : ''
   });
 
-  // اطلاع‌رسانی رد شدن درخواست به کاربر (پوینتش قبلاً در بالا برگردانده شده)
+  // اطلاع‌رسانی رد شدن درخواست به کاربر (GRAM قبلاً در بالا برگردانده شده)
   const requesterUser = await User.findById(withdrawal.user, 'telegramId');
   if (requesterUser) {
     const reasonLine = withdrawal.adminNote ? `\nدلیل: ${withdrawal.adminNote}` : '';
     notifyUser(
       requesterUser.telegramId,
-      `❌ درخواست برداشت شما رد شد و پوینت‌هایش به حسابت برگشت.${reasonLine}`
+      `❌ درخواست برداشت شما رد شد و GRAM به موجودی حسابت برگشت.${reasonLine}`
     ).catch(() => {});
   }
 });
@@ -302,7 +355,7 @@ router.get('/users', async (req, res) => {
   const filter = {};
 
   if (search) {
-    const regex = new RegExp(String(search).trim(), 'i');
+    const regex = new RegExp(escapeRegex(String(search).trim()), 'i');
     filter.$or = [{ firstName: regex }, { lastName: regex }, { username: regex }, { telegramId: regex }, { referralCode: regex }];
   }
   if (status === 'banned') filter.isBanned = true;
@@ -348,8 +401,26 @@ router.get('/settings', async (req, res) => {
 });
 
 router.put('/settings', async (req, res) => {
+  const body = req.body || {};
+  const rules = {
+    rate: v => v > 0,
+    minWithdrawPoints: v => v >= 0,
+    dailyCheckInPoints: v => v >= 0,
+    streakBonusPoints: v => v >= 0,
+    gramUsdPrice: v => v >= 0
+  };
+  const changes = {};
+  for (const [key, isOk] of Object.entries(rules)) {
+    if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+    const value = Number(body[key]);
+    if (!Number.isFinite(value) || !isOk(value)) {
+      return res.status(400).json({ success: false, message: `مقدار «${key}» نامعتبر است.` });
+    }
+    changes[key] = value;
+  }
+
   const settings = await Settings.getGlobal();
-  Object.assign(settings, req.body || {});
+  Object.assign(settings, changes);
   await settings.save();
   res.json({ success: true, settings });
 
@@ -357,7 +428,7 @@ router.put('/settings', async (req, res) => {
     actor: req.adminActor,
     action: 'settings_update',
     targetType: 'settings',
-    details: Object.keys(req.body || {}).join(', ')
+    details: Object.keys(changes).join(', ')
   });
 });
 

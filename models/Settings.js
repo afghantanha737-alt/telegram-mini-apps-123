@@ -11,7 +11,9 @@ const settingsSchema = new mongoose.Schema(
     // قیمت هر ۱ GRAM به دلار؛ برای نمایش «≈ $ USD» در صفحه‌ی خانه. صفر = مخفی
     gramUsdPrice: { type: Number, default: 0, min: 0 },
     // هزینه‌ی یک بار چرخاندن گردونه با پوینت (علاوه بر شانس‌های رایگان استریک)
-    spinCostPoints: { type: Number, default: 30, min: 1 }
+    spinCostPoints: { type: Number, default: 30, min: 1 },
+    // وزن شانس ۶ خانه‌ی گردونه برای چرخش با پوینت (ترتیب: ۲۰، ۴۰، ۶۰، ۱۰۰، پوچ، شانس دوباره)
+    paidSpinWeights: { type: [Number], default: () => [30, 20, 8, 2, 30, 10] }
   },
   { timestamps: true }
 );

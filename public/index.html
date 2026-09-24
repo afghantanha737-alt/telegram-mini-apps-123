@@ -34,7 +34,7 @@
           <div id="userIdLine" class="brandId">ID</div>
         </div>
       </div>
-      <div id="avatar" class="avatar" aria-label="تصویر پروفایل">A</div>
+      <div id="avatar" class="avatar" data-i18n-aria="profile_picture_aria" aria-label="تصویر پروفایل">A</div>
     </div>
   </header>
 
@@ -42,24 +42,24 @@
   <main id="content" class="appContent" aria-live="polite"></main>
 
   <!-- BOTTOM NAVIGATION -->
-  <nav id="tabbar" class="bottomNav" aria-label="منوی اصلی">
-    <button type="button" data-tab="home" aria-label="خانه">
+  <nav id="tabbar" class="bottomNav" data-i18n-aria="nav_aria" aria-label="منوی اصلی">
+    <button type="button" data-tab="home" data-i18n-aria="nav_home" aria-label="خانه">
       <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>
       <span class="tabLabel">خانه</span>
     </button>
-    <button type="button" data-tab="tasks" aria-label="تسک‌ها">
+    <button type="button" data-tab="tasks" data-i18n-aria="nav_tasks" aria-label="تسک‌ها">
       <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17.5" rx="2.5"/><path d="M9 3.5h6v3H9z"/><path d="m9 13 2 2 4-4"/></svg></span>
       <span class="tabLabel">تسک‌ها</span>
     </button>
-    <button type="button" data-tab="daily" aria-label="پاداش روزانه">
+    <button type="button" data-tab="daily" data-i18n-aria="nav_daily" aria-label="پاداش روزانه">
       <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg></span>
       <span class="tabLabel">روزانه</span>
     </button>
-    <button type="button" data-tab="wallet" aria-label="کیف پول">
+    <button type="button" data-tab="wallet" data-i18n-aria="nav_wallet" aria-label="کیف پول">
       <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19v4"/><path d="M4 7.5V17a2.5 2.5 0 0 0 2.5 2.5H20V9H6.5A2.5 2.5 0 0 1 4 7.5z"/><circle cx="16" cy="14" r="1.2"/></svg></span>
       <span class="tabLabel">کیف پول</span>
     </button>
-    <button type="button" data-tab="profile" aria-label="پروفایل">
+    <button type="button" data-tab="profile" data-i18n-aria="nav_profile" aria-label="پروفایل">
       <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg></span>
       <span class="tabLabel">پروفایل</span>
     </button>
@@ -70,24 +70,24 @@
 <!-- ONBOARDING (راهنمای ورود اول) -->
 <div id="onboardingOverlay" class="overlay" style="display:none">
   <div class="modalBox onboardingBox" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
-    <button class="closeBtn onboardingSkip" type="button" onclick="skipOnboarding()" aria-label="رد کردن">×</button>
+    <button class="closeBtn onboardingSkip" type="button" onclick="skipOnboarding()" data-i18n-aria="ob_skip" aria-label="رد کردن">×</button>
 
     <div id="onboardingStep0" class="onboardingStep">
       <div class="onboardingEmoji">👋</div>
-      <h3 id="onboardingTitle" class="onboardingHeading">به Gramup خوش اومدی</h3>
-      <p class="onboardingText">یک مینی‌اپ ساده برای جمع‌آوری پوینت با انجام کارهای کوچیک، که قابل تبدیل به کوین واقعیه. تو ۳۰ ثانیه نشونت می‌دیم از کجا شروع کنی.</p>
+      <h3 id="onboardingTitle" class="onboardingHeading" data-i18n="ob_title0">به Gramup خوش اومدی</h3>
+      <p class="onboardingText" data-i18n="ob_text0">یک مینی‌اپ ساده برای جمع‌آوری پوینت با انجام کارهای کوچیک، که قابل تبدیل به کوین واقعیه. تو ۳۰ ثانیه نشونت می‌دیم از کجا شروع کنی.</p>
     </div>
 
     <div id="onboardingStep1" class="onboardingStep" style="display:none">
       <div class="onboardingEmoji">🎯</div>
-      <h3 class="onboardingHeading">چطور پوینت جمع کنی؟</h3>
-      <p class="onboardingText">از تب «تسک‌ها» با انجام کارهای مشخص‌شده، از تب «روزانه» با ورود متوالی هر روز، و از بخش «دعوت دوستان» با معرفی افراد جدید، پوینت به‌دست میاد.</p>
+      <h3 class="onboardingHeading" data-i18n="ob_title1">چطور پوینت جمع کنی؟</h3>
+      <p class="onboardingText" data-i18n="ob_text1">از تب «تسک‌ها» با انجام کارهای مشخص‌شده، از تب «روزانه» با ورود متوالی هر روز، و از بخش «دعوت دوستان» با معرفی افراد جدید، پوینت به‌دست میاد.</p>
     </div>
 
     <div id="onboardingStep2" class="onboardingStep" style="display:none">
       <div class="onboardingEmoji">💱</div>
-      <h3 class="onboardingHeading">تبدیل و برداشت</h3>
-      <p class="onboardingText">از تب «کیف‌پول» پوینت‌هاتو به GRAM تبدیل کن و درخواست برداشت بده. هر پرداخت واقعی، با تراکنش روی زنجیره قابل بررسیه — همه‌چیز شفاف.</p>
+      <h3 class="onboardingHeading" data-i18n="ob_title2">تبدیل و برداشت</h3>
+      <p class="onboardingText" data-i18n="ob_text2">از تب «کیف‌پول» پوینت‌هاتو به GRAM تبدیل کن و درخواست برداشت بده. هر پرداخت واقعی، با تراکنش روی زنجیره قابل بررسیه — همه‌چیز شفاف.</p>
     </div>
 
     <div class="onboardingDots">
@@ -96,7 +96,7 @@
       <span id="onboardingDot2" class="onboardingDot"></span>
     </div>
 
-    <button id="onboardingNextBtn" class="primaryBtn" type="button" onclick="onboardingNext()">بعدی</button>
+    <button id="onboardingNextBtn" class="primaryBtn" type="button" onclick="onboardingNext()" data-i18n="ob_next">بعدی</button>
   </div>
 </div>
 
@@ -104,12 +104,12 @@
   <div class="modalBox termsBox" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
     <div class="modalHeader">
       <div>
-        <span class="modalEyebrow">قوانین</span>
-        <h3 id="termsTitle">قوانین و شرایط استفاده</h3>
+        <span class="modalEyebrow" data-i18n="terms_eyebrow">قوانین</span>
+        <h3 id="termsTitle" data-i18n="terms_title">قوانین و شرایط استفاده</h3>
       </div>
-      <button class="closeBtn" type="button" onclick="hideTerms()" aria-label="بستن">×</button>
+      <button class="closeBtn" type="button" onclick="hideTerms()" data-i18n-aria="common_close" aria-label="بستن">×</button>
     </div>
-    <div id="termsBody" class="termsBody">
+    <div id="termsBody" class="termsBody" data-i18n-html="terms_body">
       <p><b>۱. پوینت و نرخ تبدیل</b><br>پوینت‌ها از طریق تسک‌ها، دعوت دوستان و پاداش روزانه به دست می‌آیند. نرخ تبدیل ممکن است توسط مدیریت تغییر کند.</p>
       <p><b>۲. تسک‌ها</b><br>تسک‌ها باید واقعی و طبق دستورالعمل انجام شوند. تقلب یا اتوماسیون می‌تواند باعث محدودیت حساب شود.</p>
       <p><b>۳. رفرال</b><br>سیستم رفرال برای جلوگیری از سوءاستفاده بررسی می‌شود و پاداش‌ها ممکن است مشروط به فعالیت واقعی دعوت‌شده باشند.</p>
@@ -123,14 +123,14 @@
   <div class="modalBox termsBox" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
     <div class="modalHeader">
       <div>
-        <span class="modalEyebrow">حریم خصوصی</span>
-        <h3 id="privacyTitle">سیاست حفظ حریم خصوصی</h3>
+        <span class="modalEyebrow" data-i18n="privacy_eyebrow">حریم خصوصی</span>
+        <h3 id="privacyTitle" data-i18n="privacy_title">سیاست حفظ حریم خصوصی</h3>
       </div>
-      <button class="closeBtn" type="button" onclick="hidePrivacy()" aria-label="بستن">×</button>
+      <button class="closeBtn" type="button" onclick="hidePrivacy()" data-i18n-aria="common_close" aria-label="بستن">×</button>
     </div>
-    <div class="termsBody">
+    <div class="termsBody" data-i18n-html="privacy_body">
       <p><b>۱. چه اطلاعاتی جمع‌آوری می‌شود</b><br>شناسه‌ی تلگرام، نام و یوزرنیم عمومی حساب تلگرام، آدرس کیف‌پولی که خودتان برای برداشت وارد می‌کنید، و داده‌های فعالیت داخل اپ (پوینت، تسک‌های انجام‌شده، ریفرال‌ها).</p>
-      <p><b>۲. چرا این اطلاعات جمع‌آوری می‌شود</b><br>صرفاً برای عملکرد خود اپ: محاسبه‌ی پوینت، بررسی و پرداخت درخواست‌های برداشت، جلوگیری از سوءاستفاده در سیستم ریفرال و تسک‌ها، و اطلاع‌رسانی وضعیت (تایید/رد برداشت، تسک جدید) از طریق خود ربات تلگرام.</p>
+      <p><b>۲. چرا این اطلاعات جمع‌آوری می‌شود</b><br>صرفاً برای عملکرد خود اپ: محاسبه‌ی پوینت، بررسی و پرداخت درخواست‌های برداشت، جلوگیری از سوءاستفاده در سیستم ریفرال و تسک‌ها، بررسی عضویت شما در کانال‌های اجباری، و اطلاع‌رسانی وضعیت (تایید/رد برداشت، تسک جدید) از طریق خود ربات تلگرام.</p>
       <p><b>۳. چه چیزی به اشتراک گذاشته نمی‌شود</b><br>نام، یوزرنیم یا هر اطلاعات شناسایی‌کننده‌ی دیگری از حسابتان به هیچ شخص ثالثی فروخته یا اجاره داده نمی‌شود. تاریخچه‌ی عمومی پرداخت‌ها فقط آدرس کیف‌پول (کوتاه‌شده) و هش تراکنش را نشان می‌دهد، بدون نام یا یوزرنیم.</p>
       <p><b>۴. ذخیره‌سازی و امنیت</b><br>داده‌ها در یک پایگاه‌داده‌ی خصوصی نگهداری می‌شوند. درخواست‌های برداشت فقط پس از تایید یک ادمین انسانی و بررسی واقعی تراکنش روی زنجیره پردازش می‌شوند.</p>
       <p><b>۵. حذف حساب</b><br>برای درخواست حذف اطلاعات حساب خود، از طریق ربات با پشتیبانی تماس بگیرید.</p>
@@ -142,12 +142,12 @@
 <div id="captchaOverlay" class="overlay" style="display:none">
   <div class="modalBox captchaBox" role="dialog" aria-modal="true" aria-labelledby="captchaTitle">
     <div class="captchaIcon" aria-hidden="true">🔐</div>
-    <span class="modalEyebrow">امنیت</span>
-    <h3 id="captchaTitle">یک لحظه...</h3>
-    <p class="captchaDescription">فقط می‌خواهیم مطمئن شویم کاربر واقعی هستی.</p>
+    <span class="modalEyebrow" data-i18n="captcha_eyebrow">امنیت</span>
+    <h3 id="captchaTitle" data-i18n="captcha_title">یک لحظه...</h3>
+    <p class="captchaDescription" data-i18n="captcha_desc">فقط می‌خواهیم مطمئن شویم کاربر واقعی هستی.</p>
     <p id="captchaQuestion" class="captchaQ">...</p>
-    <input id="captchaAnswer" type="number" inputmode="numeric" autocomplete="off" placeholder="جواب را وارد کن" aria-label="پاسخ کپچا">
-    <button type="button" class="primaryBtn" id="submitCaptcha" onclick="submitCaptcha()">تأیید و ادامه</button>
+    <input id="captchaAnswer" type="number" inputmode="numeric" autocomplete="off" placeholder="جواب را وارد کن" data-i18n-ph="captcha_placeholder" aria-label="پاسخ کپچا" data-i18n-aria="captcha_aria">
+    <button type="button" class="primaryBtn" id="submitCaptcha" onclick="submitCaptcha()" data-i18n="captcha_submit">تأیید و ادامه</button>
     <p id="captchaError" class="captchaErr" role="alert"></p>
   </div>
 </div>
@@ -157,18 +157,18 @@
   <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="withdrawTitle">
     <div class="modalHeader">
       <div>
-        <span class="modalEyebrow">برداشت</span>
-        <h3 id="withdrawTitle">درخواست برداشت</h3>
+        <span class="modalEyebrow" data-i18n="withdraw_eyebrow">برداشت</span>
+        <h3 id="withdrawTitle" data-i18n="withdraw_modal_title">درخواست برداشت</h3>
       </div>
-      <button class="closeBtn" type="button" onclick="hideWithdraw()" aria-label="بستن">×</button>
+      <button class="closeBtn" type="button" onclick="hideWithdraw()" data-i18n-aria="common_close" aria-label="بستن">×</button>
     </div>
     <div class="withdrawBody">
-      <label class="fieldLabel">مقدار GRAM</label>
-      <input id="withdrawPoints" type="number" inputmode="decimal" step="0.000001" placeholder="مثلاً 0.5">
-      <label class="fieldLabel">آدرس کیف پول</label>
-      <input id="withdrawAddress" type="text" placeholder="آدرس کیف پول خود را وارد کن">
+      <label class="fieldLabel" data-i18n="exchange_gram_label">مقدار GRAM</label>
+      <input id="withdrawPoints" type="number" inputmode="decimal" step="0.000001" placeholder="مثلاً 0.5" data-i18n-ph="withdraw_amount_ph">
+      <label class="fieldLabel" data-i18n="withdraw_address_label">آدرس کیف پول</label>
+      <input id="withdrawAddress" type="text" placeholder="آدرس کیف پول خود را وارد کن" data-i18n-ph="withdraw_address_ph">
       <p id="withdrawError" class="captchaErr" role="alert"></p>
-      <button type="button" class="primaryBtn" id="submitWithdraw" onclick="submitWithdraw()">ثبت درخواست</button>
+      <button type="button" class="primaryBtn" id="submitWithdraw" onclick="submitWithdraw()" data-i18n="withdraw_submit">ثبت درخواست</button>
     </div>
   </div>
 </div>
@@ -201,9 +201,9 @@
     <div class="modalHeader">
       <div>
         <span class="modalEyebrow">Exchange</span>
-        <h3 id="exchangeTitle">تبدیل پوینت به GRAM</h3>
+        <h3 id="exchangeTitle" data-i18n="exchange_modal_title">تبدیل پوینت به GRAM</h3>
       </div>
-      <button class="closeBtn" type="button" onclick="hideExchange()" aria-label="بستن">×</button>
+      <button class="closeBtn" type="button" onclick="hideExchange()" data-i18n-aria="common_close" aria-label="بستن">×</button>
     </div>
     <div class="withdrawBody">
       <div class="exchangeDirectionToggle">
@@ -211,10 +211,10 @@
         <button type="button" class="exchangeDirectionBtn" id="exchangeDirGTP" onclick="setExchangeDirection('gram_to_points')">Gram → Point</button>
       </div>
       <label class="fieldLabel" id="exchangeAmountLabel">مقدار پوینت</label>
-      <input id="exchangePoints" type="number" inputmode="numeric" placeholder="مثلاً 1000" oninput="updateExchangePreview()">
+      <input id="exchangePoints" type="number" inputmode="numeric" placeholder="مثلاً 1000" data-i18n-ph="exchange_points_ph" oninput="updateExchangePreview()">
       <p id="exchangePreview" style="font-size:12px;color:var(--text-muted);margin:-4px 0 12px">معادل GRAM دریافتی: 0</p>
       <p id="exchangeError" class="captchaErr" role="alert"></p>
-      <button type="button" class="primaryBtn" id="submitExchange" onclick="submitExchange()">تبدیل کن</button>
+      <button type="button" class="primaryBtn" id="submitExchange" onclick="submitExchange()" data-i18n="exchange_submit">تبدیل کن</button>
     </div>
   </div>
 </div>
@@ -225,13 +225,13 @@
     <div class="modalHeader">
       <div>
         <span class="modalEyebrow">Deposit</span>
-        <h3 id="depositTitle">واریز</h3>
+        <h3 id="depositTitle" data-i18n="deposit_modal_title">واریز</h3>
       </div>
-      <button class="closeBtn" type="button" onclick="hideDeposit()" aria-label="بستن">×</button>
+      <button class="closeBtn" type="button" onclick="hideDeposit()" data-i18n-aria="common_close" aria-label="بستن">×</button>
     </div>
     <div class="captchaIcon" aria-hidden="true">🚧</div>
     <p id="depositMessage" style="font-size:13px;color:var(--text-soft)">قابلیت واریز به‌زودی فعال می‌شود.</p>
-    <button type="button" class="secondaryBtn" onclick="hideDeposit()">باشه</button>
+    <button type="button" class="secondaryBtn" onclick="hideDeposit()" data-i18n="deposit_ok">باشه</button>
   </div>
 </div>
 

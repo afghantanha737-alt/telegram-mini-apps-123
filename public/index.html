@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#050609">
+<meta name="theme-color" content="#faf5ff">
 <meta name="color-scheme" content="dark light">
 <meta name="description" content="Gramup — پلتفرم جمع‌آوری پوینت و پاداش با انجام تسک، دعوت دوستان و ورود روزانه، قابل تبدیل به کوین در تلگرام">
 <title>Gramup</title>
@@ -14,9 +14,10 @@
 <!-- Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Vazirmatn:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Vazirmatn:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
 <!-- App CSS -->
+<link rel="icon" type="image/svg+xml" href="img/logo.svg">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -26,18 +27,14 @@
   <!-- HEADER -->
   <header id="appHeader">
     <div class="headerInner">
-      <div class="userIdentity">
-        <div id="avatar" class="avatar" aria-label="تصویر پروفایل">A</div>
-        <div id="headerInfo" class="headerInfo">
-          <div class="brandEyebrow">Gramup</div>
-          <div id="greetName" class="greetName">سلام 👋</div>
-          <div id="pointsDisplay" class="pointsDisplay">۰ پوینت</div>
+      <div class="brandBlock">
+        <img class="brandLogo" src="img/logo.svg" alt="Gramup">
+        <div class="brandInfo">
+          <div class="brandName">Gram<span>up</span></div>
+          <div id="userIdLine" class="brandId">ID</div>
         </div>
       </div>
-      <div class="headerStatus">
-        <span class="statusDot"></span>
-        <span>فعال</span>
-      </div>
+      <div id="avatar" class="avatar" aria-label="تصویر پروفایل">A</div>
     </div>
   </header>
 
@@ -47,23 +44,23 @@
   <!-- BOTTOM NAVIGATION -->
   <nav id="tabbar" class="bottomNav" aria-label="منوی اصلی">
     <button type="button" data-tab="home" aria-label="خانه">
-      <span class="tabIcon" aria-hidden="true">⌂</span>
+      <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>
       <span class="tabLabel">خانه</span>
     </button>
     <button type="button" data-tab="tasks" aria-label="تسک‌ها">
-      <span class="tabIcon" aria-hidden="true">✓</span>
+      <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17.5" rx="2.5"/><path d="M9 3.5h6v3H9z"/><path d="m9 13 2 2 4-4"/></svg></span>
       <span class="tabLabel">تسک‌ها</span>
     </button>
     <button type="button" data-tab="daily" aria-label="پاداش روزانه">
-      <span class="tabIcon" aria-hidden="true">◷</span>
+      <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg></span>
       <span class="tabLabel">روزانه</span>
     </button>
     <button type="button" data-tab="wallet" aria-label="کیف پول">
-      <span class="tabIcon" aria-hidden="true">◇</span>
+      <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19v4"/><path d="M4 7.5V17a2.5 2.5 0 0 0 2.5 2.5H20V9H6.5A2.5 2.5 0 0 1 4 7.5z"/><circle cx="16" cy="14" r="1.2"/></svg></span>
       <span class="tabLabel">کیف پول</span>
     </button>
     <button type="button" data-tab="profile" aria-label="پروفایل">
-      <span class="tabIcon" aria-hidden="true">○</span>
+      <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg></span>
       <span class="tabLabel">پروفایل</span>
     </button>
   </nav>

@@ -39,16 +39,7 @@ function truncateAddress(address) {
 // چرخ‌گردون: ۶ خانه
 const crypto = require('crypto');
 
-const SPIN_SEGMENTS = [
-  { type: 'points', value: 20 },
-  { type: 'points', value: 40 },
-  { type: 'points', value: 60 },
-  { type: 'points', value: 100 },
-  { type: 'empty', value: 0 },
-  { type: 'spin', value: 1 }
-];
-
-const { PAID_SPIN_WEIGHTS, pickWeightedIndex } = require('../utils/spin');
+const { SPIN_SEGMENTS, resolveWeights, pickWeightedIndex } = require('../utils/spin');
 
 // GET /api/points/me
 router.get('/me', auth, async (req, res) => {
@@ -170,7 +161,7 @@ router.post('/spin', auth, async (req, res) => {
     }
   }
 
-  const segmentIndex = paid ? pickWeightedIndex(PAID_SPIN_WEIGHTS) : crypto.randomInt(0, SPIN_SEGMENTS.length);
+  const segmentIndex = paid ? pickWeightedIndex(resolveWeights(settings.paidSpinWeights)) : crypto.randomInt(0, SPIN_SEGMENTS.length);
   const segment = SPIN_SEGMENTS[segmentIndex];
 
   let updated = claimed;

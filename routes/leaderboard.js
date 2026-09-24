@@ -21,7 +21,16 @@ router.get('/top', auth, async (req, res) => {
     points: { $gt: req.dbUser.points }
   });
 
-  res.json({ success: true, top, myRank: rankAbove + 1 });
+  const myId = String(req.dbUser._id);
+  const list = top.map(doc => ({
+    firstName: doc.firstName,
+    username: doc.username,
+    photoUrl: doc.photoUrl,
+    points: doc.points,
+    isMe: String(doc._id) === myId // برای هایلایت «من»؛ شناسه‌ی دیتابیس را به کلاینت نمی‌دهیم
+  }));
+
+  res.json({ success: true, top: list, myRank: rankAbove + 1 });
 });
 
 module.exports = router;

@@ -17,6 +17,7 @@ const PointsLedger = require('../models/PointsLedger');
 const { isValidAdminKey } = require('../utils/adminKey');
 const RequiredChannel = require('../models/RequiredChannel');
 const { membership, validateChannelRef, normalizeChannelInput } = require('../utils/membership');
+const { isValidWeights, resolveWeights, checkSpinSettings, spinModel } = require('../utils/spin');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -566,7 +567,11 @@ router.post('/required-channels/:id/test', async (req, res) => {
 /* -------------------- SETTINGS -------------------- */
 router.get('/settings', async (req, res) => {
   const settings = await Settings.getGlobal();
-  res.json({ success: true, settings });
+  res.json({
+    success: true,
+    settings: { ...settings.toObject(), paidSpinWeights: resolveWeights(settings.paidSpinWeights) },
+    spinModel: spinModel()
+  });
 });
 
 router.put('/settings', async (req, res) => {
@@ -590,9 +595,30 @@ router.put('/settings', async (req, res) => {
   }
 
   const settings = await Settings.getGlobal();
+
+  if (Object.prototype.hasOwnProperty.call(body, 'paidSpinWeights')) {
+    const weights = Array.isArray(body.paidSpinWeights) ? body.paidSpinWeights.map(Number) : null;
+    if (!isValidWeights(weights)) {
+      return res.status(400).json({ success: false, message: 'وزن شانس گردونه نامعتبر است: ۶ عدد صحیح بین ۰ تا ۱۰۰۰ لازم است و مجموعشان باید بیشتر از صفر باشد.' });
+    }
+    changes.paidSpinWeights = weights;
+  }
+
+  // جلوی سودآور شدن چرخش پولی برای کاربران (تولید بی‌نهایت پوینت) را می‌گیرد
+  if (changes.paidSpinWeights !== undefined || changes.spinCostPoints !== undefined) {
+    const finalCost = changes.spinCostPoints !== undefined ? changes.spinCostPoints : (settings.spinCostPoints || 30);
+    const finalWeights = changes.paidSpinWeights || resolveWeights(settings.paidSpinWeights);
+    const check = checkSpinSettings(finalWeights, finalCost);
+    if (check.error) return res.status(400).json({ success: false, message: check.error });
+  }
+
   Object.assign(settings, changes);
   await settings.save();
-  res.json({ success: true, settings });
+  res.json({
+    success: true,
+    settings: { ...settings.toObject(), paidSpinWeights: resolveWeights(settings.paidSpinWeights) },
+    spinModel: spinModel()
+  });
 
   recordAdminLog({
     actor: req.adminActor,

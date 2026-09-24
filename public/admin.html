@@ -84,6 +84,7 @@
       <button data-tab="users" onclick="switchTab('users')">کاربران</button>
       <button data-tab="broadcast" onclick="switchTab('broadcast')">پیام همگانی</button>
       <button data-tab="logs" onclick="switchTab('logs')">لاگ فعالیت</button>
+      <button data-tab="channels" onclick="switchTab('channels')">کانال‌های اجباری</button>
       <button data-tab="settings" onclick="switchTab('settings')">تنظیمات</button>
     </div>
 
@@ -229,6 +230,39 @@
       </div>
     </div>
 
+    <!-- REQUIRED CHANNELS -->
+    <div id="tab-channels" class="tabContent hidden">
+      <div id="channelsWarn"></div>
+
+      <div class="card">
+        <div class="flexBetween"><b id="channelFormTitle">افزودن کانال اجباری</b></div>
+        <p class="small">کاربران برای استفاده از مینی‌اپ باید عضو <b>همه‌ی کانال‌های فعال</b> باشند. عضویت هر بار که کاربر وارد برنامه می‌شود دوباره از خود تلگرام بررسی می‌شود. اگر هیچ کانالی فعال نباشد، ورود آزاد است.</p>
+        <label>نام کانال (برای نمایش به کاربر)</label>
+        <input id="chName" placeholder="مثلاً GramUp Official">
+        <label>یوزرنیم تلگرام</label>
+        <input id="chUsername" placeholder="@GramUpOfficial" style="direction:ltr">
+        <label>آیدی عددی کانال (اختیاری — اگر خالی باشد بعد از اعتبارسنجی خودکار پر می‌شود)</label>
+        <input id="chChatId" placeholder="-1001234567890" style="direction:ltr">
+        <label>لینک کانال (خالی = ساخت خودکار از یوزرنیم)</label>
+        <input id="chUrl" placeholder="https://t.me/GramUpOfficial" style="direction:ltr">
+        <label>وضعیت</label>
+        <select id="chActive">
+          <option value="true">فعال (اجباری)</option>
+          <option value="false">غیرفعال</option>
+        </select>
+        <p class="small">⚠️ ربات باید در این کانال <b>ادمین</b> باشد؛ وگرنه تلگرام اجازه‌ی بررسی عضویت کاربران را نمی‌دهد. قبل از ذخیره، اتصال ربات بررسی می‌شود.</p>
+        <div class="row">
+          <button onclick="saveRequiredChannel()" id="chSaveBtn">ذخیره</button>
+          <button type="button" class="secondary hidden" id="chCancelBtn" onclick="resetChannelForm()">انصراف از ویرایش</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="flexBetween"><b>لیست کانال‌های اجباری</b><button class="secondary" onclick="loadRequiredChannels()">🔄</button></div>
+        <div id="channelsList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div id="tab-settings" class="tabContent hidden">
       <div class="card">
@@ -331,6 +365,7 @@ function switchTab(tab) {
   if (tab === "withdrawals") loadWithdrawals();
   if (tab === "users") loadUsers();
   if (tab === "logs") loadLogs();
+  if (tab === "channels") loadRequiredChannels();
   if (tab === "settings") loadSettings();
 }
 
@@ -834,6 +869,140 @@ function fallbackCopyAddress(text, onDone) {
   temp.select();
   try { document.execCommand("copy"); onDone?.(); } catch {}
   document.body.removeChild(temp);
+}
+
+
+/* ---------- REQUIRED CHANNELS (عضویت اجباری) ---------- */
+let editingChannelId = null;
+let channelsCache = [];
+
+function resetChannelForm() {
+  editingChannelId = null;
+  ["chName", "chUsername", "chChatId", "chUrl"].forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("chActive").value = "true";
+  document.getElementById("channelFormTitle").textContent = "افزودن کانال اجباری";
+  document.getElementById("chSaveBtn").textContent = "ذخیره";
+  document.getElementById("chCancelBtn").classList.add("hidden");
+}
+
+function connBadge(c) {
+  if (c.lastCheckOk === true) return '<span class="badge approved" title="ربات می‌تواند عضویت را بررسی کند">✓ اتصال سالم</span>';
+  if (c.lastCheckOk === false) return `<span class="badge rejected" title="${escapeHtml(c.lastCheckError || "")}">✕ مشکل اتصال</span>`;
+  return '<span class="badge pending">بررسی نشده</span>';
+}
+
+async function loadRequiredChannels() {
+  const box = document.getElementById("channelsList");
+  try {
+    const data = await api("/api/admin/required-channels");
+    channelsCache = data.channels || [];
+
+    const broken = channelsCache.filter(c => c.isActive && c.lastCheckOk === false);
+    document.getElementById("channelsWarn").innerHTML = broken.length
+      ? `<div class="card" style="border-color:rgba(239,68,68,.4)"><b style="color:var(--danger)">⚠️ ربات نمی‌تواند عضویت را در این کانال‌ها بررسی کند:</b>
+          <ul style="margin:8px 0 0;padding-inline-start:18px;font-size:12px">${broken.map(c => `<li><b>${escapeHtml(c.name)}</b> — ${escapeHtml(c.lastCheckError || "خطای نامشخص")}</li>`).join("")}</ul>
+          <p class="small" style="margin-top:8px">تا رفع مشکل، کاربران وارد برنامه نمی‌شوند (برای امنیت، هیچ کاربری بدون تایید واقعی تلگرام تایید نمی‌شود). معمولاً کافی است ربات را ادمین همان کانال کنید.</p></div>`
+      : "";
+
+    if (!channelsCache.length) {
+      box.innerHTML = '<div class="empty">هنوز کانالی ثبت نشده است — ورود به مینی‌اپ آزاد است.</div>';
+      return;
+    }
+
+    box.innerHTML = channelsCache.map(c => `
+      <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px;background:var(--surface2)">
+        <div class="flexBetween" style="align-items:flex-start">
+          <b style="font-size:14px">${escapeHtml(c.name)}</b>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            <span class="badge ${c.isActive ? "approved" : "rejected"}">${c.isActive ? "فعال" : "غیرفعال"}</span>
+            ${connBadge(c)}
+          </div>
+        </div>
+        <div class="small" style="margin-top:8px;display:grid;grid-template-columns:auto 1fr;gap:4px 10px">
+          <span>یوزرنیم</span><span style="direction:ltr;text-align:right">${c.username ? "@" + escapeHtml(c.username) : "—"}</span>
+          <span>آیدی کانال</span><span style="direction:ltr;text-align:right;font-family:monospace">${escapeHtml(c.chatId || "—")}</span>
+          <span>لینک</span><span style="direction:ltr;text-align:right;word-break:break-all"><a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" style="color:var(--primary)">${escapeHtml(c.url)}</a></span>
+          ${c.lastCheckOk === false ? `<span>خطا</span><span style="color:var(--danger);direction:ltr;text-align:right">${escapeHtml(c.lastCheckError || "")}</span>` : ""}
+        </div>
+        <div class="row" style="margin-top:10px;gap:6px">
+          <button class="secondary" onclick="editChannel('${c._id}')">ویرایش</button>
+          <button class="secondary" onclick="toggleChannel('${c._id}', ${!c.isActive})">${c.isActive ? "غیرفعال کردن" : "فعال کردن"}</button>
+          <button class="secondary" onclick="testChannel('${c._id}')">تست اتصال</button>
+          <button class="danger" onclick="deleteChannel('${c._id}')">حذف</button>
+        </div>
+      </div>`).join("");
+  } catch (error) {
+    box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function saveRequiredChannel(force) {
+  const body = {
+    name: document.getElementById("chName").value.trim(),
+    username: document.getElementById("chUsername").value.trim(),
+    chatId: document.getElementById("chChatId").value.trim(),
+    url: document.getElementById("chUrl").value.trim(),
+    isActive: document.getElementById("chActive").value === "true"
+  };
+  if (force === true) body.force = true;
+
+  try {
+    const path = editingChannelId ? `/api/admin/required-channels/${editingChannelId}` : "/api/admin/required-channels";
+    const data = await api(path, { method: editingChannelId ? "PUT" : "POST", body: JSON.stringify(body) });
+    showMsg(data.warning ? "ذخیره شد، ولی: " + data.warning : "کانال ذخیره شد.", data.warning ? "error" : "success");
+    resetChannelForm();
+    loadRequiredChannels();
+  } catch (error) {
+    if (error.code === "CHANNEL_VALIDATION_FAILED" && force !== true) {
+      if (confirm(error.message + "\n\nبا این حال کانال ذخیره شود؟ (تا رفع مشکل، کاربران وارد برنامه نمی‌شوند)")) {
+        return saveRequiredChannel(true);
+      }
+      return;
+    }
+    showMsg(error.message, "error");
+  }
+}
+
+function editChannel(id) {
+  const c = channelsCache.find(x => x._id === id);
+  if (!c) return;
+  editingChannelId = id;
+  document.getElementById("chName").value = c.name || "";
+  document.getElementById("chUsername").value = c.username ? "@" + c.username : "";
+  document.getElementById("chChatId").value = c.chatId || "";
+  document.getElementById("chUrl").value = c.url || "";
+  document.getElementById("chActive").value = c.isActive ? "true" : "false";
+  document.getElementById("channelFormTitle").textContent = "ویرایش کانال: " + c.name;
+  document.getElementById("chSaveBtn").textContent = "ذخیره‌ی تغییرات";
+  document.getElementById("chCancelBtn").classList.remove("hidden");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function toggleChannel(id, isActive) {
+  try {
+    await api(`/api/admin/required-channels/${id}`, { method: "PUT", body: JSON.stringify({ isActive }) });
+    showMsg(isActive ? "کانال فعال شد." : "کانال غیرفعال شد.", "success");
+    loadRequiredChannels();
+  } catch (error) { showMsg(error.message, "error"); }
+}
+
+async function testChannel(id) {
+  try {
+    const data = await api(`/api/admin/required-channels/${id}/test`, { method: "POST", body: "{}" });
+    showMsg(data.message, data.ok ? "success" : "error");
+    loadRequiredChannels();
+  } catch (error) { showMsg(error.message, "error"); }
+}
+
+async function deleteChannel(id) {
+  const c = channelsCache.find(x => x._id === id);
+  if (!confirm(`کانال «${c ? c.name : ""}» حذف شود؟`)) return;
+  try {
+    await api(`/api/admin/required-channels/${id}`, { method: "DELETE" });
+    showMsg("کانال حذف شد.", "success");
+    if (editingChannelId === id) resetChannelForm();
+    loadRequiredChannels();
+  } catch (error) { showMsg(error.message, "error"); }
 }
 
 function escapeHtml(value) {

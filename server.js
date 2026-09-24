@@ -87,6 +87,7 @@ app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
    API ROUTES
 ========================================================= */
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/required-channels', require('./routes/membership'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/points', require('./routes/points'));
 app.use('/api/referral', require('./routes/referral'));

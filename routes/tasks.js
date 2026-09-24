@@ -9,7 +9,9 @@ const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
 const User = require('../models/User');
 
-const auth = requireTelegramAuth(process.env.BOT_TOKEN);
+// احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
+const { withMembership } = require('../utils/membership');
+const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
 
 // حداقل تعداد تسک معتبری که کاربر دعوت‌شده باید تکمیل کند تا دعوت‌کننده‌اش پاداش بگیرد
 const REFERRAL_MIN_TASKS = Number(process.env.REFERRAL_MIN_TASKS || 2);

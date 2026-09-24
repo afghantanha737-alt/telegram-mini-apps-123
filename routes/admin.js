@@ -15,6 +15,10 @@ const AdminLog = require('../models/AdminLog');
 const TaskCompletion = require('../models/TaskCompletion');
 const PointsLedger = require('../models/PointsLedger');
 const { isValidAdminKey } = require('../utils/adminKey');
+const RequiredChannel = require('../models/RequiredChannel');
+const { membership, validateChannelRef, normalizeChannelInput } = require('../utils/membership');
+
+const MAX_REQUIRED_CHANNELS = 5;
 
 const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -391,6 +395,171 @@ router.post('/users/:id/unban', async (req, res) => {
     targetType: 'user',
     targetId: req.params.id,
     details: user ? (user.firstName || user.username || user.telegramId) : ''
+  });
+});
+
+/* -------------------- REQUIRED CHANNELS (عضویت اجباری) -------------------- */
+function publicChannel(c) {
+  return {
+    _id: c._id,
+    name: c.name,
+    username: c.username,
+    chatId: c.chatId,
+    url: c.url,
+    isActive: c.isActive,
+    lastCheckOk: c.lastCheckOk,
+    lastCheckError: c.lastCheckError,
+    lastCheckAt: c.lastCheckAt,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt
+  };
+}
+
+const channelRefOf = v => v.chatId || `@${v.username}`;
+
+router.get('/required-channels', async (req, res) => {
+  const list = await RequiredChannel.find().sort({ sortOrder: 1, createdAt: 1 });
+  res.json({ success: true, channels: list.map(publicChannel), max: MAX_REQUIRED_CHANNELS });
+});
+
+router.post('/required-channels', async (req, res) => {
+  const { value, error } = normalizeChannelInput(req.body);
+  if (error) return res.status(400).json({ success: false, message: error });
+
+  if ((await RequiredChannel.countDocuments()) >= MAX_REQUIRED_CHANNELS) {
+    return res.status(400).json({ success: false, message: `حداکثر ${MAX_REQUIRED_CHANNELS} کانال اجباری مجاز است.` });
+  }
+
+  const dupFilter = [];
+  if (value.username) dupFilter.push({ username: new RegExp(`^${escapeRegex(value.username)}$`, 'i') });
+  if (value.chatId) dupFilter.push({ chatId: value.chatId });
+  if (dupFilter.length && (await RequiredChannel.findOne({ $or: dupFilter }))) {
+    return res.status(400).json({ success: false, message: 'این کانال قبلاً ثبت شده است.' });
+  }
+
+  const check = await validateChannelRef(channelRefOf(value));
+  if (check.chat && !value.chatId) value.chatId = check.chat.id; // آیدی عددی پایدارتر از یوزرنیم است
+  if (!check.ok && !(req.body && req.body.force)) {
+    return res.status(400).json({
+      success: false,
+      code: 'CHANNEL_VALIDATION_FAILED',
+      message: check.reason
+    });
+  }
+
+  const channel = await RequiredChannel.create({
+    ...value,
+    lastCheckOk: check.ok,
+    lastCheckError: check.ok ? '' : String(check.reason || '').slice(0, 300),
+    lastCheckAt: new Date()
+  });
+  membership.clearCache();
+
+  res.json({ success: true, channel: publicChannel(channel), warning: check.ok ? '' : check.reason });
+
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'required_channel_create',
+    targetType: 'required_channel',
+    targetId: channel._id,
+    details: `«${channel.name}» ${channel.username ? '@' + channel.username : channel.chatId}`
+  });
+});
+
+router.put('/required-channels/:id', async (req, res) => {
+  const existing = await RequiredChannel.findById(req.params.id);
+  if (!existing) return res.status(404).json({ success: false, message: 'کانال پیدا نشد.' });
+
+  const body = req.body || {};
+  const merged = {
+    name: body.name !== undefined ? body.name : existing.name,
+    username: body.username !== undefined ? body.username : existing.username,
+    chatId: body.chatId !== undefined ? body.chatId : existing.chatId,
+    url: body.url !== undefined ? body.url : existing.url,
+    isActive: body.isActive !== undefined ? body.isActive : existing.isActive
+  };
+  const { value, error } = normalizeChannelInput(merged);
+  if (error) return res.status(400).json({ success: false, message: error });
+
+  const identityChanged = value.username.toLowerCase() !== (existing.username || '').toLowerCase() || value.chatId !== (existing.chatId || '');
+
+  if (identityChanged) {
+    const dupFilter = [];
+    if (value.username) dupFilter.push({ username: new RegExp(`^${escapeRegex(value.username)}$`, 'i') });
+    if (value.chatId) dupFilter.push({ chatId: value.chatId });
+    if (dupFilter.length && (await RequiredChannel.findOne({ _id: { $ne: existing._id }, $or: dupFilter }))) {
+      return res.status(400).json({ success: false, message: 'این کانال قبلاً ثبت شده است.' });
+    }
+  }
+
+  let check = null;
+  if (identityChanged) {
+    check = await validateChannelRef(channelRefOf(value));
+    if (check.chat && !value.chatId) value.chatId = check.chat.id;
+    if (!check.ok && !body.force) {
+      return res.status(400).json({ success: false, code: 'CHANNEL_VALIDATION_FAILED', message: check.reason });
+    }
+  }
+
+  Object.assign(existing, value);
+  if (check) {
+    existing.lastCheckOk = check.ok;
+    existing.lastCheckError = check.ok ? '' : String(check.reason || '').slice(0, 300);
+    existing.lastCheckAt = new Date();
+  }
+  await existing.save();
+  membership.clearCache();
+
+  res.json({ success: true, channel: publicChannel(existing), warning: check && !check.ok ? check.reason : '' });
+
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'required_channel_update',
+    targetType: 'required_channel',
+    targetId: existing._id,
+    details: `«${existing.name}» ${existing.isActive ? 'فعال' : 'غیرفعال'}`
+  });
+});
+
+router.delete('/required-channels/:id', async (req, res) => {
+  const channel = await RequiredChannel.findByIdAndDelete(req.params.id);
+  if (!channel) return res.status(404).json({ success: false, message: 'کانال پیدا نشد.' });
+  membership.clearCache();
+  res.json({ success: true });
+
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'required_channel_delete',
+    targetType: 'required_channel',
+    targetId: channel._id,
+    details: `«${channel.name}» حذف شد`
+  });
+});
+
+// تست اتصال: آیا کانال معتبر است و ربات در آن ادمین است؟
+router.post('/required-channels/:id/test', async (req, res) => {
+  const channel = await RequiredChannel.findById(req.params.id);
+  if (!channel) return res.status(404).json({ success: false, message: 'کانال پیدا نشد.' });
+
+  const check = await validateChannelRef(channelRefOf(channel));
+  await RequiredChannel.updateOne(
+    { _id: channel._id },
+    {
+      $set: {
+        lastCheckOk: check.ok,
+        lastCheckError: check.ok ? '' : String(check.reason || '').slice(0, 300),
+        lastCheckAt: new Date()
+      }
+    },
+    { timestamps: false }
+  );
+
+  res.json({
+    success: true,
+    ok: check.ok,
+    message: check.ok
+      ? `✅ اتصال سالم است — «${(check.chat && check.chat.title) || channel.name}». ربات ادمین است و عضویت کاربران را می‌تواند بررسی کند.`
+      : `❌ ${check.reason}`
   });
 });
 

@@ -9,7 +9,9 @@ const User = require('../models/User');
 const Withdrawal = require('../models/Withdrawal');
 const PointsLedger = require('../models/PointsLedger');
 
-const auth = requireTelegramAuth(process.env.BOT_TOKEN);
+// احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
+const { withMembership } = require('../utils/membership');
+const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
 
 /**
  * نکته مهم زمان‌بندی:

@@ -6,7 +6,9 @@ const { requireTelegramAuth } = require('../utils/telegramAuth');
 const User = require('../models/User');
 const TaskCompletion = require('../models/TaskCompletion');
 
-const auth = requireTelegramAuth(process.env.BOT_TOKEN);
+// احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
+const { withMembership } = require('../utils/membership');
+const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
 const REFERRAL_MIN_TASKS = Number(process.env.REFERRAL_MIN_TASKS || 2);
 const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
 

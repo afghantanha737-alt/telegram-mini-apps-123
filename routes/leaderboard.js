@@ -5,7 +5,9 @@ require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth } = require('../utils/telegramAuth');
 const User = require('../models/User');
 
-const auth = requireTelegramAuth(process.env.BOT_TOKEN);
+// احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
+const { withMembership } = require('../utils/membership');
+const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
 
 // GET /api/leaderboard/top
 router.get('/top', auth, async (req, res) => {

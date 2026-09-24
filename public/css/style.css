@@ -1069,3 +1069,8 @@ html[data-theme="dark"] .referralCodeText { color: #c4b5fd; }
 .ledgerIcon { border-radius: 50%; }
 .ledgerAmount { font-size: 13.5px; }
 .loadMoreBtn { border-radius: 999px; font-weight: 700; }
+
+/* Modals: alignment follows the language direction (was hard-coded for RTL) */
+.withdrawBox { text-align: start; }
+.withdrawBody { text-align: start; }
+.termsBody { padding-right: 0; padding-inline-end: 4px; }

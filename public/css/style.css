@@ -748,20 +748,21 @@ html[data-theme="light"] .progressTrack { background: rgba(20,22,28,.08); }
 
 /* =========================================================
    GRAMUP HOME — Turbo-style redesign (header, home, bottom nav)
+   Sizes are measured from the reference screenshot (411px wide phone).
    Light = lavender look; dark keeps the same layout with dark tokens.
 ========================================================= */
 :root {
   --tb-card: var(--surface);
-  --tb-card-shadow: 0 10px 34px rgba(0, 0, 0, .28);
+  --tb-card-shadow: 0 8px 26px rgba(0, 0, 0, .28);
   --tb-grad: linear-gradient(90deg, #7c3aed 0%, #c026d3 100%);
   --tb-blue: #2f9bf0;
   --tb-dark-btn: #0f172a;
-  --header-height: 84px;
-  --nav-height: 74px;
+  --header-height: 66px;
+  --nav-height: 68px;
 }
 html[data-theme="light"] {
   --tb-card: #ffffff;
-  --tb-card-shadow: 0 10px 34px rgba(124, 58, 237, .09);
+  --tb-card-shadow: 0 8px 26px rgba(124, 58, 237, .08);
 }
 html[data-theme="light"] body {
   background:
@@ -775,110 +776,105 @@ html[data-theme="light"] body {
   background: transparent; border-bottom: 0;
   backdrop-filter: none; -webkit-backdrop-filter: none;
 }
-.headerInner { padding: 14px 16px 8px; }
-.brandBlock { min-width: 0; display: flex; align-items: center; gap: 13px; }
+.headerInner { padding: 10px 17px 6px; }
+.brandBlock { min-width: 0; display: flex; align-items: center; gap: 10px; }
 .brandLogo {
-  width: 58px; height: 58px; flex: 0 0 58px; border-radius: 18px;
-  box-shadow: 0 8px 22px rgba(124, 58, 237, .28);
+  width: 44px; height: 44px; flex: 0 0 44px; border-radius: 13px;
+  box-shadow: 0 5px 14px rgba(124, 58, 237, .25);
 }
 .brandInfo { min-width: 0; }
-.brandName { font-size: 27px; line-height: 1.1; font-weight: 800; letter-spacing: -.5px; color: var(--text); }
+.brandName { font-size: 19px; line-height: 1.15; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
 .brandName span { color: #7c3aed; }
 html[data-theme="dark"] .brandName span { color: #a78bfa; }
-.brandId { margin-top: 3px; font-size: 14px; font-weight: 700; color: var(--text-muted); letter-spacing: .2px; direction: ltr; text-align: start; }
+.brandId { margin-top: 1px; font-size: 12px; font-weight: 700; color: var(--text-muted); letter-spacing: .2px; direction: ltr; text-align: start; }
 .avatar {
-  width: 56px; height: 56px; flex: 0 0 56px; border: 3px solid #fff;
-  box-shadow: 0 6px 20px rgba(124, 58, 237, .25);
+  width: 40px; height: 40px; flex: 0 0 40px; border: 2px solid #fff; font-size: 15px;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, .22);
 }
 html[data-theme="dark"] .avatar { border-color: rgba(255, 255, 255, .18); }
 
 /* Bottom nav */
 .bottomNav {
-  border-top: 0; border-radius: 30px 30px 0 0; padding: 9px 12px env(safe-area-inset-bottom);
-  background: var(--tb-card); box-shadow: 0 -10px 34px rgba(124, 58, 237, .10);
+  border-top: 0; border-radius: 26px 26px 0 0; padding: 8px 10px env(safe-area-inset-bottom);
+  background: var(--tb-card); box-shadow: 0 -8px 26px rgba(124, 58, 237, .09);
 }
 html[data-theme="light"] .bottomNav { background: #ffffff; }
 html[data-theme="dark"] .bottomNav { background: rgba(14, 16, 22, .96); }
-.bottomNav button { height: 58px; margin: 0 3px; border-radius: 22px; gap: 2px; }
-.bottomNav button::before { top: -9px; width: 38px; height: 4px; background: #7c3aed; }
+.bottomNav button { height: 54px; margin: 0 3px; border-radius: 18px; gap: 1px; }
+.bottomNav button::before { top: -8px; width: 32px; height: 3px; background: #7c3aed; }
 .bottomNav button.active { color: #7c3aed; background: rgba(124, 58, 237, .10); }
 html[data-theme="dark"] .bottomNav button.active { color: #a78bfa; background: rgba(167, 139, 250, .14); }
-.tabIcon { width: 26px; height: 26px; }
-.tabSvg { width: 25px; height: 25px; }
+.tabIcon { width: 24px; height: 24px; }
+.tabSvg { width: 22px; height: 22px; }
 .tabLabel { font-size: 11px; font-weight: 700; }
 
 /* Home components */
 .tbCard {
-  background: var(--tb-card); border-radius: 34px; padding: 22px 22px 22px;
-  box-shadow: var(--tb-card-shadow); margin-bottom: 20px;
+  background: var(--tb-card); border-radius: 24px; padding: 16px;
+  box-shadow: var(--tb-card-shadow); margin-bottom: 16px;
 }
-.tbBalanceTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.tbBalanceTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .tbBalanceInfo { min-width: 0; }
-.tbLabel { font-size: 15px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: var(--text-muted); }
-.tbAmount { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 12px; direction: ltr; justify-content: flex-start; }
-.tbAmountNum { font-size: 46px; line-height: 1; font-weight: 800; letter-spacing: -2px; color: var(--text); }
-.tbAmountUnit { font-size: 19px; font-weight: 800; color: var(--text-muted); }
-.tbPills { display: flex; flex-wrap: wrap; gap: 8px; }
-.tbPill { display: inline-flex; align-items: center; padding: 9px 16px; border-radius: 999px; font-size: 16px; font-weight: 800; line-height: 1; }
+.tbLabel { font-size: 12px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--text-muted); }
+.tbAmount { display: flex; align-items: baseline; gap: 6px; margin: 4px 0 8px; direction: ltr; justify-content: flex-start; }
+.tbAmountNum { font-size: 34px; line-height: 1.05; font-weight: 800; letter-spacing: -1px; color: var(--text); }
+.tbAmountUnit { font-size: 16px; font-weight: 700; color: var(--text-muted); }
+.tbPills { display: flex; flex-wrap: wrap; gap: 6px; }
+.tbPill { display: inline-flex; align-items: center; padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1; }
 .tbPillGreen { background: #10b981; color: #fff; direction: ltr; }
 .tbPillPurple { background: rgba(124, 58, 237, .12); color: #7c3aed; }
 html[data-theme="dark"] .tbPillPurple { color: #c4b5fd; background: rgba(167, 139, 250, .16); }
 .tbGemRing {
-  width: 78px; height: 78px; flex: 0 0 78px; padding: 8px; border-radius: 50%;
-  border: 3px dashed #2dd4bf; display: grid; place-items: center;
+  width: 64px; height: 64px; flex: 0 0 64px; padding: 6px; border-radius: 50%;
+  border: 2px dashed #2dd4bf; display: grid; place-items: center;
 }
 .tbGemRing svg { width: 100%; height: 100%; }
-.tbActions { display: grid; grid-template-columns: 1.15fr 1fr; gap: 12px; }
+.tbActions { display: grid; grid-template-columns: 1.15fr 1fr; gap: 10px; }
 .tbActions button, .tbBtnDark {
-  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
-  min-height: 62px; border-radius: 999px; font-size: 20px; font-weight: 800; transition: transform .15s ease;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 44px; border-radius: 999px; font-size: 15px; font-weight: 700; transition: transform .15s ease;
 }
 .tbActions button:active, .tbBtnDark:active { transform: scale(.97); }
-.tbBtnPrimary { background: var(--tb-grad); color: #fff; box-shadow: 0 10px 24px rgba(168, 45, 224, .35); }
-.tbBtnGhost { color: var(--text); background: transparent; border: 3px solid var(--line-strong); }
-.tbBtnIcon { width: 22px; height: 22px; display: inline-grid; place-items: center; }
+.tbBtnPrimary { background: var(--tb-grad); color: #fff; box-shadow: 0 6px 16px rgba(168, 45, 224, .3); }
+.tbBtnGhost { color: var(--text); background: transparent; border: 2px solid var(--line-strong); }
+.tbBtnIcon { width: 16px; height: 16px; display: inline-grid; place-items: center; }
 .tbBtnIcon svg { width: 100%; height: 100%; }
 html[dir="rtl"] .tbFlip svg { transform: scaleX(-1); }
-.tbSectionHead { display: flex; align-items: center; justify-content: space-between; margin: 4px 4px 14px; }
-.tbSectionTitle { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.4px; color: var(--text); }
-.tbSpark { font-size: 22px; }
-.tbLink { font-size: 16px; font-weight: 800; color: #7c3aed; }
+.tbSectionHead { display: flex; align-items: center; justify-content: space-between; margin: 2px 4px 10px; }
+.tbSectionTitle { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -.2px; color: var(--text); }
+.tbSpark { font-size: 15px; }
+.tbLink { font-size: 13px; font-weight: 700; color: #7c3aed; }
 html[data-theme="dark"] .tbLink { color: #a78bfa; }
 html[dir="rtl"] .tbLinkArrow { display: inline-block; transform: scaleX(-1); }
-.tbStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
-.tbStat { background: var(--tb-card); border-radius: 28px; padding: 18px 8px 16px; text-align: center; box-shadow: var(--tb-card-shadow); }
-.tbStatIcon { width: 60px; height: 60px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
-.tbStatIcon svg { width: 30px; height: 30px; }
-.tbIconMint { background: #d1fae5; border: 2px solid #a7f3d0; }
-.tbIconMint svg { width: 28px; height: 28px; }
-.tbIconOrange { background: #f59e0b; box-shadow: 0 8px 18px rgba(245, 158, 11, .35); }
-.tbIconPurple { background: #6d28d9; box-shadow: 0 8px 18px rgba(109, 40, 217, .35); }
-.tbStatLabel { font-size: 15px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; }
+.tbStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.tbStat { background: var(--tb-card); border-radius: 20px; padding: 14px 6px 12px; text-align: center; box-shadow: var(--tb-card-shadow); }
+.tbStatIcon { width: 40px; height: 40px; margin: 0 auto 8px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
+.tbStatIcon svg { width: 20px; height: 20px; }
+.tbIconMint { background: #d1fae5; border: 1.5px solid #a7f3d0; }
+.tbIconMint svg { width: 18px; height: 18px; }
+.tbIconOrange { background: #f59e0b; box-shadow: 0 5px 12px rgba(245, 158, 11, .32); }
+.tbIconPurple { background: #6d28d9; box-shadow: 0 5px 12px rgba(109, 40, 217, .32); }
+.tbStatLabel { font-size: 11.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; }
 .tbColGreen { color: #059669; } .tbColOrange { color: #d97706; } .tbColPurple { color: #7c3aed; }
-.tbStatValue { margin-top: 8px; font-size: 30px; line-height: 1; font-weight: 800; letter-spacing: -1px; color: var(--text); }
+.tbStatValue { margin-top: 3px; font-size: 20px; line-height: 1.1; font-weight: 800; letter-spacing: -.4px; color: var(--text); }
 .tbExplore {
-  position: relative; display: block;
-  padding: 26px 24px; border-radius: 34px; overflow: hidden;
-  background: linear-gradient(135deg, #dbe7fd 0%, #e9e4fb 100%); border: 2px solid rgba(147, 168, 232, .25);
+  position: relative; display: block; padding: 18px 16px; border-radius: 24px; overflow: hidden;
+  background: linear-gradient(135deg, #dbe7fd 0%, #e9e4fb 100%); border: 1.5px solid rgba(147, 168, 232, .25);
 }
 html[data-theme="dark"] .tbExplore { background: linear-gradient(135deg, rgba(47, 155, 240, .16), rgba(124, 58, 237, .18)); border-color: var(--line-strong); }
 .tbExploreText { min-width: 0; }
-.tbExploreTitle { margin: 0 0 8px; font-size: 28px; font-weight: 800; letter-spacing: -.6px; color: var(--text); }
-.tbExploreDesc { margin: 0 0 20px; max-width: 290px; font-size: 18px; line-height: 1.5; font-weight: 500; color: var(--text-soft); }
-.tbBtnDark { padding: 0 26px; min-height: 58px; font-size: 19px; color: #fff; background: var(--tb-dark-btn); }
+.tbExploreTitle { margin: 0 0 4px; font-size: 20px; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
+.tbExploreDesc { margin: 0 0 12px; max-width: 265px; font-size: 14px; line-height: 1.45; font-weight: 500; color: var(--text-soft); }
+.tbBtnDark { padding: 0 16px; min-height: 34px; font-size: 13.5px; font-weight: 700; color: #fff; background: var(--tb-dark-btn); }
 html[data-theme="dark"] .tbBtnDark { background: #f8fafc; color: #0f172a; }
 .tbExploreGem {
-  position: absolute; inset-inline-end: 22px; bottom: 24px;
-  width: 78px; height: 78px; padding: 9px; border-radius: 50%; background: #fff;
-  box-shadow: 0 12px 28px rgba(47, 155, 240, .25);
+  position: absolute; inset-inline-end: 16px; bottom: 16px;
+  width: 56px; height: 56px; padding: 6px; border-radius: 50%; background: #fff;
+  box-shadow: 0 8px 20px rgba(47, 155, 240, .22);
 }
 .tbExploreGem svg { width: 100%; height: 100%; }
 
-@media (max-width: 380px) {
-  .tbAmountNum { font-size: 44px; }
-  .tbSectionTitle { font-size: 22px; }
-  .tbStatValue { font-size: 28px; }
-  .tbExploreTitle { font-size: 25px; }
-  .tbExploreDesc { font-size: 16px; }
-  .tbActions button { font-size: 18px; }
+@media (max-width: 350px) {
+  .tbAmountNum { font-size: 30px; }
+  .tbExploreDesc { font-size: 13px; }
 }

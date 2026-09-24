@@ -123,6 +123,12 @@ app.get('*', (req, res) => {
    GLOBAL ERROR HANDLER
 ========================================================= */
 app.use((err, req, res, next) => {
+  // هنگام خاموش شدن (مثلاً دیپلوی جدید) اتصال دیتابیس بسته می‌شود؛ این خطای مورد انتظار است، نه باگ.
+  if (err && err.name === 'MongoClientClosedError') {
+    if (res.headersSent) return undefined;
+    return res.status(503).json({ success: false, message: 'Server is restarting. Please try again.' });
+  }
+
   console.error('Unhandled server error:', err);
   if (res.headersSent) return next(err);
 
@@ -195,7 +201,16 @@ async function cleanupStaleIndexes() {
 async function shutdown(signal) {
   console.log(`\n${signal} received. Shutting down...`);
   try {
-    if (server) await new Promise(resolve => server.close(resolve));
+    if (server) {
+      // اول اتصال‌های بیکار (keep-alive) بسته می‌شوند و درخواست‌های در حال انجام تمام می‌شوند؛
+      // بعد دیتابیس بسته می‌شود تا درخواستی وسط کار با «client was closed» خراب نشود.
+      await new Promise(resolve => {
+        server.close(resolve);
+        if (server.closeIdleConnections) server.closeIdleConnections();
+        const force = setTimeout(() => { if (server.closeAllConnections) server.closeAllConnections(); }, 8000);
+        force.unref();
+      });
+    }
     await mongoose.connection.close(false);
     console.log('✅ Server shutdown completed');
     process.exit(0);

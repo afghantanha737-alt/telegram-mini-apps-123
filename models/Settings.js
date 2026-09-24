@@ -7,7 +7,9 @@ const settingsSchema = new mongoose.Schema(
     rate: { type: Number, default: 0.0001 },
     minWithdrawPoints: { type: Number, default: 1000 },
     dailyCheckInPoints: { type: Number, default: 10 },
-    streakBonusPoints: { type: Number, default: 2 }
+    streakBonusPoints: { type: Number, default: 2 },
+    // قیمت هر ۱ GRAM به دلار؛ برای نمایش «≈ $ USD» در صفحه‌ی خانه. صفر = مخفی
+    gramUsdPrice: { type: Number, default: 0, min: 0 }
   },
   { timestamps: true }
 );

@@ -18,6 +18,7 @@ const { isValidAdminKey } = require('../utils/adminKey');
 const RequiredChannel = require('../models/RequiredChannel');
 const { membership, validateChannelRef, normalizeChannelInput } = require('../utils/membership');
 const { isValidWeights, resolveWeights, checkSpinSettings, spinModel } = require('../utils/spin');
+const { normalizeSponsorInput, marginInfo } = require('../utils/sponsor');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -104,11 +105,46 @@ router.get('/tasks', async (req, res) => {
   if (status === 'inactive') filter.isActive = false;
 
   const tasks = await Task.find(filter).sort({ createdAt: -1 });
-  res.json({ success: true, tasks });
+
+  // درآمد/هزینه‌ی هر تسک از روی «عکس لحظه‌ی تکمیل» (تغییر بعدی نرخ گزارش را خراب نمی‌کند)
+  const perTask = await TaskCompletion.aggregate([
+    { $match: { task: { $in: tasks.map(t => t._id) }, status: 'approved' } },
+    { $group: { _id: '$task', joins: { $sum: 1 }, revenueUsd: { $sum: '$revenueUsd' }, costUsd: { $sum: '$costUsd' } } }
+  ]);
+  const statsByTask = new Map(perTask.map(row => [String(row._id), row]));
+
+  const overall = await TaskCompletion.aggregate([
+    { $match: { status: 'approved' } },
+    {
+      $group: {
+        _id: null,
+        revenueUsd: { $sum: '$revenueUsd' },
+        allCostUsd: { $sum: '$costUsd' },
+        sponsoredCostUsd: { $sum: { $cond: [{ $gt: ['$revenueUsd', 0] }, '$costUsd', 0] } },
+        sponsoredJoins: { $sum: { $cond: [{ $gt: ['$revenueUsd', 0] }, 1, 0] } }
+      }
+    }
+  ]);
+  const o = overall[0] || { revenueUsd: 0, allCostUsd: 0, sponsoredCostUsd: 0, sponsoredJoins: 0 };
+
+  res.json({
+    success: true,
+    tasks: tasks.map(t => {
+      const row = statsByTask.get(String(t._id));
+      return { ...t.toObject(), stats: { revenueUsd: row ? row.revenueUsd : 0, costUsd: row ? row.costUsd : 0 } };
+    }),
+    summary: {
+      sponsoredRevenueUsd: o.revenueUsd,
+      sponsoredCostUsd: o.sponsoredCostUsd,
+      sponsoredProfitUsd: o.revenueUsd - o.sponsoredCostUsd,
+      sponsoredJoins: o.sponsoredJoins,
+      allTasksCostUsd: o.allCostUsd
+    }
+  });
 });
 
 router.post('/tasks', async (req, res) => {
-  const { title, description, type, url, reward, chatId, maxCompletions } = req.body || {};
+  const { title, description, type, url, reward, chatId, maxCompletions, force } = req.body || {};
   if (!title || !reward) {
     return res.status(400).json({ success: false, message: 'عنوان و مقدار پاداش الزامی است.' });
   }
@@ -118,13 +154,44 @@ router.post('/tasks', async (req, res) => {
 
   // اگر خالی/صفر/نامعتبر بود یعنی «بدون محدودیت ظرفیت»
   const parsedMax = Number(maxCompletions);
-  const finalMaxCompletions = Number.isFinite(parsedMax) && parsedMax > 0 ? Math.floor(parsedMax) : null;
+  let finalMaxCompletions = Number.isFinite(parsedMax) && parsedMax > 0 ? Math.floor(parsedMax) : null;
+
+  // ---- تسک اسپانسری: ظرفیت از بودجه محاسبه می‌شود و سود/زیان قبل از ثبت بررسی می‌شود
+  const sponsor = normalizeSponsorInput(req.body);
+  if (sponsor.error) return res.status(400).json({ success: false, message: sponsor.error });
+  const sp = sponsor.value;
+
+  if (sp.isSponsored) {
+    finalMaxCompletions = sp.maxCompletions;
+    const settings = await Settings.getGlobal();
+    const margin = marginInfo({
+      reward: Number(reward), rate: settings.rate, gramUsdPrice: settings.gramUsdPrice,
+      priceUsd: sp.sponsorPriceUsd, budgetUsd: sp.sponsorBudgetUsd
+    });
+    if (!margin.canCompute && !force) {
+      return res.status(400).json({
+        success: false, code: 'COST_UNKNOWN',
+        message: 'قیمت دلاری GRAM در تنظیمات وارد نشده، پس سود/زیان این تسک قابل محاسبه نیست.'
+      });
+    }
+    if (margin.isLoss && !force) {
+      return res.status(400).json({
+        success: false, code: 'LOSS_MAKING',
+        message: `با این پاداش، هزینه‌ی هر عضو (${margin.costPerJoinUsd.toFixed(4)}$) از دریافتی‌تان (${sp.sponsorPriceUsd}$) بیشتر است و در هر عضو ${Math.abs(margin.profitPerJoinUsd).toFixed(4)}$ ضرر می‌کنید.`
+      });
+    }
+  }
 
   const task = await Task.create({
     title, description, type, url, reward,
     verifyType: 'telegram',
     chatId,
-    maxCompletions: finalMaxCompletions
+    maxCompletions: finalMaxCompletions,
+    isSponsored: sp.isSponsored,
+    sponsorName: sp.sponsorName,
+    sponsorPriceUsd: sp.sponsorPriceUsd,
+    sponsorBudgetUsd: sp.sponsorBudgetUsd,
+    expiresAt: sp.expiresAt
   });
 
   res.json({ success: true, task });
@@ -134,11 +201,13 @@ router.post('/tasks', async (req, res) => {
     action: 'task_create',
     targetType: 'task',
     targetId: task._id,
-    details: `«${title}» — پاداش ${reward} پوینت`
+    details: sp.isSponsored
+      ? `«${title}» — اسپانسر: ${sp.sponsorName} (${sp.sponsorPriceUsd}$ هر عضو، بودجه ${sp.sponsorBudgetUsd}$، ظرفیت ${finalMaxCompletions}) — پاداش ${reward} پوینت`
+      : `«${title}» — پاداش ${reward} پوینت`
   });
 
   // اطلاع‌رسانی تسک جدید به همه‌ی کاربران فعال؛ عمداً بدون await تا پاسخ به پنل ادمین معطل نماند
-  broadcastToActiveUsers(User, `🎯 تسک جدید اضافه شد!\n\n${title}\nپاداش: ${reward} پوینت\n\nهمین حالا از تب «تسک‌ها» انجامش بده.`)
+  broadcastToActiveUsers(User, `🎯 ${sp.isSponsored ? 'تسک اسپانسری جدید' : 'تسک جدید'} اضافه شد!\n\n${title}${sp.isSponsored ? `\nاسپانسر: ${sp.sponsorName}` : ''}\nپاداش: ${reward} پوینت\n\nهمین حالا از تب «تسک‌ها» انجامش بده.`)
     .catch(error => console.warn('Task broadcast failed:', error.message || error));
 });
 
@@ -148,6 +217,50 @@ router.put('/tasks/:id', async (req, res) => {
   const update = {};
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(body, key)) update[key] = body[key];
+  }
+
+  // فیلدهای اسپانسری (ویرایش نام/قیمت/بودجه/پایان): با مقدارهای فعلی ادغام و دوباره اعتبارسنجی می‌شوند
+  const sponsorKeys = ['isSponsored', 'sponsorName', 'sponsorPriceUsd', 'sponsorBudgetUsd', 'expiresAt'];
+  if (sponsorKeys.some(key => Object.prototype.hasOwnProperty.call(body, key))) {
+    const current = await Task.findById(req.params.id);
+    if (!current) return res.status(404).json({ success: false, message: 'تسک پیدا نشد.' });
+    const merged = {
+      isSponsored: body.isSponsored !== undefined ? body.isSponsored : current.isSponsored,
+      sponsorName: body.sponsorName !== undefined ? body.sponsorName : current.sponsorName,
+      sponsorPriceUsd: body.sponsorPriceUsd !== undefined ? body.sponsorPriceUsd : current.sponsorPriceUsd,
+      sponsorBudgetUsd: body.sponsorBudgetUsd !== undefined ? body.sponsorBudgetUsd : current.sponsorBudgetUsd,
+      // تاریخ پایانِ قبلی اگر دست نخورده باشد دوباره «آینده بودن» چک نمی‌شود
+      expiresAt: body.expiresAt !== undefined ? body.expiresAt : (current.expiresAt ? current.expiresAt.toISOString() : null)
+    };
+    const sponsor = normalizeSponsorInput(merged, body.expiresAt !== undefined ? new Date() : new Date(0));
+    if (sponsor.error) return res.status(400).json({ success: false, message: sponsor.error });
+    const sp = sponsor.value;
+
+    if (sp.isSponsored) {
+      const rewardNow = update.reward !== undefined ? Number(update.reward) : current.reward;
+      const settings = await Settings.getGlobal();
+      const margin = marginInfo({
+        reward: rewardNow, rate: settings.rate, gramUsdPrice: settings.gramUsdPrice,
+        priceUsd: sp.sponsorPriceUsd, budgetUsd: sp.sponsorBudgetUsd
+      });
+      if (margin.isLoss && !body.force) {
+        return res.status(400).json({
+          success: false, code: 'LOSS_MAKING',
+          message: `با این تنظیمات در هر عضو ${Math.abs(margin.profitPerJoinUsd).toFixed(4)}$ ضرر می‌کنید.`
+        });
+      }
+      if (sp.maxCompletions < current.completedCount) {
+        return res.status(400).json({ success: false, message: `بودجه کمتر از تعداد عضوهای تاکنون (${current.completedCount}) است.` });
+      }
+      update.maxCompletions = sp.maxCompletions; // ظرفیت همیشه از بودجه ÷ قیمت
+    }
+    Object.assign(update, {
+      isSponsored: sp.isSponsored,
+      sponsorName: sp.sponsorName,
+      sponsorPriceUsd: sp.sponsorPriceUsd,
+      sponsorBudgetUsd: sp.sponsorBudgetUsd,
+      expiresAt: sp.expiresAt
+    });
   }
   if ('reward' in update) {
     update.reward = Number(update.reward);

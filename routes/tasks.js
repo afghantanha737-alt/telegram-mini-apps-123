@@ -8,6 +8,8 @@ const { recordLedger } = require('../utils/ledger');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
 const User = require('../models/User');
+const Settings = require('../models/Settings');
+const { rewardCostUsd } = require('../utils/sponsor');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
@@ -65,7 +67,10 @@ async function maybeAwardReferralBonus(userId) {
 router.get('/', auth, async (req, res) => {
   try {
     const [tasks, completions] = await Promise.all([
-      Task.find({ isActive: true }).sort({ createdAt: -1 }),
+      // قیمت/بودجه‌ی تبلیغ‌دهنده هرگز به کاربر داده نمی‌شود؛ تسک‌های منقضی‌شده هم نمایش داده نمی‌شوند
+      Task.find({ isActive: true, $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] })
+        .select('-sponsorPriceUsd -sponsorBudgetUsd')
+        .sort({ isSponsored: -1, createdAt: -1 }),
       TaskCompletion.find({ user: req.dbUser._id })
     ]);
     res.json({ success: true, tasks, completions });
@@ -130,9 +135,9 @@ router.post('/:id/claim', auth, async (req, res) => {
       {
         _id: task._id,
         isActive: true,
-        $or: [
-          { maxCompletions: null },
-          { $expr: { $lt: ['$completedCount', '$maxCompletions'] } }
+        $and: [
+          { $or: [{ maxCompletions: null }, { $expr: { $lt: ['$completedCount', '$maxCompletions'] } }] },
+          { $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] }
         ]
       },
       { $inc: { completedCount: 1 } },
@@ -155,13 +160,20 @@ router.post('/:id/claim', auth, async (req, res) => {
       weJustFilledCapacity = true;
     }
 
+    // عکسِ لحظه‌ی تکمیل برای گزارش سود/زیان: درآمد از تبلیغ‌دهنده و هزینه‌ی پاداش کاربر (به دلار)
+    const settings = await Settings.getGlobal();
+    const revenueUsd = task.isSponsored ? Number(task.sponsorPriceUsd) || 0 : 0;
+    const costUsd = rewardCostUsd(task.reward, settings.rate, settings.gramUsdPrice);
+
     try {
       if (existing) {
         existing.status = 'approved';
         existing.reward = task.reward;
+        existing.revenueUsd = revenueUsd;
+        existing.costUsd = costUsd;
         await existing.save();
       } else {
-        await TaskCompletion.create({ user: u._id, task: task._id, reward: task.reward, status: 'approved' });
+        await TaskCompletion.create({ user: u._id, task: task._id, reward: task.reward, status: 'approved', revenueUsd, costUsd });
       }
     } catch (createError) {
       // اگر ثبت تکمیل به هر دلیلی شکست خورد، ظرفیتی که رزرو کرده بودیم
@@ -172,15 +184,15 @@ router.post('/:id/claim', auth, async (req, res) => {
       throw createError;
     }
 
-    u.points += task.reward;
-    await u.save();
+    // atomic ($inc) تا با درخواست‌های هم‌زمان دیگر (ورود روزانه، گردونه، ...) پوینت گم نشود
+    const rewarded = await User.findByIdAndUpdate(u._id, { $inc: { points: task.reward } }, { new: true });
 
     recordLedger({
       user: u._id,
       type: 'task',
       amount: task.reward,
       description: task.title,
-      balanceAfter: u.points
+      balanceAfter: rewarded.points
     }).catch(() => {});
 
     // بعد از ثبت موفق تسک، بررسی می‌کنیم آیا پاداش رفرال دعوت‌کننده
@@ -193,7 +205,7 @@ router.post('/:id/claim', auth, async (req, res) => {
       success: true,
       joined: true,
       message: `${task.reward} پوینت به حساب شما اضافه شد.`,
-      points: u.points,
+      points: rewarded.points,
       status: 'approved'
     });
   } catch (error) {

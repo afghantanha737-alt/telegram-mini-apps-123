@@ -964,7 +964,7 @@ function renderTasks() {
         <div class="taskItem" style="flex-wrap:wrap">
           <div class="taskIcon">${icon}</div>
           <div class="taskBody">
-            <div class="taskTitle">${escapeHTML(task.title)}</div>
+            <div class="taskTitle">${task.isSponsored ? `<span class="sponsoredTag">${t("task_sponsored_tag")}</span> ` : ""}${escapeHTML(task.title)}</div>
             ${task.description ? `<div class="taskDesc">${escapeHTML(task.description)}</div>` : ""}
             <div class="taskReward">+${formatPoints(task.reward)} ${t("points_unit")}</div>
           </div>

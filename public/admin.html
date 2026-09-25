@@ -108,7 +108,7 @@
     <!-- TASKS -->
     <div id="tab-tasks" class="tabContent">
       <div class="card">
-        <div class="flexBetween"><b>افزودن تسک تلگرامی جدید</b></div>
+        <div class="flexBetween"><b id="taskFormTitle">افزودن تسک تلگرامی جدید</b></div>
         <p class="small">فقط تسک‌های عضویت در کانال/گروه تلگرام پشتیبانی می‌شود — عضویت به‌صورت خودکار توسط خود تلگرام بررسی می‌شود.</p>
         <label>عنوان</label>
         <input id="taskTitle" placeholder="مثلاً عضویت در کانال تلگرام">
@@ -128,11 +128,36 @@
         <input id="taskUrl" placeholder="https://t.me/...">
         <label>مقدار پاداش (پوینت)</label>
         <input id="taskReward" type="number" placeholder="مثلاً 100">
-        <label>حداکثر تعداد تکمیل (اختیاری)</label>
+        <label>حداکثر تعداد تکمیل (اختیاری — برای تسک اسپانسری نادیده گرفته می‌شود)</label>
         <input id="taskMaxCompletions" type="number" min="1" placeholder="خالی = بدون محدودیت">
         <p class="small">اگه پر کنی، فقط همین تعداد نفر اول که تسک رو با موفقیت انجام بدن پاداش می‌گیرن؛ بعدش تسک خودکار غیرفعال می‌شه.</p>
-        <button onclick="addTask()">افزودن تسک</button>
+        <label>تاریخ پایان (اختیاری)</label>
+        <input id="taskExpiresAt" type="date">
+
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
+          <label style="display:flex;align-items:center;gap:8px;margin:0">
+            <input type="checkbox" id="taskSponsored" style="width:auto" onchange="toggleSponsorFields()">
+            <b>💰 این تسک اسپانسری است (منبع درآمد)</b>
+          </label>
+          <p class="small" style="margin:8px 0">یک تبلیغ‌دهنده برای هر عضو تاییدشده مبلغی می‌پردازد. ظرفیت این تسک خودکار از «بودجه ÷ قیمت هر عضو» محاسبه می‌شود و شما نباید حداکثر تکمیل را جدا وارد کنید.</p>
+          <div id="sponsorFields" class="hidden">
+            <label>نام تبلیغ‌دهنده</label>
+            <input id="sponsorName" placeholder="مثلاً Acme Exchange">
+            <label>دریافتی شما از تبلیغ‌دهنده به‌ازای هر عضو (دلار)</label>
+            <input id="sponsorPrice" type="number" step="0.0001" min="0" placeholder="مثلاً 0.05" oninput="updateSponsorPreview()">
+            <label>بودجه‌ی کل تبلیغ‌دهنده (دلار)</label>
+            <input id="sponsorBudget" type="number" step="0.01" min="0" placeholder="مثلاً 10" oninput="updateSponsorPreview()">
+            <div id="sponsorPreview" class="small" style="line-height:1.9;margin-top:6px"></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <button onclick="addTask()" id="taskSubmitBtn">افزودن تسک</button>
+          <button type="button" class="secondary hidden" id="taskCancelBtn" onclick="resetTaskForm()">انصراف از ویرایش</button>
+        </div>
       </div>
+
+      <div class="card" id="sponsorSummaryCard"></div>
 
       <div class="card">
         <div class="flexBetween"><b>لیست تسک‌ها</b></div>
@@ -381,6 +406,7 @@ function switchTab(tab) {
   if (tab === "withdrawals") loadWithdrawals();
   if (tab === "users") loadUsers();
   if (tab === "logs") loadLogs();
+  if (tab === "tasks") loadTaskFormSettings();
   if (tab === "channels") loadRequiredChannels();
   if (tab === "settings") loadSettings();
 }
@@ -489,13 +515,14 @@ async function loadTasks() {
   try {
     const data = await api(`/api/admin/tasks${params.toString() ? "?" + params.toString() : ""}`);
     const tasks = data.tasks || [];
+    renderSponsorSummary(data.summary);
     if (tasks.length === 0) {
       container.innerHTML = `<div class="empty">${search || type || status ? "با این فیلتر چیزی پیدا نشد." : "هنوز تسکی ثبت نشده."}</div>`;
       return;
     }
     container.innerHTML = `
       <table>
-        <thead><tr><th>عنوان</th><th>پاداش</th><th>تکمیل‌شده</th><th>ظرفیت کل</th><th>باقی‌مانده</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <thead><tr><th>عنوان</th><th>پاداش</th><th>تکمیل‌شده</th><th>ظرفیت کل</th><th>باقی‌مانده</th><th>سود/زیان</th><th>وضعیت</th><th>عملیات</th></tr></thead>
         <tbody>
           ${tasks.map(t => {
             const hasLimit = t.maxCompletions != null;
@@ -506,16 +533,30 @@ async function loadTasks() {
               : t.isActive
                 ? '<span class="badge approved">فعال</span>'
                 : '<span class="badge pending">غیرفعال</span>';
+            const isExpired = t.expiresAt && new Date(t.expiresAt).getTime() <= Date.now();
+            const stats = t.stats || { revenueUsd: 0, costUsd: 0 };
+            const profit = stats.revenueUsd - stats.costUsd;
+            const sponsorLabel = t.isSponsored
+              ? `<br><span class="badge approved" title="قیمت هر عضو: ${t.sponsorPriceUsd ?? "—"}$ | بودجه: ${t.sponsorBudgetUsd ?? "—"}$">💰 ${escapeHtml(t.sponsorName || "اسپانسری")}</span>`
+              : "";
+            const expiryLabel = t.expiresAt
+              ? `<br><span class="small" style="color:${isExpired ? "var(--danger)" : "var(--text-muted, inherit)"}">پایان: ${new Date(t.expiresAt).toLocaleDateString("fa-IR")}${isExpired ? " (منقضی)" : ""}</span>`
+              : "";
+            const profitCell = t.isSponsored
+              ? `<span style="color:${profit >= 0 ? "var(--success)" : "var(--danger)"}">${profit >= 0 ? "+" : ""}${profit.toFixed(2)}$</span><br><span class="small">${stats.revenueUsd.toFixed(2)}$ − ${stats.costUsd.toFixed(2)}$</span>`
+              : "—";
             return `
             <tr>
-              <td>${escapeHtml(t.title)}<br><span class="small" style="direction:ltr">${escapeHtml(t.chatId || "—")}</span></td>
+              <td>${escapeHtml(t.title)}<br><span class="small" style="direction:ltr">${escapeHtml(t.chatId || "—")}</span>${sponsorLabel}${expiryLabel}</td>
               <td>${t.reward}</td>
               <td>${t.completedCount || 0}</td>
               <td>${hasLimit ? t.maxCompletions : "بدون محدودیت"}</td>
               <td>${remaining}</td>
-              <td>${statusLabel}</td>
+              <td>${profitCell}</td>
+              <td>${statusLabel}${isExpired && t.isActive ? '<br><span class="badge pending">منقضی</span>' : ""}</td>
               <td class="row">
                 <button class="secondary" onclick="testExistingChatId('${(t.chatId || '').replaceAll("'", "\\'")}',this)">تست</button>
+                <button class="secondary" onclick="editTask('${t._id}')">ویرایش</button>
                 <button class="secondary" onclick="toggleTask('${t._id}', ${!t.isActive})">${t.isActive ? "غیرفعال" : "فعال"}</button>
                 <button class="danger" onclick="deleteTask('${t._id}')">حذف</button>
               </td>
@@ -578,37 +619,80 @@ async function runChatIdCheck(chatId, resultEl) {
   }
 }
 
-async function addTask() {
-  const title = document.getElementById("taskTitle").value.trim();
-  const description = document.getElementById("taskDesc").value.trim();
-  const type = document.getElementById("taskType").value;
-  const chatId = document.getElementById("taskChatId").value.trim();
-  const url = document.getElementById("taskUrl").value.trim();
-  const reward = Number(document.getElementById("taskReward").value);
+function readTaskForm() {
   const maxCompletionsRaw = document.getElementById("taskMaxCompletions").value.trim();
-  const maxCompletions = maxCompletionsRaw ? Number(maxCompletionsRaw) : null;
+  return {
+    title: document.getElementById("taskTitle").value.trim(),
+    description: document.getElementById("taskDesc").value.trim(),
+    type: document.getElementById("taskType").value,
+    chatId: document.getElementById("taskChatId").value.trim(),
+    url: document.getElementById("taskUrl").value.trim(),
+    reward: Number(document.getElementById("taskReward").value),
+    maxCompletions: maxCompletionsRaw ? Number(maxCompletionsRaw) : null,
+    expiresAt: document.getElementById("taskExpiresAt").value || null,
+    isSponsored: document.getElementById("taskSponsored").checked,
+    sponsorName: document.getElementById("sponsorName").value.trim(),
+    sponsorPriceUsd: Number(document.getElementById("sponsorPrice").value) || 0,
+    sponsorBudgetUsd: Number(document.getElementById("sponsorBudget").value) || 0
+  };
+}
 
-  if (!title || !reward) {
-    showMsg("عنوان و مقدار پاداش الزامی است.", "error");
-    return;
-  }
-  if (!chatId) {
-    showMsg("chatId الزامی است.", "error");
-    return;
-  }
+function resetTaskForm() {
+  editingTaskId = null;
+  ["taskTitle","taskDesc","taskUrl","taskReward","taskChatId","taskMaxCompletions","taskExpiresAt","sponsorName","sponsorPrice","sponsorBudget"]
+    .forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("taskSponsored").checked = false;
+  toggleSponsorFields();
+  document.getElementById("chatIdTestResult").textContent = "";
+  document.getElementById("taskFormTitle").textContent = "افزودن تسک تلگرامی جدید";
+  document.getElementById("taskSubmitBtn").textContent = "افزودن تسک";
+  document.getElementById("taskCancelBtn").classList.add("hidden");
+}
+
+async function addTask(force) {
+  const form = readTaskForm();
+  if (!form.title || !form.reward) return showMsg("عنوان و مقدار پاداش الزامی است.", "error");
+  if (!form.chatId) return showMsg("chatId الزامی است.", "error");
+  if (form.isSponsored && !form.sponsorName) return showMsg("نام تبلیغ‌دهنده الزامی است.", "error");
 
   try {
-    await api("/api/admin/tasks", {
-      method: "POST",
-      body: JSON.stringify({ title, description, type, url, reward, chatId, maxCompletions })
-    });
-    showMsg("تسک با موفقیت اضافه شد.", "success");
-    ["taskTitle","taskDesc","taskUrl","taskReward","taskChatId","taskMaxCompletions"].forEach(id => document.getElementById(id).value = "");
-    document.getElementById("chatIdTestResult").textContent = "";
+    const path = editingTaskId ? `/api/admin/tasks/${editingTaskId}` : "/api/admin/tasks";
+    await api(path, { method: editingTaskId ? "PUT" : "POST", body: JSON.stringify({ ...form, force: force === true }) });
+    showMsg(editingTaskId ? "تسک ویرایش شد." : "تسک با موفقیت اضافه شد.", "success");
+    resetTaskForm();
     loadTasks();
   } catch (error) {
+    if (error.code === "LOSS_MAKING" && force !== true) {
+      if (confirm(error.message + "\n\nبا این حال ذخیره شود؟")) return addTask(true);
+      return;
+    }
     showMsg(error.message, "error");
   }
+}
+
+function editTask(id) {
+  api(`/api/admin/tasks?search=`).then(data => {
+    const t = (data.tasks || []).find(x => x._id === id);
+    if (!t) return;
+    editingTaskId = id;
+    document.getElementById("taskTitle").value = t.title || "";
+    document.getElementById("taskDesc").value = t.description || "";
+    document.getElementById("taskType").value = t.type || "channel";
+    document.getElementById("taskChatId").value = t.chatId || "";
+    document.getElementById("taskUrl").value = t.url || "";
+    document.getElementById("taskReward").value = t.reward ?? "";
+    document.getElementById("taskMaxCompletions").value = t.isSponsored ? "" : (t.maxCompletions ?? "");
+    document.getElementById("taskExpiresAt").value = t.expiresAt ? new Date(t.expiresAt).toISOString().slice(0, 10) : "";
+    document.getElementById("taskSponsored").checked = !!t.isSponsored;
+    document.getElementById("sponsorName").value = t.sponsorName || "";
+    document.getElementById("sponsorPrice").value = t.sponsorPriceUsd || "";
+    document.getElementById("sponsorBudget").value = t.sponsorBudgetUsd || "";
+    toggleSponsorFields();
+    document.getElementById("taskFormTitle").textContent = "ویرایش تسک: " + t.title;
+    document.getElementById("taskSubmitBtn").textContent = "ذخیره‌ی تغییرات";
+    document.getElementById("taskCancelBtn").classList.remove("hidden");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }).catch(error => showMsg(error.message, "error"));
 }
 
 async function toggleTask(id, newState) {
@@ -832,6 +916,59 @@ async function sendBroadcast() {
 }
 
 /* ---------- SETTINGS ---------- */
+let currentSettingsCache = { rate: 0.0001, gramUsdPrice: 0 };
+let editingTaskId = null;
+
+function toggleSponsorFields() {
+  const box = document.getElementById("sponsorFields");
+  const on = document.getElementById("taskSponsored").checked;
+  box.classList.toggle("hidden", !on);
+  if (on) updateSponsorPreview();
+}
+
+// پیش‌نمایش زنده‌ی سود/زیان قبل از ذخیره (همان فرمول سرور: هزینه = پاداش × نرخ × قیمت GRAM)
+function updateSponsorPreview() {
+  const box = document.getElementById("sponsorPreview");
+  if (!box) return;
+  const reward = Number(document.getElementById("taskReward").value) || 0;
+  const price = Number(document.getElementById("sponsorPrice").value) || 0;
+  const budget = Number(document.getElementById("sponsorBudget").value) || 0;
+  const { rate, gramUsdPrice } = currentSettingsCache;
+
+  if (!price || !budget) { box.innerHTML = ""; return; }
+  const capacity = Math.floor(budget / price + 1e-9);
+  if (!rate || !gramUsdPrice) {
+    box.innerHTML = `ظرفیت این تسک: <b>${capacity}</b> عضو<br><span style="color:var(--danger)">⚠️ نرخ تبدیل یا قیمت دلاری GRAM در تنظیمات خالی است؛ سود/زیان قابل‌محاسبه نیست.</span>`;
+    return;
+  }
+  const costPerJoin = reward * rate * gramUsdPrice;
+  const profitPerJoin = price - costPerJoin;
+  const totalProfit = capacity * profitPerJoin;
+  const ok = profitPerJoin >= 0;
+  box.innerHTML =
+    `ظرفیت این تسک: <b>${capacity}</b> عضو &nbsp;|&nbsp; هزینه‌ی هر عضو (پاداش کاربر): <b>${costPerJoin.toFixed(4)}$</b><br>` +
+    (ok
+      ? `<span style="color:var(--success)">✓ سود هر عضو: ${profitPerJoin.toFixed(4)}$ — سود کل کمپین: ${totalProfit.toFixed(2)}$</span>`
+      : `<span style="color:var(--danger)">✕ ضرر هر عضو: ${Math.abs(profitPerJoin).toFixed(4)}$ — ضرر کل کمپین: ${Math.abs(totalProfit).toFixed(2)}$ (سرور اجازه‌ی ذخیره نمی‌دهد)</span>`);
+}
+
+function renderSponsorSummary(summary) {
+  const card = document.getElementById("sponsorSummaryCard");
+  if (!card) return;
+  if (!summary) { card.innerHTML = ""; return; }
+  const profit = summary.sponsoredProfitUsd || 0;
+  card.innerHTML = `
+    <b>💰 خلاصه‌ی درآمد تسک‌های اسپانسری (کل تاریخچه)</b>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px">
+      <div><span class="small">دریافتی از تبلیغ‌دهنده‌ها</span><br><b>${summary.sponsoredRevenueUsd.toFixed(2)}$</b></div>
+      <div><span class="small">هزینه‌ی پاداش این عضوها</span><br><b>${summary.sponsoredCostUsd.toFixed(2)}$</b></div>
+      <div><span class="small">سود خالص</span><br><b style="color:${profit >= 0 ? "var(--success)" : "var(--danger)"}">${profit >= 0 ? "+" : ""}${profit.toFixed(2)}$</b></div>
+      <div><span class="small">تعداد عضوِ تاییدشده</span><br><b>${summary.sponsoredJoins}</b></div>
+    </div>
+    <p class="small" style="margin-top:8px">هزینه‌ی کل همه‌ی تسک‌ها (اسپانسری + عادی): ${summary.allTasksCostUsd.toFixed(2)}$</p>
+  `;
+}
+
 let spinModel = {
   segments: [{ type: "points", value: 20 }, { type: "points", value: 40 }, { type: "points", value: 60 }, { type: "points", value: 100 }, { type: "empty", value: 0 }, { type: "spin", value: 1 }],
   freeSpinValue: 44,
@@ -875,6 +1012,13 @@ function updateSpinPreview() {
 function resetSpinWeights() {
   (spinModel.defaultWeights || [30, 20, 8, 2, 30, 10]).forEach((w, i) => { document.getElementById("setW" + i).value = w; });
   updateSpinPreview();
+}
+
+async function loadTaskFormSettings() {
+  try {
+    const data = await api("/api/admin/settings");
+    currentSettingsCache = { rate: data.settings.rate || 0, gramUsdPrice: data.settings.gramUsdPrice || 0 };
+  } catch (error) { /* پیش‌نمایش بدون این مقدارها هم به‌صورت "نامشخص" کار می‌کند */ }
 }
 
 async function loadSettings() {

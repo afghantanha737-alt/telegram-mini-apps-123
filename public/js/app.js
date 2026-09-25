@@ -870,6 +870,13 @@ function openTaskLinkOnly(url) {
 }
 window.openTaskLinkOnly = openTaskLinkOnly;
 
+// صفحه‌ی عمومی «تاریخچه‌ی پرداخت‌ها» — بدون نیاز به لاگین، لینک‌های Tonviewer، برای اثبات پرداخت واقعی
+function openProofPage() {
+  haptic("selection");
+  openTaskLinkOnly(`${location.origin}/proof.html`);
+}
+window.openProofPage = openProofPage;
+
 /**
  * راهنمای پایدار زیر هر تسک، بعد از تلاش ناموفق برای تایید — کلید taskId.
  * بر خلاف toast (که بعد از ۲.۸ ثانیه محو می‌شود)، این راهنما تا اقدام بعدی
@@ -1494,6 +1501,7 @@ function renderWallet() {
       <div id="publicHistoryList">
         <div class="loading" style="height:60px"></div>
       </div>
+      <button type="button" class="secondaryBtn" style="width:100%;margin-top:12px" onclick="openProofPage()">${t("wallet_proof_button")}</button>
     </div>
   `;
 
@@ -1539,6 +1547,7 @@ function renderWallet() {
         ${item.fromAddress ? `<div class="publicTxRow"><span>${t("history_from_label")}</span><span>${escapeHTML(truncateMiddle(item.fromAddress))}</span></div>` : ""}
         ${item.txHash ? `<div class="publicTxRow"><span>${t("history_txid_label")}</span><span>${escapeHTML(truncateMiddle(item.txHash))}</span></div>` : ""}
         <div class="publicTxRow"><span>${t("history_date_label")}</span><span style="font-family:inherit">${timeAgo(item.date)}</span></div>
+        ${item.txHash ? `<a class="explorerLink" href="#" onclick="openTaskLinkOnly('https://tonviewer.com/transaction/${encodeURIComponent(item.txHash)}');return false;">🔗 ${t("history_view_explorer")}</a>` : ""}
       </div>
     `).join("");
   });
@@ -1705,6 +1714,14 @@ function renderProfileAbout() {
         <div class="cardTitle">${t("about_ads_title")}</div>
       </div>
       <p class="cardSubtitle" style="line-height:1.9">${t("about_ads_desc")}</p>
+    </div>
+
+    <div class="card">
+      <div class="cardHeader">
+        <div class="cardTitle">${t("about_proof_title")}</div>
+      </div>
+      <p class="cardSubtitle" style="line-height:1.9;margin-bottom:12px">${t("about_proof_desc")}</p>
+      <button type="button" class="secondaryBtn" style="width:100%" onclick="openProofPage()">${t("about_proof_button")}</button>
     </div>
   `;
 }

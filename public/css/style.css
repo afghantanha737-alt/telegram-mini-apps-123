@@ -1081,3 +1081,59 @@ html[data-theme="dark"] .referralCodeText { color: #c4b5fd; }
   color: #b45309; background: rgba(245, 158, 11, .16);
 }
 html[data-theme="dark"] .sponsoredTag { color: #fbbf24; }
+
+/* =========================================================
+   PROOF-OF-PAYMENTS PUBLIC PAGE (public/proof.html)
+   Standalone, no Telegram login required — for advertisers/ad-network reviewers.
+========================================================= */
+.proofPage { min-height: 100vh; padding: 20px 16px 50px; }
+.proofWrap { width: 100%; max-width: 640px; margin: 0 auto; }
+.proofTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+.proofBrand { display: flex; align-items: center; gap: 11px; }
+.proofBrand img { width: 42px; height: 42px; border-radius: 13px; box-shadow: 0 5px 14px rgba(124, 58, 237, .25); }
+.proofBrandName { font-size: 19px; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
+.proofBrandName span { color: #7c3aed; }
+html[data-theme="dark"] .proofBrandName span { color: #a78bfa; }
+.proofLangBtn {
+  padding: 8px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+  color: var(--text); background: var(--tb-card, var(--surface)); box-shadow: var(--tb-card-shadow, var(--shadow-soft));
+}
+.proofHero { text-align: center; margin: 10px 0 22px; }
+.proofHeroBadge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; margin-bottom: 12px; border-radius: 999px;
+  font-size: 12px; font-weight: 800; color: #059669; background: rgba(16, 185, 129, .13);
+}
+html[data-theme="dark"] .proofHeroBadge { color: #34d399; }
+.proofHeroTitle { margin: 0 0 8px; font-size: 25px; font-weight: 800; letter-spacing: -.4px; color: var(--text); }
+.proofHeroDesc { margin: 0 auto; max-width: 460px; font-size: 14px; line-height: 1.7; color: var(--text-soft); }
+.proofStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 22px; }
+.proofStat { padding: 16px 10px; border-radius: 22px; text-align: center; background: var(--tb-card, var(--surface)); box-shadow: var(--tb-card-shadow, var(--shadow-soft)); }
+.proofStatValue { font-size: 21px; font-weight: 800; letter-spacing: -.4px; color: var(--text); direction: ltr; }
+.proofStatLabel { margin-top: 4px; font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.proofListTitle { margin: 0 0 12px; font-size: 15px; font-weight: 800; color: var(--text); }
+.proofCard { padding: 14px; margin-bottom: 10px; border-radius: 20px; background: var(--tb-card, var(--surface)); box-shadow: var(--tb-card-shadow, var(--shadow-soft)); }
+.proofCardTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.proofAmount { font-size: 17px; font-weight: 800; color: var(--text); direction: ltr; }
+.proofBadgeOk { padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; color: #059669; background: rgba(16, 185, 129, .13); }
+.proofBadgeWarn { padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; color: #b45309; background: rgba(245, 158, 11, .16); }
+html[data-theme="dark"] .proofBadgeOk { color: #34d399; }
+html[data-theme="dark"] .proofBadgeWarn { color: #fbbf24; }
+.proofRow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 12.5px; color: var(--text-soft); }
+.proofRow span:first-child { color: var(--text-muted); flex: 0 0 auto; }
+.proofRow span:last-child { direction: ltr; text-align: end; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proofExplorerLink {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; font-size: 12px; font-weight: 700;
+  color: #7c3aed; direction: ltr;
+}
+html[data-theme="dark"] .proofExplorerLink { color: #a78bfa; }
+.proofEmpty { padding: 30px 20px; text-align: center; border-radius: 22px; background: var(--tb-card, var(--surface)); box-shadow: var(--tb-card-shadow, var(--shadow-soft)); color: var(--text-soft); font-size: 13.5px; line-height: 1.7; }
+.proofFooter { margin-top: 26px; text-align: center; }
+.proofFooter a.proofCta {
+  display: inline-flex; align-items: center; gap: 8px; padding: 13px 24px; border-radius: 999px; font-size: 14px; font-weight: 800;
+  color: #fff; background: var(--tb-grad, linear-gradient(90deg, #7c3aed 0%, #c026d3 100%)); box-shadow: 0 10px 24px rgba(168, 45, 224, .3);
+}
+.proofFooterNote { margin-top: 14px; font-size: 11.5px; color: var(--text-muted); line-height: 1.7; }
+
+.explorerLink { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 11.5px; font-weight: 700; color: #7c3aed; }
+html[data-theme="dark"] .explorerLink { color: #a78bfa; }
+.proofTimeAgo { font-size: 11.5px; font-weight: 600; color: var(--text-muted); }

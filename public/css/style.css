@@ -1074,3 +1074,10 @@ html[data-theme="dark"] .referralCodeText { color: #c4b5fd; }
 .withdrawBox { text-align: start; }
 .withdrawBody { text-align: start; }
 .termsBody { padding-right: 0; padding-inline-end: 4px; }
+
+.sponsoredTag {
+  display: inline-block; margin-inline-end: 5px; padding: 2px 8px; border-radius: 999px;
+  font-size: 10px; font-weight: 800; letter-spacing: .2px; vertical-align: middle;
+  color: #b45309; background: rgba(245, 158, 11, .16);
+}
+html[data-theme="dark"] .sponsoredTag { color: #fbbf24; }

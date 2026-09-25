@@ -27,7 +27,15 @@ const taskSchema = new mongoose.Schema(
     maxCompletions: { type: Number, default: null, min: 1 },
     // تعداد تکمیل‌های موفق (approved) — به‌صورت atomic در routes/tasks.js افزایش می‌یابد
     completedCount: { type: Number, default: 0, min: 0 },
-    isActive: { type: Boolean, default: true }
+    isActive: { type: Boolean, default: true },
+
+    // ---- تسک اسپانسری (درآمد): تبلیغ‌دهنده برای هر عضو تاییدشده مبلغی می‌پردازد ----
+    isSponsored: { type: Boolean, default: false },
+    sponsorName: { type: String, default: '', trim: true },
+    sponsorPriceUsd: { type: Number, default: 0, min: 0 }, // دریافتی از تبلیغ‌دهنده به‌ازای هر عضو (دلار) — به کاربر نمایش داده نمی‌شود
+    sponsorBudgetUsd: { type: Number, default: 0, min: 0 }, // بودجه‌ی کل تبلیغ‌دهنده (دلار) — ظرفیت = بودجه ÷ قیمت
+    // پایان زمانی کمپین (اختیاری؛ برای هر تسکی قابل استفاده است). null = بدون پایان
+    expiresAt: { type: Date, default: null }
   },
   { timestamps: true }
 );

@@ -101,15 +101,17 @@ async function notifyUser(telegramId, text, options = {}) {
  * برای اطلاع‌رسانی رویدادهای عمومی مثل «تسک جدید اضافه شد» استفاده می‌شود.
  * fire-and-forget است؛ منتظرش نمی‌مانیم تا پاسخ اصلی API کند نشود.
  */
-async function broadcastToActiveUsers(User, text) {
+async function broadcastToActiveUsers(User, textOrFn) {
   if (!bot) return;
-  const users = await User.find({ isBanned: false }, 'telegramId');
+  // زبان هر کاربر هم لازم است تا اگر textOrFn تابع باشد، پیام به همان زبان ساخته شود
+  const users = await User.find({ isBanned: false }, 'telegramId language');
   const BATCH_SIZE = 20;
   const DELAY_MS = 1100;
+  const textFor = typeof textOrFn === 'function' ? textOrFn : () => textOrFn;
 
   for (let i = 0; i < users.length; i += BATCH_SIZE) {
     const batch = users.slice(i, i + BATCH_SIZE);
-    await Promise.all(batch.map(u => notifyUser(u.telegramId, text)));
+    await Promise.all(batch.map(u => notifyUser(u.telegramId, textFor(u))));
     if (i + BATCH_SIZE < users.length) {
       await new Promise(resolve => setTimeout(resolve, DELAY_MS));
     }

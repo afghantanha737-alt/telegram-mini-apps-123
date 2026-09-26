@@ -88,6 +88,7 @@ app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
 ========================================================= */
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/required-channels', require('./routes/membership'));
+app.use('/api/app-info', require('./routes/appInfo'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/points', require('./routes/points'));
 app.use('/api/referral', require('./routes/referral'));
@@ -162,6 +163,13 @@ async function startServer() {
     setInterval(() => {
       runReferralSweep().catch(error => console.error('Scheduled referral sweep failed:', error));
     }, 15 * 60 * 1000);
+
+    // یادآوری ورود روزانه: هر ۱۰ دقیقه چک می‌کند که آیا الان همان ساعتِ تنظیم‌شده در پنل ادمین هست؛
+    // پیش‌فرض خاموش است (Settings.dailyReminderEnabled=false) تا خودتان تصمیم بگیرید فعالش کنید.
+    const { runDailyReminderSweep } = require('./utils/dailyReminder');
+    setInterval(() => {
+      runDailyReminderSweep().catch(error => console.error('Daily reminder sweep failed:', error));
+    }, 10 * 60 * 1000);
 
     server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);

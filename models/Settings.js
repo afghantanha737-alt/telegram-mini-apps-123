@@ -13,7 +13,10 @@ const settingsSchema = new mongoose.Schema(
     // هزینه‌ی یک بار چرخاندن گردونه با پوینت (علاوه بر شانس‌های رایگان استریک)
     spinCostPoints: { type: Number, default: 30, min: 1 },
     // وزن شانس ۶ خانه‌ی گردونه برای چرخش با پوینت (ترتیب: ۲۰، ۴۰، ۶۰، ۱۰۰، پوچ، شانس دوباره)
-    paidSpinWeights: { type: [Number], default: () => [30, 20, 8, 2, 30, 10] }
+    paidSpinWeights: { type: [Number], default: () => [30, 20, 8, 2, 30, 10] },
+    // یادآوری ورود روزانه: پیش‌فرض خاموش تا خودتان تصمیم بگیرید
+    dailyReminderEnabled: { type: Boolean, default: false },
+    dailyReminderHourUtc: { type: Number, default: 15, min: 0, max: 23 }
   },
   { timestamps: true }
 );

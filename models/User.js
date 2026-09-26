@@ -24,7 +24,9 @@ const userSchema = new mongoose.Schema(
 
     walletAddress: { type: String, default: '' },
     language: { type: String, enum: ['fa', 'ps', 'en'], default: 'fa' },
-    isBanned: { type: Boolean, default: false }
+    isBanned: { type: Boolean, default: false },
+    // آخرین باری که یادآوری ورود روزانه برایش ارسال شد (برای جلوگیری از ارسال تکراری در همان روز)
+    lastReminderSentAt: { type: Date, default: null }
   },
   { timestamps: true }
 );

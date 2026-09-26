@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#faf5ff">
+<meta name="color-scheme" content="light">
+<title>Gramup — پوینت جمع کن، به GRAM تبدیل کن</title>
+<meta name="description" content="Gramup: با انجام تسک، دعوت دوستان و ورود روزانه پوینت جمع کن و به GRAM (روی TON) تبدیل و برداشت کن.">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Gramup">
+<meta property="og:description" content="با انجام تسک، دعوت دوستان و ورود روزانه پوینت جمع کن و به GRAM تبدیل کن.">
+<link rel="icon" type="image/svg+xml" href="img/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Vazirmatn:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  body { font-family: "Vazirmatn", "Plus Jakarta Sans", "Inter", sans-serif; }
+  html[lang="en"] body { font-family: "Plus Jakarta Sans", "Inter", sans-serif; }
+  .landingPage { min-height: 100vh; padding: 22px 16px 50px; }
+  .landingWrap { width: 100%; max-width: 640px; margin: 0 auto; }
+  .landingTopBar { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 6px; }
+</style>
+</head>
+<body class="proofPage landingPage">
+  <div class="landingWrap">
+    <div class="landingTopBar">
+      <button type="button" class="proofLangBtn" id="langToggle" onclick="toggleLang()">English</button>
+    </div>
+
+    <div class="landingHero">
+      <img class="landingLogo" src="img/logo.svg" alt="Gramup">
+      <h1 class="landingTitle">Gram<span>up</span></h1>
+      <p class="landingTagline" data-i18n="tagline">تسک انجام بده، دوست دعوت کن، هر روز وارد شو — پوینت جمع کن و به GRAM واقعی روی TON تبدیل و برداشت کن.</p>
+      <div class="landingCtas">
+        <a class="landingCtaPrimary" href="#" id="openAppLink" target="_blank" rel="noopener">🚀 <span data-i18n="ctaOpen">باز کردن Gramup</span></a>
+        <a class="landingCtaGhost" href="proof.html"><span data-i18n="ctaProof">مشاهده‌ی اثبات پرداخت‌ها ↗</span></a>
+      </div>
+    </div>
+
+    <div class="landingSection">
+      <h2 class="landingSectionTitle" data-i18n="featuresTitle">چطور پوینت جمع می‌کنی؟</h2>
+      <div class="landingFeatures">
+        <div class="landingFeature">
+          <div class="landingFeatureIcon">📋</div>
+          <div class="landingFeatureTitle" data-i18n="f1Title">تسک‌ها</div>
+          <div class="landingFeatureDesc" data-i18n="f1Desc">عضویت در کانال یا گروه، با تایید واقعی از خود تلگرام</div>
+        </div>
+        <div class="landingFeature">
+          <div class="landingFeatureIcon">🎡</div>
+          <div class="landingFeatureTitle" data-i18n="f2Title">ورود روزانه و گردونه</div>
+          <div class="landingFeatureDesc" data-i18n="f2Desc">هر روز پوینت رایگان بگیر؛ با استریک ۷ روزه شانس گردونه هم می‌گیری</div>
+        </div>
+        <div class="landingFeature">
+          <div class="landingFeatureIcon">👥</div>
+          <div class="landingFeatureTitle" data-i18n="f3Title">دعوت دوستان</div>
+          <div class="landingFeatureDesc" data-i18n="f3Desc">با هر دوست فعال، پوینت پاداش دعوت می‌گیری</div>
+        </div>
+        <div class="landingFeature">
+          <div class="landingFeatureIcon">💎</div>
+          <div class="landingFeatureTitle" data-i18n="f4Title">تبدیل و برداشت واقعی</div>
+          <div class="landingFeatureDesc" data-i18n="f4Desc">پوینت‌ها را به GRAM تبدیل کن و به کیف‌پول TON خودت برداشت بزن</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="landingSection">
+      <h2 class="landingSectionTitle" data-i18n="stepsTitle">شروع در ۳ قدم</h2>
+      <div class="landingSteps">
+        <div class="landingStep">
+          <div class="landingStepNum">1</div>
+          <div><div class="landingStepText" data-i18n="s1Title">اپ را در تلگرام باز کن</div><div class="landingStepDesc" data-i18n="s1Desc">با دکمه‌ی بالا، مستقیم داخل تلگرام باز می‌شود</div></div>
+        </div>
+        <div class="landingStep">
+          <div class="landingStepNum">2</div>
+          <div><div class="landingStepText" data-i18n="s2Title">تسک انجام بده و هر روز سر بزن</div><div class="landingStepDesc" data-i18n="s2Desc">پوینت جمع می‌شود؛ استریک روزانه پاداش بیشتر می‌دهد</div></div>
+        </div>
+        <div class="landingStep">
+          <div class="landingStepNum">3</div>
+          <div><div class="landingStepText" data-i18n="s3Title">به GRAM تبدیل و برداشت کن</div><div class="landingStepDesc" data-i18n="s3Desc">از کیف‌پول اپ، به آدرس TON خودت درخواست برداشت بده</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="landingSection">
+      <div class="landingTrust">
+        <p data-i18n="trustDesc">هر پرداختی که Gramup انجام می‌دهد واقعی و روی زنجیره‌ی TON قابل بررسی است — نه یک ادعای ساده.</p>
+        <a class="landingCtaGhost" href="proof.html"><span data-i18n="trustCta">مشاهده‌ی پرداخت‌های واقعی ↗</span></a>
+      </div>
+    </div>
+  </div>
+
+<script>
+const I18N = {
+  fa: {
+    tagline: "تسک انجام بده، دوست دعوت کن، هر روز وارد شو — پوینت جمع کن و به GRAM واقعی روی TON تبدیل و برداشت کن.",
+    ctaOpen: "باز کردن Gramup", ctaProof: "مشاهده‌ی اثبات پرداخت‌ها ↗",
+    featuresTitle: "چطور پوینت جمع می‌کنی؟",
+    f1Title: "تسک‌ها", f1Desc: "عضویت در کانال یا گروه، با تایید واقعی از خود تلگرام",
+    f2Title: "ورود روزانه و گردونه", f2Desc: "هر روز پوینت رایگان بگیر؛ با استریک ۷ روزه شانس گردونه هم می‌گیری",
+    f3Title: "دعوت دوستان", f3Desc: "با هر دوست فعال، پوینت پاداش دعوت می‌گیری",
+    f4Title: "تبدیل و برداشت واقعی", f4Desc: "پوینت‌ها را به GRAM تبدیل کن و به کیف‌پول TON خودت برداشت بزن",
+    stepsTitle: "شروع در ۳ قدم",
+    s1Title: "اپ را در تلگرام باز کن", s1Desc: "با دکمه‌ی بالا، مستقیم داخل تلگرام باز می‌شود",
+    s2Title: "تسک انجام بده و هر روز سر بزن", s2Desc: "پوینت جمع می‌شود؛ استریک روزانه پاداش بیشتر می‌دهد",
+    s3Title: "به GRAM تبدیل و برداشت کن", s3Desc: "از کیف‌پول اپ، به آدرس TON خودت درخواست برداشت بده",
+    trustDesc: "هر پرداختی که Gramup انجام می‌دهد واقعی و روی زنجیره‌ی TON قابل بررسی است — نه یک ادعای ساده.",
+    trustCta: "مشاهده‌ی پرداخت‌های واقعی ↗",
+    langBtn: "English"
+  },
+  ps: {
+    tagline: "دندې ترسره کړئ، ملګري بلنه وکړئ، هره ورځ ننوځئ — پوائنټونه راټول کړئ او د TON پر بنسټ ریښتینې GRAM ته یې بدل او ایستل کړئ.",
+    ctaOpen: "Gramup خلاصول", ctaProof: "د تادیاتو تایید وګورئ ↗",
+    featuresTitle: "پوائنټونه به څنګه راټول کړئ؟",
+    f1Title: "دندې", f1Desc: "په چینل یا ګروپ کې غړیتوب، د ټیلیګرام له خوا ریښتیني تایید سره",
+    f2Title: "ورځنی ننوتل او ګردونه", f2Desc: "هره ورځ وړیا پوائنټ ترلاسه کړئ؛ د ۷ ورځې پرله‌پسې سره د ګردونې چانس هم ترلاسه کوئ",
+    f3Title: "ملګري بلنه", f3Desc: "د هر فعال ملګری سره، د بلنې ګټه ترلاسه کوئ",
+    f4Title: "ریښتینی بدلون او ایستل", f4Desc: "پوائنټونه GRAM ته بدل او خپل TON والټ ته یې ایستل کړئ",
+    stepsTitle: "په ۳ ګامونو کې پیل",
+    s1Title: "اپ په ټیلیګرام کې خلاص کړئ", s1Desc: "د پورتني تڼي سره، مستقیم په ټیلیګرام کې خلاصیږي",
+    s2Title: "دنده ترسره کړئ او هره ورځ راشئ", s2Desc: "پوائنټونه راټولیږي؛ ورځنی پرله‌پسې والی ډیره ګټه ورکوي",
+    s3Title: "GRAM ته یې بدل او ایستل یې کړئ", s3Desc: "د اپ له والټ څخه، خپل TON پته ته د ایستلو غوښتنه ورکړئ",
+    trustDesc: "هره تادیه چې Gramup یې کوي ریښتینې ده او د TON په زنځیر کې د کتلو وړ ده — یوازې یو ادعا نه ده.",
+    trustCta: "ریښتینې تادیات وګورئ ↗",
+    langBtn: "English"
+  },
+  en: {
+    tagline: "Complete tasks, invite friends, and check in daily — earn points and convert them into real GRAM on TON.",
+    ctaOpen: "Open Gramup", ctaProof: "View proof of payments ↗",
+    featuresTitle: "How do you earn points?",
+    f1Title: "Tasks", f1Desc: "Join a channel or group, verified for real by Telegram itself",
+    f2Title: "Daily check-in & wheel", f2Desc: "Get free points every day; a 7-day streak also earns a spin",
+    f3Title: "Invite friends", f3Desc: "Earn a referral bonus for every active friend you invite",
+    f4Title: "Real conversion & withdrawal", f4Desc: "Convert points to GRAM and withdraw to your own TON wallet",
+    stepsTitle: "Get started in 3 steps",
+    s1Title: "Open the app in Telegram", s1Desc: "The button above opens it directly inside Telegram",
+    s2Title: "Do tasks & check in daily", s2Desc: "Points add up; a daily streak earns extra rewards",
+    s3Title: "Convert to GRAM & withdraw", s3Desc: "From the app's wallet, request a withdrawal to your TON address",
+    trustDesc: "Every payment Gramup makes is real and verifiable on the TON blockchain — not just a claim.",
+    trustCta: "See real payments ↗",
+    langBtn: "فارسی"
+  }
+};
+
+let lang = (navigator.language || "fa").toLowerCase().startsWith("en") ? "en" : "fa";
+
+function applyLang() {
+  const dict = I18N[lang];
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === "en" ? "ltr" : "rtl";
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    if (dict[el.dataset.i18n]) el.textContent = dict[el.dataset.i18n];
+  });
+  document.getElementById("langToggle").textContent = dict.langBtn;
+  document.title = lang === "en" ? "Gramup — Earn points, get real crypto" : "Gramup — پوینت جمع کن، به GRAM تبدیل کن";
+}
+
+function toggleLang() {
+  lang = lang === "fa" ? "en" : "fa";
+  applyLang();
+}
+
+async function loadAppInfo() {
+  try {
+    const res = await fetch("/api/app-info");
+    const data = await res.json();
+    const link = document.getElementById("openAppLink");
+    if (data.botLink) link.href = data.botLink;
+  } catch (error) { /* دکمه بدون این هم شکل درستی دارد، فقط لینکش خالی می‌ماند */ }
+}
+
+applyLang();
+loadAppInfo();
+</script>
+</body>
+</html>

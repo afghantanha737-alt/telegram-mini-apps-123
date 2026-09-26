@@ -51,7 +51,7 @@
     </div>
 
     <div class="proofFooter">
-      <a class="proofCta" href="https://t.me/AmirAFG123_bot/app" target="_blank" rel="noopener">
+      <a class="proofCta" href="#" id="openAppLink" target="_blank" rel="noopener">
         🚀 <span data-i18n="cta">Open Gramup</span>
       </a>
       <p class="proofFooterNote" data-i18n="note">Full wallet addresses are withheld to protect users' privacy — this matches Gramup's published privacy policy. Transaction hashes are shown in full and link directly to a public TON explorer for independent verification.</p>
@@ -192,8 +192,20 @@ async function load() {
   }
 }
 
+// لینک باز کردن اپ از سرور گرفته می‌شود (نه هاردکد) تا اگر یوزرنیم ربات عوض شد، اینجا خودش درست شود
+async function loadAppInfo() {
+  try {
+    const res = await fetch("/api/app-info");
+    const data = await res.json();
+    const link = document.getElementById("openAppLink");
+    if (data.botLink) link.href = data.botLink;
+    else link.style.display = "none";
+  } catch (error) { /* دکمه‌ی باز کردن اپ بدون این هم مشکلی برای بقیه‌ی صفحه ایجاد نمی‌کند */ }
+}
+
 applyLang();
 load();
+loadAppInfo();
 </script>
 </body>
 </html>

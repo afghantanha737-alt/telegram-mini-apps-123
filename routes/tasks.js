@@ -4,6 +4,7 @@ const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth } = require('../utils/telegramAuth');
 const { checkChatMembership, notifyUser } = require('../utils/bot');
+const { botText } = require('../utils/botMessages');
 const { recordLedger } = require('../utils/ledger');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
@@ -28,6 +29,7 @@ const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
  */
 async function maybeAwardReferralBonus(userId) {
   const user = await User.findById(userId).select('referredBy referralBonusAwarded firstName username');
+  // زبان دعوت‌کننده (نه دعوت‌شده) برای پیام لازم است؛ در ادامه از خود referrer گرفته می‌شود
   if (!user || !user.referredBy || user.referralBonusAwarded) return;
 
   const approvedCount = await TaskCompletion.countDocuments({ user: userId, status: 'approved' });
@@ -46,7 +48,7 @@ async function maybeAwardReferralBonus(userId) {
   );
   if (!referrer) return;
 
-  const invitedName = user.firstName || user.username || 'دوستت';
+  const invitedName = user.firstName || user.username || (referrer.language === 'en' ? 'your friend' : 'دوستت');
   await recordLedger({
     user: referrer._id,
     type: 'referral_bonus',
@@ -59,7 +61,7 @@ async function maybeAwardReferralBonus(userId) {
   // کاربر فقط تعداد دعوت‌شده‌ها را می‌دید، نه اینکه دقیقاً کِی پاداش می‌گیرد.
   notifyUser(
     referrer.telegramId,
-    `🎉 تبریک! ${invitedName} تسک‌های لازم رو تکمیل کرد و ${REFERRAL_BONUS_POINTS} پوینت پاداش دعوت به حسابت اضافه شد.\nموجودی فعلی: ${referrer.points} پوینت.`
+    botText('referralBonus', referrer.language, invitedName, REFERRAL_BONUS_POINTS, referrer.points)
   ).catch(() => {});
 }
 

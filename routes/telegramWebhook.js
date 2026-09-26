@@ -4,6 +4,7 @@ const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
 const { isValidAdminKey } = require('../utils/adminKey');
 const { bot } = require('../utils/bot');
+const { botText } = require('../utils/botMessages');
 const User = require('../models/User');
 const { generateReferralCode } = require('../utils/telegramAuth');
 
@@ -71,9 +72,10 @@ router.post('/webhook', async (req, res) => {
         ? { inline_keyboard: [[{ text: '🚀 باز کردن اپلیکیشن', web_app: { url: webAppUrl } }]] }
         : undefined;
 
+      const startedUser = await User.findOne({ telegramId: String(chatId) }, 'language');
       await bot.sendMessage(
         chatId,
-        `سلام ${message.from.first_name || 'دوست عزیز'} 👋\nبه ربات امتیاز و پاداش خوش آمدی!\nبا انجام تسک‌ها، دعوت دوستان و ورود روزانه، امتیاز جمع کن.`,
+        botText('welcome', startedUser?.language || 'fa', message.from.first_name || (startedUser?.language === 'en' ? 'friend' : 'دوست عزیز')),
         keyboard ? { reply_markup: keyboard } : {}
       );
     }

@@ -8,6 +8,7 @@ const Withdrawal = require('../models/Withdrawal');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
 const { bot, notifyUser, broadcastToActiveUsers } = require('../utils/bot');
+const { botText } = require('../utils/botMessages');
 const { verifyTonTransaction } = require('../utils/tonVerify');
 const { recordLedger } = require('../utils/ledger');
 const { recordAdminLog } = require('../utils/adminLog');
@@ -206,8 +207,8 @@ router.post('/tasks', async (req, res) => {
       : `«${title}» — پاداش ${reward} پوینت`
   });
 
-  // اطلاع‌رسانی تسک جدید به همه‌ی کاربران فعال؛ عمداً بدون await تا پاسخ به پنل ادمین معطل نماند
-  broadcastToActiveUsers(User, `🎯 ${sp.isSponsored ? 'تسک اسپانسری جدید' : 'تسک جدید'} اضافه شد!\n\n${title}${sp.isSponsored ? `\nاسپانسر: ${sp.sponsorName}` : ''}\nپاداش: ${reward} پوینت\n\nهمین حالا از تب «تسک‌ها» انجامش بده.`)
+  // اطلاع‌رسانی تسک جدید به همه‌ی کاربران فعال، هرکدام به زبان خودش؛ عمداً بدون await تا پاسخ به پنل ادمین معطل نماند
+  broadcastToActiveUsers(User, u => botText('taskNew', u.language, title, reward, sp.isSponsored ? sp.sponsorName : ''))
     .catch(error => console.warn('Task broadcast failed:', error.message || error));
 });
 
@@ -402,11 +403,11 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
   });
 
   // اطلاع‌رسانی به خود کاربر که پرداختش انجام شد
-  const payeeUser = await User.findById(withdrawal.user, 'telegramId');
+  const payeeUser = await User.findById(withdrawal.user, 'telegramId language');
   if (payeeUser) {
     notifyUser(
       payeeUser.telegramId,
-      `✅ برداشت شما تایید و پرداخت شد!\n\nمبلغ: ${withdrawal.cryptoAmount} ${withdrawal.token}\nTxID: ${withdrawal.txHash}\n\nمی‌تونی تراکنش رو تو تاریخچه‌ی کیف‌پولت هم ببینی.`
+      botText('withdrawalApproved', payeeUser.language, withdrawal.cryptoAmount, withdrawal.token, withdrawal.txHash)
     ).catch(() => {});
   }
 });
@@ -453,12 +454,11 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
   });
 
   // اطلاع‌رسانی رد شدن درخواست به کاربر (GRAM قبلاً در بالا برگردانده شده)
-  const requesterUser = await User.findById(withdrawal.user, 'telegramId');
+  const requesterUser = await User.findById(withdrawal.user, 'telegramId language');
   if (requesterUser) {
-    const reasonLine = withdrawal.adminNote ? `\nدلیل: ${withdrawal.adminNote}` : '';
     notifyUser(
       requesterUser.telegramId,
-      `❌ درخواست برداشت شما رد شد و GRAM به موجودی حسابت برگشت.${reasonLine}`
+      botText('withdrawalRejected', requesterUser.language, withdrawal.adminNote || '')
     ).catch(() => {});
   }
 });
@@ -695,8 +695,10 @@ router.put('/settings', async (req, res) => {
     dailyCheckInPoints: v => v >= 0,
     streakBonusPoints: v => v >= 0,
     gramUsdPrice: v => v >= 0,
-    spinCostPoints: v => v >= 1
+    spinCostPoints: v => v >= 1,
+    dailyReminderHourUtc: v => Number.isInteger(v) && v >= 0 && v <= 23
   };
+
   const changes = {};
   for (const [key, isOk] of Object.entries(rules)) {
     if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
@@ -705,6 +707,11 @@ router.put('/settings', async (req, res) => {
       return res.status(400).json({ success: false, message: `مقدار «${key}» نامعتبر است.` });
     }
     changes[key] = value;
+  }
+
+  // dailyReminderEnabled یک boolean است، نه یک عدد؛ جدا از قاعده‌ی بالا پردازش می‌شود
+  if (Object.prototype.hasOwnProperty.call(body, 'dailyReminderEnabled')) {
+    changes.dailyReminderEnabled = body.dailyReminderEnabled === true || body.dailyReminderEnabled === 'true';
   }
 
   const settings = await Settings.getGlobal();

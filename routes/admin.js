@@ -343,7 +343,7 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
 
   let withdrawal = await Withdrawal.findById(req.params.id);
   if (!withdrawal) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
-  if (withdrawal.status !== 'pending') {
+  if (!['pending', 'approved', 'processing'].includes(withdrawal.status)) {
     return res.status(400).json({ success: false, message: 'این درخواست قبلاً پردازش شده است.' });
   }
 
@@ -377,9 +377,10 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
     return res.status(400).json({ success: false, message: 'این TxID قبلاً برای برداشت دیگری ثبت شده است.', code: 'DUPLICATE_TX' });
   }
 
-  // atomic: فقط اگر هنوز pending باشد پرداخت‌شده می‌شود (جلوگیری از تایید/رد هم‌زمان)
+  // atomic: از هر سه حالت غیرپایانی (pending/approved/processing) می‌توان پرداخت را نهایی کرد
+  // (جلوگیری از تایید/رد هم‌زمان با شرط status فعلی)
   const paid = await Withdrawal.findOneAndUpdate(
-    { _id: withdrawal._id, status: 'pending' },
+    { _id: withdrawal._id, status: { $in: ['pending', 'approved', 'processing'] } },
     {
       $set: {
         status: 'paid',

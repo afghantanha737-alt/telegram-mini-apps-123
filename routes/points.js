@@ -40,6 +40,9 @@ function truncateAddress(address) {
 const crypto = require('crypto');
 
 const { SPIN_SEGMENTS, resolveWeights, pickWeightedIndex } = require('../utils/spin');
+const { notifyUser } = require('../utils/bot');
+const { botText } = require('../utils/botMessages');
+const { synthesizeHistory } = require('../utils/withdrawalStatus');
 
 // GET /api/points/me
 router.get('/me', auth, async (req, res) => {
@@ -319,7 +322,8 @@ router.post('/withdraw', auth, async (req, res) => {
       user: u._id,
       pointsSpent: settings.rate > 0 ? Math.round(amount / settings.rate) : 0,
       cryptoAmount: amount,
-      address: walletAddress
+      address: walletAddress,
+      statusHistory: [{ status: 'pending', at: new Date() }]
     });
   } catch (error) {
     // اگر ثبت درخواست شکست خورد، مبلغ کسرشده را برگردان تا کاربر ضرر نکند
@@ -341,6 +345,32 @@ router.post('/withdraw', auth, async (req, res) => {
     message: 'درخواست برداشت ثبت شد و به‌زودی بررسی می‌شود.',
     gramBalance: updated.gramBalance,
     withdrawalId: withdrawal._id
+  });
+
+  // اطلاع‌رسانی فوری ثبت درخواست (جدا از اطلاع‌رسانی تایید/رد که در پنل ادمین است)
+  notifyUser(u.telegramId, botText('withdrawalSubmitted', u.language, amount, withdrawal.token || 'GRAM')).catch(() => {});
+});
+
+// GET /api/points/withdrawals/:id — جزئیات و Timeline یک برداشت مشخص (فقط برای صاحب همان برداشت)
+router.get('/withdrawals/:id', auth, async (req, res) => {
+  const withdrawal = await Withdrawal.findOne({ _id: req.params.id, user: req.dbUser._id });
+  if (!withdrawal) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
+
+  res.json({
+    success: true,
+    withdrawal: {
+      _id: withdrawal._id,
+      cryptoAmount: withdrawal.cryptoAmount,
+      token: withdrawal.token,
+      network: withdrawal.network,
+      status: withdrawal.status,
+      address: truncateAddress(withdrawal.address),
+      txHash: withdrawal.txHash,
+      adminNote: withdrawal.status === 'rejected' || withdrawal.status === 'cancelled' ? withdrawal.adminNote : '',
+      createdAt: withdrawal.createdAt,
+      paidAt: withdrawal.paidAt,
+      timeline: synthesizeHistory(withdrawal)
+    }
   });
 });
 

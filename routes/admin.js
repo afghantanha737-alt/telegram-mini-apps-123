@@ -18,6 +18,9 @@ const PointsLedger = require('../models/PointsLedger');
 const { isValidAdminKey } = require('../utils/adminKey');
 const RequiredChannel = require('../models/RequiredChannel');
 const { membership, validateChannelRef, normalizeChannelInput } = require('../utils/membership');
+const { canTransition, requiresReason, shouldRefund, synthesizeHistory, isTerminal } = require('../utils/withdrawalStatus');
+const { COMMON_TIMEZONES, isValidTimezone, targetUtcHour } = require('../utils/timezones');
+const { sendTestReminder } = require('../utils/dailyReminder');
 const { isValidWeights, resolveWeights, checkSpinSettings, spinModel } = require('../utils/spin');
 const { normalizeSponsorInput, marginInfo } = require('../utils/sponsor');
 
@@ -316,7 +319,10 @@ router.get('/withdrawals', async (req, res) => {
     .populate('user', 'firstName username telegramId')
     .sort({ createdAt: -1 })
     .limit(200);
-  res.json({ success: true, withdrawals: list });
+  res.json({
+    success: true,
+    withdrawals: list.map(w => ({ ...w.toObject(), timeline: synthesizeHistory(w) }))
+  });
 });
 
 /**
@@ -383,7 +389,8 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
         fromAddress: verification.fromAddress || '',
         paidAt: new Date(),
         adminNote: (req.body && req.body.note) || withdrawal.adminNote
-      }
+      },
+      $push: { statusHistory: { status: 'paid', at: new Date(), note: (req.body && req.body.note) || '' } }
     },
     { new: true }
   );
@@ -413,13 +420,22 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
 });
 
 router.post('/withdrawals/:id/reject', async (req, res) => {
+  // طبق مشخصات: رد کردن باید همیشه دلیل داشته باشد (سمت سرور چک می‌شود، نه فقط فرانت)
+  const reason = String((req.body && req.body.note) || '').trim();
+  if (!reason) {
+    return res.status(400).json({ success: false, message: 'برای رد درخواست، وارد کردن دلیل الزامی است.' });
+  }
+
   const existing = await Withdrawal.findById(req.params.id);
   if (!existing) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
 
-  // atomic: فقط درخواست pending رد می‌شود؛ پرداخت‌شده یا قبلاً ردشده دوباره پردازش نمی‌شود
+  // atomic: فقط درخواستی که هنوز پرداخت/رد/لغو نشده رد می‌شود (pending، approved یا processing)
   const withdrawal = await Withdrawal.findOneAndUpdate(
-    { _id: existing._id, status: 'pending' },
-    { $set: { status: 'rejected', adminNote: (req.body && req.body.note) || '' } },
+    { _id: existing._id, status: { $in: ['pending', 'approved', 'processing'] } },
+    {
+      $set: { status: 'rejected', adminNote: reason },
+      $push: { statusHistory: { status: 'rejected', at: new Date(), note: reason } }
+    },
     { new: true }
   );
   if (!withdrawal) {
@@ -450,7 +466,7 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
     action: 'withdrawal_reject',
     targetType: 'withdrawal',
     targetId: withdrawal._id,
-    details: withdrawal.adminNote ? `دلیل: ${withdrawal.adminNote}` : ''
+    details: `دلیل: ${reason}`
   });
 
   // اطلاع‌رسانی رد شدن درخواست به کاربر (GRAM قبلاً در بالا برگردانده شده)
@@ -458,8 +474,86 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
   if (requesterUser) {
     notifyUser(
       requesterUser.telegramId,
-      botText('withdrawalRejected', requesterUser.language, withdrawal.adminNote || '')
+      botText('withdrawalRejected', requesterUser.language, reason)
     ).catch(() => {});
+  }
+});
+
+/**
+ * POST /api/admin/withdrawals/:id/status — تغییر وضعیت «فقط نمایشی» (approved/processing/cancelled)
+ * برخلاف approve/reject بالا، این مسیر پولی جابه‌جا نمی‌کند مگر برای cancelled (بازگشت GRAM،
+ * دقیقاً مثل reject). برای پرداخت نهایی همچنان باید از /approve با txHash استفاده کرد.
+ */
+router.post('/withdrawals/:id/status', async (req, res) => {
+  const targetStatus = String((req.body && req.body.status) || '');
+  const reason = String((req.body && req.body.note) || '').trim();
+
+  if (!['approved', 'processing', 'cancelled'].includes(targetStatus)) {
+    return res.status(400).json({ success: false, message: 'وضعیت درخواستی نامعتبر است.' });
+  }
+  if (requiresReason(targetStatus) && !reason) {
+    return res.status(400).json({ success: false, message: 'برای لغو درخواست، وارد کردن دلیل الزامی است.' });
+  }
+
+  const existing = await Withdrawal.findById(req.params.id);
+  if (!existing) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
+  if (!canTransition(existing.status, targetStatus)) {
+    return res.status(400).json({ success: false, message: `امکان تغییر وضعیت از «${existing.status}» به «${targetStatus}» وجود ندارد.` });
+  }
+
+  // atomic: فقط اگر وضعیت فعلی هنوز همان است که خواندیم اعمال می‌شود (جلوگیری از تغییر هم‌زمان)
+  const update = {
+    $set: { status: targetStatus },
+    $push: { statusHistory: { status: targetStatus, at: new Date(), note: reason } }
+  };
+  if (targetStatus === 'cancelled') update.$set.adminNote = reason;
+
+  const withdrawal = await Withdrawal.findOneAndUpdate(
+    { _id: existing._id, status: existing.status },
+    update,
+    { new: true }
+  );
+  if (!withdrawal) {
+    return res.status(400).json({ success: false, message: 'وضعیت این درخواست هم‌زمان توسط جای دیگری تغییر کرده؛ صفحه را رفرش کنید.' });
+  }
+
+  // لغو هم مثل رد، وجه را برمی‌گرداند (چون از لحظه‌ی درخواست کسر شده بود)
+  if (shouldRefund(targetStatus)) {
+    const refunded = await User.findByIdAndUpdate(
+      withdrawal.user,
+      { $inc: { gramBalance: withdrawal.cryptoAmount } },
+      { new: true }
+    );
+    if (refunded) {
+      recordLedger({
+        user: refunded._id,
+        type: 'admin_adjust',
+        currency: 'gram',
+        amount: withdrawal.cryptoAmount,
+        description: 'بازگشت GRAM بابت لغو درخواست برداشت',
+        balanceAfter: refunded.gramBalance
+      }).catch(() => {});
+    }
+  }
+
+  res.json({ success: true, withdrawal: { ...withdrawal.toObject(), timeline: synthesizeHistory(withdrawal) } });
+
+  recordAdminLog({
+    actor: req.adminActor,
+    action: `withdrawal_status_${targetStatus}`,
+    targetType: 'withdrawal',
+    targetId: withdrawal._id,
+    details: reason ? `دلیل: ${reason}` : ''
+  });
+
+  const amountLabel = `${withdrawal.cryptoAmount} ${withdrawal.token}`;
+  const notifiedUser = await User.findById(withdrawal.user, 'telegramId language');
+  if (notifiedUser) {
+    const key = targetStatus === 'approved' ? 'withdrawalStatusApproved'
+      : targetStatus === 'processing' ? 'withdrawalStatusProcessing'
+      : 'withdrawalStatusCancelled';
+    const args = targetStatus === 'cancelled' ? [amountLabel, reason] : [amountLabel];
+    notifyUser(notifiedUser.telegramId, botText(key, notifiedUser.language, ...args)).catch(() => {});
   }
 });
 
@@ -683,7 +777,8 @@ router.get('/settings', async (req, res) => {
   res.json({
     success: true,
     settings: { ...settings.toObject(), paidSpinWeights: resolveWeights(settings.paidSpinWeights) },
-    spinModel: spinModel()
+    spinModel: spinModel(),
+    timezones: COMMON_TIMEZONES
   });
 });
 
@@ -696,7 +791,7 @@ router.put('/settings', async (req, res) => {
     streakBonusPoints: v => v >= 0,
     gramUsdPrice: v => v >= 0,
     spinCostPoints: v => v >= 1,
-    dailyReminderHourUtc: v => Number.isInteger(v) && v >= 0 && v <= 23
+    dailyReminderLocalHour: v => Number.isInteger(v) && v >= 0 && v <= 23
   };
 
   const changes = {};
@@ -713,8 +808,35 @@ router.put('/settings', async (req, res) => {
   if (Object.prototype.hasOwnProperty.call(body, 'dailyReminderEnabled')) {
     changes.dailyReminderEnabled = body.dailyReminderEnabled === true || body.dailyReminderEnabled === 'true';
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'dailyReminderTimezone')) {
+    const tz = String(body.dailyReminderTimezone || 'UTC');
+    if (!isValidTimezone(tz)) {
+      return res.status(400).json({ success: false, message: 'منطقه‌ی زمانی نامعتبر است.' });
+    }
+    changes.dailyReminderTimezone = tz;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'dailyReminderAudience')) {
+    if (!['all', 'active'].includes(body.dailyReminderAudience)) {
+      return res.status(400).json({ success: false, message: 'مخاطبان یادآوری نامعتبر است.' });
+    }
+    changes.dailyReminderAudience = body.dailyReminderAudience;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'dailyReminderMessage')) {
+    const msg = String(body.dailyReminderMessage || '').trim();
+    if (msg.length > 500) {
+      return res.status(400).json({ success: false, message: 'متن یادآوری نباید بیشتر از ۵۰۰ کاراکتر باشد.' });
+    }
+    changes.dailyReminderMessage = msg;
+  }
 
   const settings = await Settings.getGlobal();
+
+  // ساعت واقعی اجرا (UTC) از روی «ساعت محلی + منطقه‌ی زمانی» محاسبه می‌شود، نه مستقیم از ادمین
+  if (changes.dailyReminderLocalHour !== undefined || changes.dailyReminderTimezone !== undefined) {
+    const localHour = changes.dailyReminderLocalHour !== undefined ? changes.dailyReminderLocalHour : settings.dailyReminderLocalHour;
+    const timezone = changes.dailyReminderTimezone !== undefined ? changes.dailyReminderTimezone : settings.dailyReminderTimezone;
+    changes.dailyReminderHourUtc = targetUtcHour(localHour, timezone);
+  }
 
   if (Object.prototype.hasOwnProperty.call(body, 'paidSpinWeights')) {
     const weights = Array.isArray(body.paidSpinWeights) ? body.paidSpinWeights.map(Number) : null;
@@ -737,7 +859,8 @@ router.put('/settings', async (req, res) => {
   res.json({
     success: true,
     settings: { ...settings.toObject(), paidSpinWeights: resolveWeights(settings.paidSpinWeights) },
-    spinModel: spinModel()
+    spinModel: spinModel(),
+    timezones: COMMON_TIMEZONES
   });
 
   recordAdminLog({
@@ -746,6 +869,27 @@ router.put('/settings', async (req, res) => {
     targetType: 'settings',
     details: Object.keys(changes).join(', ')
   });
+});
+
+/**
+ * POST /api/admin/daily-reminder/test — ارسال پیام یادآوری (با متن فعلی تنظیمات) به یک
+ * آیدی عددی تلگرام مشخص، برای اینکه ادمین قبل از فعال کردن، پیام را واقعاً ببیند.
+ * این اندپوینت خودِ Settings.dailyReminderEnabled را روشن نمی‌کند و شمارنده‌ها را تغییر نمی‌دهد.
+ */
+router.post('/daily-reminder/test', async (req, res) => {
+  const telegramId = String((req.body && req.body.telegramId) || '').trim();
+  const lang = ['fa', 'ps', 'en'].includes(req.body && req.body.lang) ? req.body.lang : 'fa';
+  if (!telegramId || !/^\d{3,15}$/.test(telegramId)) {
+    return res.status(400).json({ success: false, message: 'آیدی عددی تلگرام معتبر وارد کنید (فقط عدد).' });
+  }
+  const ok = await sendTestReminder(telegramId, lang);
+  if (!ok) {
+    return res.status(400).json({
+      success: false,
+      message: 'ارسال ناموفق بود. مطمئن شوید این آیدی درست است و قبلاً /start را به ربات زده.'
+    });
+  }
+  res.json({ success: true, message: 'پیام آزمایشی ارسال شد.' });
 });
 
 /* -------------------- STATS (داشبورد آمار) -------------------- */

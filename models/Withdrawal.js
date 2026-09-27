@@ -15,11 +15,17 @@ const withdrawalSchema = new mongoose.Schema(
     verificationNote: { type: String, default: '' },
     status: {
       type: String,
-      enum: ['pending', 'rejected', 'paid'],
+      enum: ['pending', 'approved', 'processing', 'rejected', 'paid', 'cancelled'],
       default: 'pending'
     },
     adminNote: { type: String, default: '' },
-    paidAt: { type: Date, default: null }
+    paidAt: { type: Date, default: null },
+    // تاریخچه‌ی وضعیت برای Timeline؛ رکوردهای قدیمی این فیلد را ندارند — در پاسخ API
+    // با utils/withdrawalStatus.js#synthesizeHistory به‌صورت خودکار جبران می‌شود.
+    statusHistory: {
+      type: [{ status: String, at: { type: Date, default: Date.now }, note: { type: String, default: '' } }],
+      default: []
+    }
   },
   { timestamps: true }
 );

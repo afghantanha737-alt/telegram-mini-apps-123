@@ -16,7 +16,15 @@ const settingsSchema = new mongoose.Schema(
     paidSpinWeights: { type: [Number], default: () => [30, 20, 8, 2, 30, 10] },
     // یادآوری ورود روزانه: پیش‌فرض خاموش تا خودتان تصمیم بگیرید
     dailyReminderEnabled: { type: Boolean, default: false },
-    dailyReminderHourUtc: { type: Number, default: 15, min: 0, max: 23 }
+    dailyReminderHourUtc: { type: Number, default: 15, min: 0, max: 23 },
+    dailyReminderTimezone: { type: String, default: 'UTC' },
+    dailyReminderLocalHour: { type: Number, default: 15, min: 0, max: 23 }, // فقط برای نمایش در پنل؛ منبع واقعی زمان‌بندی همان dailyReminderHourUtc است
+    dailyReminderAudience: { type: String, enum: ['all', 'active'], default: 'all' },
+    dailyReminderMessage: { type: String, default: '' }, // خالی = متن پیش‌فرض چندزبانه از botMessages.js
+    dailyReminderLastRunAt: { type: Date, default: null },
+    dailyReminderLastSentCount: { type: Number, default: 0 },
+    dailyReminderLastStatus: { type: String, default: '' },
+    dailyReminderLastError: { type: String, default: '' }
   },
   { timestamps: true }
 );

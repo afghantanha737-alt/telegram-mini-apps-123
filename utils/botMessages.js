@@ -25,6 +25,26 @@ const MESSAGES = {
     ps: reason => `❌ ستاسو د ایستلو غوښتنه رد شوه او GRAM ستاسو حساب ته بیرته ورغلل.${reason ? `\nدلیل: ${reason}` : ''}`,
     en: reason => `❌ Your withdrawal request was rejected and the GRAM was refunded to your balance.${reason ? `\nReason: ${reason}` : ''}`
   },
+  withdrawalSubmitted: {
+    fa: (amount, token) => `💰 درخواست برداشت شما ثبت شد.\n\nمبلغ: ${amount} ${token}\nوضعیت: در انتظار بررسی\n\nدرخواست شما برای بررسی دستی ارسال شده است.`,
+    ps: (amount, token) => `💰 ستاسو د ایستلو غوښتنه ثبت شوه.\n\nمقدار: ${amount} ${token}\nوضعیت: د کتنې په تمه\n\nستاسو غوښتنه د لاسي کتنې لپاره لیږل شوې.`,
+    en: (amount, token) => `💰 Your withdrawal request was submitted.\n\nAmount: ${amount} ${token}\nStatus: Pending review\n\nYour request has been sent for manual review.`
+  },
+  withdrawalStatusApproved: {
+    fa: amount => `✅ درخواست برداشت شما تأیید شد.\n\nمبلغ: ${amount}\n\nدرخواست شما برای پرداخت تأیید شده است.`,
+    ps: amount => `✅ ستاسو د ایستلو غوښتنه تایید شوه.\n\nمقدار: ${amount}\n\nستاسو غوښتنه د تادیې لپاره تایید شوې ده.`,
+    en: amount => `✅ Your withdrawal request was approved.\n\nAmount: ${amount}\n\nYour request has been approved for payment.`
+  },
+  withdrawalStatusProcessing: {
+    fa: amount => `⏳ پرداخت برداشت شما در حال پردازش است.\n\nمبلغ: ${amount}\n\nپس از تکمیل پرداخت، وضعیت درخواست شما به‌روزرسانی خواهد شد.`,
+    ps: amount => `⏳ ستاسو د ایستلو تادیه پروسس کیږي.\n\nمقدار: ${amount}\n\nد تادیې له بشپړیدو وروسته، ستاسو د غوښتنې حالت به تازه شي.`,
+    en: amount => `⏳ Your withdrawal payment is being processed.\n\nAmount: ${amount}\n\nYour request status will update once payment is complete.`
+  },
+  withdrawalStatusCancelled: {
+    fa: (amount, reason) => `⚠️ درخواست برداشت شما لغو شد.\n\nمبلغ: ${amount}${reason ? `\nدلیل: ${reason}` : ''}\n\nGRAM به موجودی حسابت برگشت.`,
+    ps: (amount, reason) => `⚠️ ستاسو د ایستلو غوښتنه لغوه شوه.\n\nمقدار: ${amount}${reason ? `\nدلیل: ${reason}` : ''}\n\nGRAM ستاسو حساب ته بیرته ورغلل.`,
+    en: (amount, reason) => `⚠️ Your withdrawal request was cancelled.\n\nAmount: ${amount}${reason ? `\nReason: ${reason}` : ''}\n\nThe GRAM was refunded to your balance.`
+  },
   referralBonus: {
     fa: (name, points, balance) => `🎉 تبریک! ${name} تسک‌های لازم رو تکمیل کرد و ${points} پوینت پاداش دعوت به حسابت اضافه شد.\nموجودی فعلی: ${balance} پوینت.`,
     ps: (name, points, balance) => `🎉 مبارک شه! ${name} اړینې دندې بشپړې کړې او ${points} پوائنټ د بلنې ګټه ستاسو حساب ته اضافه شوه.\nاوسنی بیلانس: ${balance} پوائنټ.`,

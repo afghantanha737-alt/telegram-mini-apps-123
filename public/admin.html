@@ -43,6 +43,8 @@
   .badge.approved{background:rgba(34,197,94,.15);color:var(--success)}
   .badge.rejected{background:rgba(239,68,68,.15);color:var(--danger)}
   .badge.paid{background:rgba(34,197,94,.15);color:var(--success)}
+  .badge.processing{background:rgba(59,130,246,.15);color:#3b82f6}
+  .badge.cancelled{background:rgba(148,163,184,.18);color:var(--muted)}
   .empty{color:var(--muted);text-align:center;padding:24px;font-size:12px}
   #loginBox{max-width:360px;margin:60px auto}
   #msg{font-size:12px;margin-top:8px;min-height:16px}
@@ -187,9 +189,12 @@
           <b>درخواست‌های برداشت</b>
           <select id="withdrawFilter" onchange="loadWithdrawals()" style="width:auto;margin:0">
             <option value="">همه</option>
-            <option value="pending" selected>در انتظار</option>
-            <option value="rejected">رد شده</option>
+            <option value="pending" selected>در انتظار بررسی</option>
+            <option value="approved">تاییدشده</option>
+            <option value="processing">در حال پردازش</option>
             <option value="paid">پرداخت‌شده</option>
+            <option value="rejected">رد شده</option>
+            <option value="cancelled">لغوشده</option>
           </select>
         </div>
         <div id="withdrawalsList" style="margin-top:10px"></div>
@@ -312,6 +317,46 @@
           </div>
           <div id="spinPreview" class="small" style="line-height:1.9"></div>
           <button type="button" class="secondary" onclick="resetSpinWeights()" style="margin-top:8px">بازگشت به مقادیر پیش‌فرض</button>
+        </div>
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:4px 0 12px;background:var(--surface2)">
+          <b>⏰ Daily Check Reminder (یادآوری ورود روزانه)</b>
+          <p class="small" style="margin:8px 0">به کاربرانی که آن روز هنوز ورود روزانه نزده‌اند، یک‌بار در روز پیام یادآوری فرستاده می‌شود (به زبان خودشان، مگر متن سفارشی زیر را پر کنید). سرور هر ۱۰ دقیقه چک می‌کند و فقط در همان ساعتی که اینجا تنظیم می‌شود ارسال می‌شود؛ بعد از ذخیره، زمان‌بندی خودش از تنظیمات جدید استفاده می‌کند و نیازی به ری‌استارت نیست.</p>
+
+          <label style="display:flex;align-items:center;gap:8px;margin:10px 0 0">
+            <input type="checkbox" id="setReminderEnabled" style="width:auto">
+            <b>فعال باشد</b>
+          </label>
+
+          <label>منطقه‌ی زمانی</label>
+          <select id="setReminderTz" onchange="updateReminderUtcHint()"></select>
+
+          <label>ساعت ارسال (به وقت محلی همین منطقه‌ی زمانی)</label>
+          <input id="setReminderLocalHour" type="number" min="0" max="23" step="1" oninput="updateReminderUtcHint()">
+          <p class="small" id="reminderUtcHint" style="margin-top:4px"></p>
+
+          <label>مخاطبان</label>
+          <select id="setReminderAudience">
+            <option value="all">همه‌ی کاربران</option>
+            <option value="active">فقط کاربران فعال (فعالیت در ۳۰ روز اخیر)</option>
+          </select>
+
+          <label>متن سفارشی پیام (اختیاری — خالی = متن پیش‌فرض به زبان خود هر کاربر)</label>
+          <textarea id="setReminderMessage" rows="4" placeholder="🔔 وقت انجام Daily Check امروز شماست..." oninput="updateReminderPreview()"></textarea>
+          <div class="small" style="margin:6px 0 12px;padding:10px;border-radius:10px;background:var(--surface3,var(--surface))">
+            <b>پیش‌نمایش:</b><br>
+            <span id="reminderPreview" style="white-space:pre-wrap"></span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;align-items:end;margin-bottom:10px">
+            <div><label>آیدی عددی تلگرام برای تست (خودتان)</label><input id="reminderTestId" placeholder="مثلاً 123456789" style="margin:0"></div>
+            <button type="button" class="secondary" onclick="sendReminderTest()">ارسال Test</button>
+          </div>
+          <div id="reminderTestMsg" class="small" style="margin-bottom:10px"></div>
+
+          <div class="small" style="line-height:2">
+            <b>وضعیت آخرین اجرای سیستم:</b><br>
+            <span id="reminderStatusBox">هنوز اجرا نشده.</span>
+          </div>
         </div>
         <label>حداقل پوینت برای برداشت</label>
         <input id="setMinWithdraw" type="number">
@@ -716,12 +761,36 @@ async function deleteTask(id) {
 }
 
 /* ---------- WITHDRAWALS (نمایش بر اساس GRAM) ---------- */
-const STATUS_FA = { pending: "در انتظار", rejected: "رد شده", paid: "پرداخت‌شده" };
+const STATUS_FA = {
+  pending: "در انتظار بررسی", approved: "تاییدشده", processing: "در حال پردازش",
+  paid: "پرداخت‌شده", rejected: "رد شده", cancelled: "لغوشده"
+};
+// همان قوانین utils/withdrawalStatus.js#TRANSITIONS سمت سرور — چون این فایل داخل مرورگر اجرا می‌شود و require ندارد،
+// این نگاشت باید دستی با آن هماهنگ بماند (فقط برای تصمیم اینکه کدام دکمه نشان داده شود؛ اعتبارسنجی واقعی سمت سرور است).
+const STATUS_LIGHT_ACTIONS = {
+  pending: [["approved", "تاییدِ اولیه"], ["processing", "شروع پردازش"], ["cancelled", "لغو"]],
+  approved: [["processing", "شروع پردازش"], ["cancelled", "لغو"]],
+  processing: [["cancelled", "لغو"]],
+  paid: [], rejected: [], cancelled: []
+};
+const NON_TERMINAL = ["pending", "approved", "processing"];
 
 function truncateMiddle(str, head = 8, tail = 6) {
   const s = String(str || "");
   if (s.length <= head + tail + 3) return s;
   return `${s.slice(0, head)}…${s.slice(-tail)}`;
+}
+
+function renderWithdrawTimeline(timeline) {
+  if (!Array.isArray(timeline) || !timeline.length) return "";
+  return `<div style="margin:10px 0;padding:10px;border-inline-start:2px solid var(--line);display:flex;flex-direction:column;gap:8px">
+    ${timeline.map(step => `
+      <div style="font-size:11px">
+        <b>${escapeHtml(STATUS_FA[step.status] || step.status)}</b>
+        <span style="color:var(--muted)"> — ${new Date(step.at).toLocaleString("fa-IR")}</span>
+        ${step.note ? `<div style="color:var(--muted);margin-top:2px">دلیل: ${escapeHtml(step.note)}</div>` : ""}
+      </div>`).join("")}
+  </div>`;
 }
 
 async function loadWithdrawals() {
@@ -741,6 +810,7 @@ async function loadWithdrawals() {
           <b>${escapeHtml(w.user?.firstName || w.user?.username || "—")}</b>
           <span class="badge ${w.status}">${STATUS_FA[w.status] || w.status}</span>
         </div>
+        <div class="small" style="margin-bottom:2px">شناسه‌ی برداشت: <span style="font-family:monospace">${escapeHtml(w._id)}</span></div>
         <div class="small" style="margin-bottom:6px">مقدار: <b style="color:var(--text)">${w.cryptoAmount} ${escapeHtml(w.token || "GRAM")}</b> · شبکه: ${escapeHtml(w.network || "TON")}</div>
         <label class="small" style="margin-bottom:4px">آدرس مقصد (کیف‌پول کاربر)</label>
         <div style="display:flex;gap:6px;align-items:stretch;margin-bottom:8px">
@@ -758,7 +828,9 @@ async function loadWithdrawals() {
           ${w.fromAddress ? `<div class="small" style="margin-top:2px">فرستنده: <span style="font-family:monospace">${escapeHtml(truncateMiddle(w.fromAddress))}</span></div>` : ""}
         ` : ""}
 
-        ${w.status === "pending" ? `
+        <details style="margin-bottom:8px"><summary class="small" style="cursor:pointer">مشاهده‌ی Timeline</summary>${renderWithdrawTimeline(w.timeline)}</details>
+
+        ${NON_TERMINAL.includes(w.status) ? `
           <div id="wd-approve-form-${w._id}" class="hidden" style="margin-bottom:8px;padding:10px;border:1px solid var(--line);border-radius:10px">
             <label class="small" style="margin-bottom:4px">Transaction Hash (TxID) واقعی پرداخت</label>
             <input type="text" id="wd-txhash-${w._id}" placeholder="مثلاً a1b2c3..." style="margin:0 0 8px;direction:ltr;font-family:monospace;font-size:12px">
@@ -768,9 +840,12 @@ async function loadWithdrawals() {
               <button class="secondary" onclick="hideApproveForm('${w._id}')">انصراف</button>
             </div>
           </div>
-          <div class="row">
-            <button class="success" onclick="showApproveForm('${w._id}')">تأیید (وارد کردن Hash)</button>
-            <button class="danger" onclick="withdrawReject('${w._id}')">رد</button>
+          <div class="row" style="flex-wrap:wrap;gap:6px">
+            <button class="success" onclick="showApproveForm('${w._id}')">پرداخت نهایی (وارد کردن Hash)</button>
+            ${(STATUS_LIGHT_ACTIONS[w.status] || []).map(([target, label]) =>
+              `<button class="${target === "cancelled" ? "danger" : "secondary"}" onclick="withdrawSetStatus('${w._id}','${target}')">${label}</button>`
+            ).join("")}
+            ${w.status === "pending" ? `<button class="danger" onclick="withdrawReject('${w._id}')">رد</button>` : ""}
           </div>
         ` : ""}
       </div>
@@ -819,10 +894,34 @@ async function submitApprove(id, forceManualConfirm = false) {
   }
 }
 
+// رد کردن همیشه دلیل می‌خواهد (هم اینجا هم سمت سرور چک می‌شود)
 async function withdrawReject(id) {
+  const reason = prompt("دلیل رد این درخواست را بنویسید (الزامی):");
+  if (reason === null) return; // انصراف از prompt
+  const trimmed = reason.trim();
+  if (!trimmed) { showMsg("برای رد درخواست، دلیل الزامی است.", "error"); return; }
   try {
-    await api(`/api/admin/withdrawals/${id}/reject`, { method: "POST", body: JSON.stringify({}) });
+    await api(`/api/admin/withdrawals/${id}/reject`, { method: "POST", body: JSON.stringify({ note: trimmed }) });
     showMsg("درخواست رد شد.", "success");
+    loadWithdrawals();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+// تغییر وضعیت «نمایشی» (approved/processing/cancelled) — پولی جابه‌جا نمی‌کند مگر cancelled (بازگشت وجه)
+async function withdrawSetStatus(id, target) {
+  let note = "";
+  if (target === "cancelled") {
+    const reason = prompt("دلیل لغو این درخواست را بنویسید (الزامی):");
+    if (reason === null) return;
+    note = reason.trim();
+    if (!note) { showMsg("برای لغو درخواست، دلیل الزامی است.", "error"); return; }
+    if (!confirm("با لغو این درخواست، GRAM به موجودی کاربر برمی‌گردد. ادامه می‌دهید؟")) return;
+  }
+  try {
+    await api(`/api/admin/withdrawals/${id}/status`, { method: "POST", body: JSON.stringify({ status: target, note }) });
+    showMsg("وضعیت به‌روزرسانی شد.", "success");
     loadWithdrawals();
   } catch (error) {
     showMsg(error.message, "error");
@@ -1021,13 +1120,64 @@ async function loadTaskFormSettings() {
   } catch (error) { /* پیش‌نمایش بدون این مقدارها هم به‌صورت "نامشخص" کار می‌کند */ }
 }
 
+let reminderTimezones = [];
+const REMINDER_STATUS_FA = { ok: 'موفق ✅', error: 'خطا ❌', '': 'هنوز اجرا نشده' };
+
+function updateReminderPreview() {
+  const custom = document.getElementById("setReminderMessage").value.trim();
+  document.getElementById("reminderPreview").textContent =
+    custom || "🔔 Daily Check Reminder\n\nوقت انجام Daily Check امروز شماست.\nوارد حساب خود شوید و Daily Check امروز را انجام دهید.";
+}
+
+function updateReminderUtcHint() {
+  const tz = document.getElementById("setReminderTz").value;
+  const hour = Number(document.getElementById("setReminderLocalHour").value) || 0;
+  const box = document.getElementById("reminderUtcHint");
+  if (tz === "UTC") { box.textContent = ""; return; }
+  // فقط یک تخمین نمایشی برای ادمین؛ محاسبه‌ی دقیق و واقعی سمت سرور هنگام ذخیره انجام می‌شود
+  box.textContent = `این تقریباً معادل ساعت ${hour}:۰۰ در «${(reminderTimezones.find(z => z.id === tz) || {}).label || tz}» است.`;
+}
+
+async function sendReminderTest() {
+  const telegramId = document.getElementById("reminderTestId").value.trim();
+  const box = document.getElementById("reminderTestMsg");
+  if (!telegramId) { box.innerHTML = '<span style="color:var(--danger)">آیدی عددی تلگرام را وارد کنید.</span>'; return; }
+  box.textContent = "در حال ارسال...";
+  try {
+    await api("/api/admin/daily-reminder/test", { method: "POST", body: JSON.stringify({ telegramId }) });
+    box.innerHTML = '<span style="color:var(--success)">✅ ارسال شد — تلگرامت را چک کن.</span>';
+  } catch (error) {
+    box.innerHTML = `<span style="color:var(--danger)">${escapeHtml(error.message)}</span>`;
+  }
+}
+
+function renderReminderStatus(s) {
+  const box = document.getElementById("reminderStatusBox");
+  if (!s.dailyReminderLastRunAt) { box.textContent = "هنوز اجرا نشده."; return; }
+  const when = new Date(s.dailyReminderLastRunAt).toLocaleString("fa-IR");
+  const statusLabel = REMINDER_STATUS_FA[s.dailyReminderLastStatus] || s.dailyReminderLastStatus;
+  box.innerHTML = `آخرین اجرا: ${when}<br>وضعیت: ${statusLabel}<br>تعداد کاربرانی که پیام گرفتند: <b>${s.dailyReminderLastSentCount ?? 0}</b>` +
+    (s.dailyReminderLastError ? `<br><span style="color:var(--danger)">خطا: ${escapeHtml(s.dailyReminderLastError)}</span>` : "");
+}
+
 async function loadSettings() {
   try {
     const data = await api("/api/admin/settings");
     const s = data.settings || {};
+    reminderTimezones = data.timezones || [];
+    document.getElementById("setReminderTz").innerHTML = reminderTimezones
+      .map(z => `<option value="${escapeHtml(z.id)}">${escapeHtml(z.label)}</option>`).join("");
     document.getElementById("setRate").value = s.rate ?? "";
     document.getElementById("setGramUsd").value = s.gramUsdPrice ?? 0;
     document.getElementById("setSpinCost").value = s.spinCostPoints ?? 30;
+    document.getElementById("setReminderEnabled").checked = !!s.dailyReminderEnabled;
+    document.getElementById("setReminderTz").value = s.dailyReminderTimezone || "UTC";
+    document.getElementById("setReminderLocalHour").value = s.dailyReminderLocalHour ?? 15;
+    document.getElementById("setReminderAudience").value = s.dailyReminderAudience || "all";
+    document.getElementById("setReminderMessage").value = s.dailyReminderMessage || "";
+    updateReminderPreview();
+    updateReminderUtcHint();
+    renderReminderStatus(s);
     spinModel = data.spinModel || spinModel;
     (s.paidSpinWeights || spinModel.defaultWeights || []).forEach((w, i) => {
       const el = document.getElementById("setW" + i);
@@ -1047,17 +1197,24 @@ async function saveSettings() {
     rate: Number(document.getElementById("setRate").value),
     gramUsdPrice: Number(document.getElementById("setGramUsd").value) || 0,
     spinCostPoints: Number(document.getElementById("setSpinCost").value) || 30,
+    dailyReminderEnabled: document.getElementById("setReminderEnabled").checked,
+    dailyReminderTimezone: document.getElementById("setReminderTz").value,
+    dailyReminderLocalHour: Number(document.getElementById("setReminderLocalHour").value) || 0,
+    dailyReminderAudience: document.getElementById("setReminderAudience").value,
+    dailyReminderMessage: document.getElementById("setReminderMessage").value.trim(),
     paidSpinWeights: [0, 1, 2, 3, 4, 5].map(i => Number(document.getElementById("setW" + i).value)),
     minWithdrawPoints: Number(document.getElementById("setMinWithdraw").value),
     dailyCheckInPoints: Number(document.getElementById("setDaily").value),
     streakBonusPoints: Number(document.getElementById("setStreakBonus").value)
   };
   try {
-    await api("/api/admin/settings", { method: "PUT", body: JSON.stringify(body) });
+    const data = await api("/api/admin/settings", { method: "PUT", body: JSON.stringify(body) });
+    renderReminderStatus(data.settings || {});
     showMsg("تنظیمات ذخیره شد.", "success");
   } catch (error) {
     showMsg(error.message, "error");
   }
+
 }
 
 /* ---------- UTIL ---------- */

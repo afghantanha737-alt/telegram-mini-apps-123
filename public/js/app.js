@@ -1425,7 +1425,8 @@ async function loadWalletHistory() {
 }
 
 const WITHDRAW_STATUS_UI = {
-  pending: { cls: "warning" }, rejected: { cls: "danger" }, paid: { cls: "success" }
+  pending: { cls: "warning" }, approved: { cls: "info" }, processing: { cls: "info" },
+  paid: { cls: "success" }, rejected: { cls: "danger" }, cancelled: { cls: "danger" }
 };
 
 let publicHistory = [];
@@ -1515,7 +1516,7 @@ function renderWallet() {
     list.innerHTML = walletHistory.map(item => {
       const statusInfo = WITHDRAW_STATUS_UI[item.status] || { cls: "" };
       return `
-        <div class="historyItem">
+        <button type="button" class="historyItem historyItemBtn" onclick="openWithdrawalDetail('${item._id}')">
           <div>
             <div class="historyAmount">${formatNumber(item.cryptoAmount, 6)} ${escapeHTML(item.token || "GRAM")}</div>
             <div class="historyMeta">${timeAgo(item.createdAt)}</div>
@@ -1526,7 +1527,7 @@ function renderWallet() {
               </div>` : ""}
           </div>
           <div class="badge ${statusInfo.cls}">${t(`withdraw_status_${item.status}`)}</div>
-        </div>`;
+        </button>`;
     }).join("");
   });
 
@@ -1552,6 +1553,78 @@ function renderWallet() {
     `).join("");
   });
 }
+
+
+/* ================= WITHDRAWAL DETAIL (Timeline) =================
+   Overlay مثل withdraw/exchange پویا ساخته می‌شود (چیزی به index.html اضافه نشده) */
+function ensureWithdrawalDetailOverlay() {
+  let el = document.getElementById("withdrawalDetailOverlay");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "withdrawalDetailOverlay";
+    el.className = "overlay";
+    el.style.display = "none";
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function closeWithdrawalDetail() {
+  const el = document.getElementById("withdrawalDetailOverlay");
+  if (el) el.style.display = "none";
+}
+window.closeWithdrawalDetail = closeWithdrawalDetail;
+
+async function openWithdrawalDetail(id) {
+  const el = ensureWithdrawalDetailOverlay();
+  el.style.display = "flex";
+  el.innerHTML = `<div class="modalBox withdrawBox" role="dialog" aria-modal="true"><div class="loading" style="height:120px"></div></div>`;
+
+  try {
+    const data = await api(`/api/points/withdrawals/${id}`);
+    const w = data.withdrawal;
+    const statusInfo = WITHDRAW_STATUS_UI[w.status] || { cls: "" };
+    const showReason = (w.status === "rejected" || w.status === "cancelled") && w.adminNote;
+
+    el.innerHTML = `
+      <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="wdDetailTitle">
+        <div class="modalHeader">
+          <div>
+            <span class="modalEyebrow">${t("withdrawal_detail_eyebrow")}</span>
+            <h3 id="wdDetailTitle">${t("withdrawal_detail_title")}</h3>
+          </div>
+          <button class="closeBtn" type="button" onclick="closeWithdrawalDetail()" aria-label="${t("common_close")}">×</button>
+        </div>
+        <div class="withdrawBody">
+          <div class="flexBetween" style="margin-bottom:12px">
+            <span class="historyAmount" style="font-size:20px">${formatNumber(w.cryptoAmount, 6)} ${escapeHTML(w.token || "GRAM")}</span>
+            <span class="badge ${statusInfo.cls}">${t(`withdraw_status_${w.status}`)}</span>
+          </div>
+          <div class="publicTxRow"><span>${t("history_to_label")}</span><span>${escapeHTML(w.address)}</span></div>
+          ${w.txHash ? `<div class="publicTxRow"><span>${t("history_txid_label")}</span><span>${escapeHTML(truncateMiddle(w.txHash))}</span></div>` : ""}
+          ${w.txHash ? `<a class="explorerLink" href="#" onclick="openTaskLinkOnly('https://tonviewer.com/transaction/${encodeURIComponent(w.txHash)}');return false;">🔗 ${t("history_view_explorer")}</a>` : ""}
+          ${showReason ? `<p class="captchaErr" style="margin-top:10px">${t("withdrawal_detail_reason_label")}: ${escapeHTML(w.adminNote)}</p>` : ""}
+
+          <div class="fieldLabel" style="margin-top:16px">${t("withdrawal_detail_timeline_title")}</div>
+          <div class="wdTimeline">
+            ${(w.timeline || []).map(step => `
+              <div class="wdStep">
+                <div class="wdStepDot"></div>
+                <div>
+                  <div class="wdStepLabel">${t(`withdraw_status_${step.status}`)}</div>
+                  <div class="wdStepDate">${new Date(step.at).toLocaleString(state.language === "en" ? "en-US" : "fa-IR")}</div>
+                  ${step.note ? `<div class="wdStepNote">${escapeHTML(step.note)}</div>` : ""}
+                </div>
+              </div>`).join("")}
+          </div>
+        </div>
+      </div>`;
+  } catch (error) {
+    el.innerHTML = `<div class="modalBox withdrawBox"><div class="emptyState"><div class="emptyDesc">${escapeHTML(error.message)}</div></div>
+      <button type="button" class="secondaryBtn" style="width:100%;margin-top:12px" onclick="closeWithdrawalDetail()">${t("common_close")}</button></div>`;
+  }
+}
+window.openWithdrawalDetail = openWithdrawalDetail;
 
 /* ================= PROFILE ================= */
 function copyReferralLink() {

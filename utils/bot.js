@@ -118,4 +118,30 @@ async function broadcastToActiveUsers(User, textOrFn) {
   }
 }
 
-module.exports = { bot, isChatMember, checkChatMembership, notifyUser, broadcastToActiveUsers };
+/**
+ * مثل broadcastToActiveUsers ولی برای «کپی کردن» یک پیام دلخواه (متن، عکس، پست فوروادشده از
+ * کانال و ...) به همه‌ی کاربران — برای دکمه‌ی «ارسال پیام همگانی» در دستور /admin ربات.
+ * از copyMessage استفاده می‌شود (نه forwardMessage) تا برچسب «Forwarded from» روی پیام کاربر نیفتد.
+ * برمی‌گرداند: تعداد کاربرانی که با موفقیت پیام گرفتند.
+ */
+async function broadcastCopyToActiveUsers(User, fromChatId, messageId) {
+  if (!bot) return 0;
+  const users = await User.find({ isBanned: false }, 'telegramId');
+  const BATCH_SIZE = 20;
+  const DELAY_MS = 1100;
+  let sent = 0;
+
+  for (let i = 0; i < users.length; i += BATCH_SIZE) {
+    const batch = users.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(u => bot.copyMessage(u.telegramId, fromChatId, messageId))
+    );
+    sent += results.filter(r => r.status === 'fulfilled').length;
+    if (i + BATCH_SIZE < users.length) {
+      await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+    }
+  }
+  return sent;
+}
+
+module.exports = { bot, isChatMember, checkChatMembership, notifyUser, broadcastToActiveUsers, broadcastCopyToActiveUsers };

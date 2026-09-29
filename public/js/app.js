@@ -1852,7 +1852,7 @@ function renderReferralRewardTasks() {
     }
 
     return `
-      <div class="taskItem referralTaskItem">
+      <div class="taskItem referralTaskItem" style="margin-bottom:12px">
         <div class="taskIcon">👥</div>
         <div class="taskBody">
           <div class="taskTitle">${t("referral_task_invite", { n: formatPoints(task.requiredInvites) })}</div>
@@ -1866,7 +1866,9 @@ function renderReferralRewardTasks() {
       </div>`;
   }).join("");
 
-  return `<div class="taskList referralTaskList">${items}</div>`;
+  // هر آیتم مستقیماً و بدون wrapper مشترک برگردانده می‌شود تا هر تسک
+  // دقیقاً یک کارت مستقل، مشابه تسک‌های کانال، داشته باشد.
+  return items;
 }
 
 function renderProfileReferral() {

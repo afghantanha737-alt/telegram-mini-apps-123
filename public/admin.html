@@ -135,6 +135,10 @@
         <p class="small">اگه پر کنی، فقط همین تعداد نفر اول که تسک رو با موفقیت انجام بدن پاداش می‌گیرن؛ بعدش تسک خودکار غیرفعال می‌شه.</p>
         <label>تاریخ پایان (اختیاری)</label>
         <input id="taskExpiresAt" type="date">
+        <label style="display:flex;align-items:center;gap:8px;margin:8px 0 12px">
+          <input type="checkbox" id="taskSpecialOfDay" style="width:auto">
+          <b>⭐ Special Task of the Day</b>
+        </label>
 
         <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
           <label style="display:flex;align-items:center;gap:8px;margin:0">
@@ -364,6 +368,20 @@
         <input id="setDaily" type="number">
         <label>پاداش اضافه به ازای هر روز استریک</label>
         <input id="setStreakBonus" type="number">
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
+          <b>🏆 Weekly Leaderboard</b>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+            <input type="checkbox" id="setWeeklyLeaderboardEnabled" style="width:auto">
+            <span>فعال باشد</span>
+          </label>
+          <p class="small">امتیازها هر دوشنبه بر اساس UTC از صفر محاسبه می‌شوند. جوایز زیر برای رتبه‌های اول تا سوم است و می‌تواند از بودجه‌ی تبلیغ‌دهنده تأمین شود.</p>
+          <label>جوایز رتبه‌های ۱، ۲ و ۳ (پوینت)</label>
+          <div class="row">
+            <input id="setWeeklyPrize1" type="number" min="0" step="1" placeholder="رتبه ۱">
+            <input id="setWeeklyPrize2" type="number" min="0" step="1" placeholder="رتبه ۲">
+            <input id="setWeeklyPrize3" type="number" min="0" step="1" placeholder="رتبه ۳">
+          </div>
+        </div>
         <button onclick="saveSettings()">ذخیره تنظیمات</button>
       </div>
     </div>
@@ -675,6 +693,7 @@ function readTaskForm() {
     reward: Number(document.getElementById("taskReward").value),
     maxCompletions: maxCompletionsRaw ? Number(maxCompletionsRaw) : null,
     expiresAt: document.getElementById("taskExpiresAt").value || null,
+    isSpecialOfDay: document.getElementById("taskSpecialOfDay").checked,
     isSponsored: document.getElementById("taskSponsored").checked,
     sponsorName: document.getElementById("sponsorName").value.trim(),
     sponsorPriceUsd: Number(document.getElementById("sponsorPrice").value) || 0,
@@ -687,6 +706,7 @@ function resetTaskForm() {
   ["taskTitle","taskDesc","taskUrl","taskReward","taskChatId","taskMaxCompletions","taskExpiresAt","sponsorName","sponsorPrice","sponsorBudget"]
     .forEach(id => { document.getElementById(id).value = ""; });
   document.getElementById("taskSponsored").checked = false;
+  document.getElementById("taskSpecialOfDay").checked = false;
   toggleSponsorFields();
   document.getElementById("chatIdTestResult").textContent = "";
   document.getElementById("taskFormTitle").textContent = "افزودن تسک تلگرامی جدید";
@@ -728,6 +748,7 @@ function editTask(id) {
     document.getElementById("taskReward").value = t.reward ?? "";
     document.getElementById("taskMaxCompletions").value = t.isSponsored ? "" : (t.maxCompletions ?? "");
     document.getElementById("taskExpiresAt").value = t.expiresAt ? new Date(t.expiresAt).toISOString().slice(0, 10) : "";
+    document.getElementById("taskSpecialOfDay").checked = !!t.isSpecialOfDay;
     document.getElementById("taskSponsored").checked = !!t.isSponsored;
     document.getElementById("sponsorName").value = t.sponsorName || "";
     document.getElementById("sponsorPrice").value = t.sponsorPriceUsd || "";
@@ -1187,6 +1208,8 @@ async function loadSettings() {
     document.getElementById("setMinWithdraw").value = s.minWithdrawPoints ?? "";
     document.getElementById("setDaily").value = s.dailyCheckInPoints ?? "";
     document.getElementById("setStreakBonus").value = s.streakBonusPoints ?? "";
+    document.getElementById("setWeeklyLeaderboardEnabled").checked = s.weeklyLeaderboardEnabled !== false;
+    [0, 1, 2].forEach(i => { document.getElementById(`setWeeklyPrize${i + 1}`).value = s.weeklyLeaderboardPrizes?.[i] ?? [500, 250, 100][i]; });
   } catch (error) {
     showMsg(error.message, "error");
   }
@@ -1205,7 +1228,9 @@ async function saveSettings() {
     paidSpinWeights: [0, 1, 2, 3, 4, 5].map(i => Number(document.getElementById("setW" + i).value)),
     minWithdrawPoints: Number(document.getElementById("setMinWithdraw").value),
     dailyCheckInPoints: Number(document.getElementById("setDaily").value),
-    streakBonusPoints: Number(document.getElementById("setStreakBonus").value)
+    streakBonusPoints: Number(document.getElementById("setStreakBonus").value),
+    weeklyLeaderboardEnabled: document.getElementById("setWeeklyLeaderboardEnabled").checked,
+    weeklyLeaderboardPrizes: [1, 2, 3].map(i => Number(document.getElementById(`setWeeklyPrize${i}`).value) || 0)
   };
   try {
     const data = await api("/api/admin/settings", { method: "PUT", body: JSON.stringify(body) });

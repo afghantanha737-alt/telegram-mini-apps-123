@@ -1,5 +1,6 @@
 'use strict';
 const mongoose = require('mongoose');
+const referralRewardClaimSchema = require('./ReferralRewardClaim');
 
 const userSchema = new mongoose.Schema(
   {
@@ -19,8 +20,15 @@ const userSchema = new mongoose.Schema(
     referralCode: { type: String, required: true, unique: true, index: true },
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     invitedCount: { type: Number, default: 0, min: 0 },
+    // دعوت‌شده‌ای که حداقل یک تسک approved تکمیل کرده است
+    activeInvitedCount: { type: Number, default: 0, min: 0 },
+    // برای جلوگیری از افزایش دوباره activeInvitedCount در درخواست‌های هم‌زمان
+    activeReferralIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
     // پاداش رفرال فقط یک‌بار و فقط بعد از تکمیل حداقل تعداد تسک لازم داده می‌شود
     referralBonusAwarded: { type: Boolean, default: false },
+    // claimهای مرحله‌ای دعوت دوستان؛ شرط یکتا در findOneAndUpdate سمت API
+    // تضمین می‌کند هر مرحله فقط یک‌بار قابل دریافت باشد.
+    referralRewardClaims: { type: [referralRewardClaimSchema], default: [] },
 
     walletAddress: { type: String, default: '' },
     language: { type: String, enum: ['fa', 'ps', 'en'], default: 'fa' },

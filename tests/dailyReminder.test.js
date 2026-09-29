@@ -1,7 +1,7 @@
 'use strict';
 /** node tests/dailyReminder.test.js — منطق زمان‌بندی یادآوری ورود روزانه و متن‌های چندزبانه‌ی ربات */
 const assert = require('assert');
-const { shouldRunNow, utcDayKey } = require('../utils/dailyReminder');
+const { shouldRunNow, utcDayKey, streakAtRiskMessageFor } = require('../utils/dailyReminder');
 const { botText } = require('../utils/botMessages');
 
 // ---- shouldRunNow
@@ -36,5 +36,9 @@ console.log('PASS  botText: هر ۶ پیام در هر ۳ زبان موجود ا
 assert.strictEqual(botText('withdrawalRejected', 'xx', ''), botText('withdrawalRejected', 'fa', ''));
 assert.strictEqual(botText('withdrawalRejected', undefined, ''), botText('withdrawalRejected', 'fa', ''));
 console.log('PASS  botText: زبان نامعتبر/خالی به فارسی برمی‌گردد، نه کرش می‌کند');
+
+assert.ok(streakAtRiskMessageFor('fa').includes('استریک'));
+assert.ok(streakAtRiskMessageFor('en').includes('streak'));
+console.log('PASS  streakAtRiskMessageFor: پیام خطر استریک برای زبان‌ها');
 
 console.log('ALL PASS');

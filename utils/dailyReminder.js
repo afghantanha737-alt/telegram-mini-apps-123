@@ -21,6 +21,15 @@ function reminderMessageFor(settings, lang) {
   return custom || botText('dailyReminder', lang);
 }
 
+function streakAtRiskMessageFor(lang) {
+  const messages = {
+    fa: '⚠️ استریک شما در خطر است! امروز وارد شوید تا استریکتان حفظ شود.',
+    ps: '⚠️ ستاسو پرله‌پسې ورځې له خطر سره مخ دي! نن ننوځئ چې خپل سټریک وساتئ.',
+    en: '⚠️ Your streak is at risk! Check in today to keep it alive.'
+  };
+  return messages[lang] || messages.fa;
+}
+
 /**
  * یادآوری ورود روزانه: فقط داخل «ساعت تنظیم‌شده‌ی UTC» به کاربرانی که امروز
  * هنوز ورود روزانه نزده‌اند و امروز قبلاً یادآوری نگرفته‌اند فرستاده می‌شود.
@@ -62,7 +71,7 @@ async function runDailyReminderSweep(now = new Date()) {
 
   let candidates;
   try {
-    candidates = await User.find(filter, '_id telegramId language').lean();
+    candidates = await User.find(filter, '_id telegramId language streak').lean();
   } catch (error) {
     await Settings.updateOne({}, {
       $set: { dailyReminderLastRunAt: now, dailyReminderLastStatus: 'error', dailyReminderLastError: String(error.message || error).slice(0, 300) }
@@ -90,7 +99,10 @@ async function runDailyReminderSweep(now = new Date()) {
   for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
     const batch = candidates.slice(i, i + BATCH_SIZE);
     const results = await Promise.allSettled(
-      batch.map(u => notifyUser(u.telegramId, reminderMessageFor(settings, u.language)))
+      batch.map(u => notifyUser(
+        u.telegramId,
+        Number(u.streak) >= 3 ? streakAtRiskMessageFor(u.language) : reminderMessageFor(settings, u.language)
+      ))
     );
     results.forEach(r => {
       if (r.status === 'fulfilled' && r.value) sent += 1;
@@ -121,4 +133,4 @@ async function sendTestReminder(telegramId, lang = 'fa') {
   return notifyUser(telegramId, reminderMessageFor(settings, lang));
 }
 
-module.exports = { runDailyReminderSweep, sendTestReminder, reminderMessageFor, utcDayKey, shouldRunNow };
+module.exports = { runDailyReminderSweep, sendTestReminder, reminderMessageFor, streakAtRiskMessageFor, utcDayKey, shouldRunNow };

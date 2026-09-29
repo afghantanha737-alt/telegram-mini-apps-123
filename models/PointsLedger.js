@@ -35,5 +35,6 @@ const pointsLedgerSchema = new mongoose.Schema(
 );
 
 pointsLedgerSchema.index({ user: 1, createdAt: -1 });
+pointsLedgerSchema.index({ createdAt: 1, currency: 1, type: 1 });
 
 module.exports = mongoose.model('PointsLedger', pointsLedgerSchema);

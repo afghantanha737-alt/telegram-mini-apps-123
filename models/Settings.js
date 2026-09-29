@@ -24,7 +24,10 @@ const settingsSchema = new mongoose.Schema(
     dailyReminderLastRunAt: { type: Date, default: null },
     dailyReminderLastSentCount: { type: Number, default: 0 },
     dailyReminderLastStatus: { type: String, default: '' },
-    dailyReminderLastError: { type: String, default: '' }
+    dailyReminderLastError: { type: String, default: '' },
+    weeklyLeaderboardEnabled: { type: Boolean, default: true },
+    // جایزه‌ی پوینتی رتبه‌های ۱، ۲ و ۳؛ منبع مالی آن می‌تواند تبلیغ‌دهنده باشد.
+    weeklyLeaderboardPrizes: { type: [Number], default: () => [500, 250, 100] }
   },
   { timestamps: true }
 );

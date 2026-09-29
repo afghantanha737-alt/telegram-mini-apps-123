@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const User = require('../models/User');
+const { hashNetworkIdentifier, assessReferralRisk } = require('./referralRisk');
 
 /**
  * initData ارسالی از Telegram WebApp را طبق مستندات رسمی تلگرام
@@ -53,7 +54,7 @@ function generateReferralCode(telegramId) {
   return `R${telegramId}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
 }
 
-async function getOrCreateUser(tgUser, startParam) {
+async function getOrCreateUser(tgUser, startParam, requestIp = '') {
   if (!tgUser || !tgUser.id) return null;
   const telegramId = String(tgUser.id);
 
@@ -61,13 +62,16 @@ async function getOrCreateUser(tgUser, startParam) {
 
   if (!dbUser) {
     let referredBy = null;
+    const signupIpHash = hashNetworkIdentifier(requestIp);
+    let referralRisk = { score: 0, flags: [] };
 
     if (startParam) {
       const code = String(startParam).replace(/^ref_/, '').trim();
       if (code) {
-        const referrer = await User.findOne({ referralCode: code });
-        if (referrer && String(referrer.telegramId) !== telegramId) {
+        const referrer = await User.findOne({ referralCode: code }).select('_id telegramId isBanned signupIpHash');
+        if (referrer && String(referrer.telegramId) !== telegramId && !referrer.isBanned) {
           referredBy = referrer._id;
+          referralRisk = assessReferralRisk({ referrer, signupIpHash });
         }
       }
     }
@@ -79,7 +83,10 @@ async function getOrCreateUser(tgUser, startParam) {
       lastName: tgUser.last_name || '',
       photoUrl: tgUser.photo_url || '',
       referralCode: generateReferralCode(telegramId),
-      referredBy
+      referredBy,
+      signupIpHash,
+      referralRiskScore: referralRisk.score,
+      referralRiskFlags: referralRisk.flags
     });
 
     // نکته مهم: اینجا هیچ پوینتی به دعوت‌کننده داده نمی‌شود.
@@ -123,7 +130,7 @@ function requireTelegramAuth(botToken) {
         return res.status(401).json({ success: false, message: 'احراز هویت تلگرام نامعتبر است.' });
       }
 
-      const dbUser = await getOrCreateUser(verified.user, verified.startParam);
+      const dbUser = await getOrCreateUser(verified.user, verified.startParam, req.ip);
       if (!dbUser) {
         return res.status(401).json({ success: false, message: 'کاربر شناسایی نشد.' });
       }

@@ -52,6 +52,8 @@ app.use(express.urlencoded({ extended: false, limit: '150kb' }));
 const rateBuckets = new Map();
 const RATE_WINDOW_MS = 60 * 1000;
 const RATE_MAX_REQUESTS = 120;
+const adminRateBuckets = new Map();
+const ADMIN_RATE_MAX_REQUESTS = 45;
 
 app.use('/api', (req, res, next) => {
   const key = req.ip || 'unknown';
@@ -71,10 +73,27 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// پنل ادمین عملیات مالی و مدیریتی دارد؛ محدودیت جداگانه جلوی brute-force کلید و فشار ناگهانی را می‌گیرد.
+app.use('/api/admin', (req, res, next) => {
+  const key = req.ip || 'unknown';
+  const now = Date.now();
+  const bucket = adminRateBuckets.get(key) || { count: 0, resetAt: now + RATE_WINDOW_MS };
+  if (now > bucket.resetAt) { bucket.count = 0; bucket.resetAt = now + RATE_WINDOW_MS; }
+  bucket.count += 1;
+  adminRateBuckets.set(key, bucket);
+  if (bucket.count > ADMIN_RATE_MAX_REQUESTS) {
+    return res.status(429).json({ success: false, message: 'تعداد درخواست‌های پنل زیاد است. یک دقیقه بعد دوباره تلاش کنید.' });
+  }
+  next();
+});
+
 setInterval(() => {
   const now = Date.now();
   for (const [key, bucket] of rateBuckets.entries()) {
     if (now > bucket.resetAt + RATE_WINDOW_MS) rateBuckets.delete(key);
+  }
+  for (const [key, bucket] of adminRateBuckets.entries()) {
+    if (now > bucket.resetAt + RATE_WINDOW_MS) adminRateBuckets.delete(key);
   }
 }, 5 * 60 * 1000);
 

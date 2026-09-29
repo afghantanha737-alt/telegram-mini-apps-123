@@ -1840,46 +1840,38 @@ function renderProfileAbout() {
 function renderReferralRewardTasks() {
   if (!state.referralTasks.length) return "";
 
-  const cards = state.referralTasks.map(task => {
+  const items = state.referralTasks.map(task => {
     const progress = Math.min(100, Math.round((task.invitedCount / task.requiredInvites) * 100));
-    let status;
-    let action = "";
+    let action;
     if (task.status === "claimed") {
-      status = `<span class="badge success">${t("referral_task_claimed")}</span>`;
+      action = `<button class="taskAction done" type="button" disabled>${t("referral_task_claimed")}</button>`;
     } else if (task.status === "claimable") {
-      status = `<span class="badge gold">${t("referral_task_ready")}</span>`;
-      action = `<button class="secondaryBtn" type="button" data-referral-claim="${escapeHTML(task.id)}" onclick="claimReferralTask('${escapeHTML(task.id)}')">${t("referral_claim_button")}</button>`;
+      action = `<button class="taskAction" type="button" data-referral-claim="${escapeHTML(task.id)}" onclick="claimReferralTask('${escapeHTML(task.id)}')">${t("referral_claim_button")}</button>`;
     } else {
-      status = `<span class="badge warning">${t("referral_task_remaining", { n: formatPoints(task.remaining) })}</span>`;
+      action = `<button class="taskAction pending" type="button" disabled>${t("referral_task_remaining", { n: formatPoints(task.remaining) })}</button>`;
     }
 
     return `
-      <div class="historyItem" style="display:block">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-          <div>
-            <div class="historyAmount">${t("referral_task_invite", { n: formatPoints(task.requiredInvites) })}</div>
-            <div class="historyMeta">+${formatPoints(task.rewardPoints)} ${t("points_unit")}</div>
+      <div class="taskItem referralTaskItem">
+        <div class="taskIcon">👥</div>
+        <div class="taskBody">
+          <div class="taskTitle">${t("referral_task_invite", { n: formatPoints(task.requiredInvites) })}</div>
+          <div class="taskDesc">${t("referral_task_progress", { current: formatPoints(task.invitedCount), total: formatPoints(task.requiredInvites) })}</div>
+          <div class="taskReward">+${formatPoints(task.rewardPoints)} ${t("points_unit")}</div>
+          <div style="height:6px;background:var(--surface-3);border-radius:999px;overflow:hidden;margin-top:8px">
+            <div style="height:100%;width:${progress}%;background:linear-gradient(90deg,var(--primary),var(--primary-2));border-radius:999px;transition:width .3s ease"></div>
           </div>
-          ${status}
         </div>
-        <div style="height:7px;background:var(--surface-3);border-radius:999px;overflow:hidden;margin:10px 0 8px">
-          <div style="height:100%;width:${progress}%;background:linear-gradient(90deg,var(--primary),var(--primary-2));border-radius:999px;transition:width .3s ease"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-          <span class="historyMeta">${task.status === "claimed" ? t("referral_task_completed") : t("referral_task_progress", { current: formatPoints(task.invitedCount), total: formatPoints(task.requiredInvites) })}</span>
-          ${action}
-        </div>
+        ${action}
       </div>`;
   }).join("");
 
   return `
-    <div class="card">
-      <div class="cardHeader">
-        <div class="cardTitle">${t("referral_tasks_title")}</div>
-        <div class="badge">${t("referral_tasks_badge")}</div>
-      </div>
-      <div class="stackList">${cards}</div>
-    </div>`;
+    <div class="sectionHeader referralTasksHeader">
+      <h2 class="sectionTitle">${t("referral_tasks_title")}</h2>
+      <span class="tbPill tbPillPurple">${t("referral_tasks_badge")}</span>
+    </div>
+    <div class="taskList referralTaskList">${items}</div>`;
 }
 
 function renderProfileReferral() {

@@ -29,6 +29,7 @@ for (const lang of ['fa', 'ps', 'en']) {
   assert.ok(botText('withdrawalRejected', lang, 'too fast').includes('too fast'), `withdrawalRejected/${lang}`);
   assert.ok(botText('referralBonus', lang, 'Sara', 50, 200).includes('Sara'), `referralBonus/${lang}`);
   assert.ok(botText('dailyReminder', lang).length > 5, `dailyReminder/${lang}`);
+  assert.ok(botText('leaderboardReward', lang, 1, 500, '2026-09-28').includes('500'), `leaderboardReward/${lang}`);
 }
 console.log('PASS  botText: هر ۶ پیام در هر ۳ زبان موجود است و متغیرها را درست جا می‌گذارد');
 

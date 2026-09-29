@@ -237,6 +237,10 @@
             <option value="points">بیشترین پوینت</option>
             <option value="invited">بیشترین دعوت</option>
           </select>
+          <select id="userRiskFilter" onchange="loadUsers()" style="flex:1;min-width:120px;margin:0">
+            <option value="">همه Referralها</option>
+            <option value="flagged">Referral پرریسک</option>
+          </select>
         </div>
         <div id="usersList" style="margin-top:10px"></div>
       </div>
@@ -407,8 +411,9 @@
 <script>
 "use strict";
 
-let ADMIN_KEY = localStorage.getItem("adminKey") || "";
-let ADMIN_NAME = localStorage.getItem("adminName") || "";
+let ADMIN_KEY = "";
+let ADMIN_SESSION = sessionStorage.getItem("adminSession") || "";
+let ADMIN_NAME = sessionStorage.getItem("adminName") || "";
 
 function showMsg(text, type) {
   const el = document.getElementById("msg");
@@ -422,8 +427,7 @@ async function api(path, options = {}) {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "x-admin-key": ADMIN_KEY,
-      "x-admin-name": ADMIN_NAME,
+      ...(ADMIN_SESSION ? { "x-admin-session": ADMIN_SESSION } : {}),
       ...(options.headers || {})
     }
   });
@@ -441,7 +445,7 @@ async function api(path, options = {}) {
 async function apiUpload(path, formData) {
   const res = await fetch(path, {
     method: "POST",
-    headers: { "x-admin-key": ADMIN_KEY, "x-admin-name": ADMIN_NAME },
+    headers: { "x-admin-session": ADMIN_SESSION },
     body: formData
   });
   let data = {};
@@ -457,9 +461,17 @@ async function login() {
   ADMIN_KEY = key;
   ADMIN_NAME = name;
   try {
-    await api("/api/admin/settings");
-    localStorage.setItem("adminKey", key);
-    localStorage.setItem("adminName", name);
+    const loginRes = await fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, name })
+    });
+    const loginData = await loginRes.json();
+    if (!loginRes.ok) throw new Error(loginData.message || "ورود ناموفق بود.");
+    ADMIN_SESSION = loginData.sessionToken;
+    ADMIN_NAME = name;
+    sessionStorage.setItem("adminSession", ADMIN_SESSION);
+    sessionStorage.setItem("adminName", name);
     document.getElementById("loginBox").classList.add("hidden");
     document.getElementById("panel").classList.remove("hidden");
     switchTab("stats");
@@ -469,8 +481,11 @@ async function login() {
 }
 
 function logout() {
-  localStorage.removeItem("adminKey");
+  if (ADMIN_SESSION) fetch("/api/admin/logout", { method: "POST", headers: { "x-admin-session": ADMIN_SESSION } }).catch(() => {});
+  sessionStorage.removeItem("adminSession");
+  sessionStorage.removeItem("adminName");
   ADMIN_KEY = "";
+  ADMIN_SESSION = "";
   document.getElementById("panel").classList.add("hidden");
   document.getElementById("loginBox").classList.remove("hidden");
 }
@@ -1012,10 +1027,12 @@ async function loadUsers() {
   const search = document.getElementById("userSearch")?.value.trim() || "";
   const status = document.getElementById("userStatusFilter")?.value || "";
   const sort = document.getElementById("userSortFilter")?.value || "";
+  const risk = document.getElementById("userRiskFilter")?.value || "";
   const params = new URLSearchParams();
   if (search) params.set("search", search);
   if (status) params.set("status", status);
   if (sort) params.set("sort", sort);
+  if (risk) params.set("risk", risk);
 
   try {
     const data = await api(`/api/admin/users${params.toString() ? "?" + params.toString() : ""}`);
@@ -1026,7 +1043,7 @@ async function loadUsers() {
     }
     container.innerHTML = `
       <table>
-        <thead><tr><th>نام</th><th>پوینت</th><th>دعوت‌شده</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <thead><tr><th>نام</th><th>پوینت</th><th>دعوت‌شده</th><th>وضعیت</th><th>ریسک Referral</th><th>عملیات</th></tr></thead>
         <tbody>
           ${users.map(u => `
             <tr>
@@ -1034,11 +1051,13 @@ async function loadUsers() {
               <td>${u.points}</td>
               <td>${u.invitedCount}</td>
               <td>${u.isBanned ? '<span class="badge rejected">مسدود</span>' : '<span class="badge approved">فعال</span>'}</td>
+              <td>${Number(u.referralRiskScore || 0) >= 50 ? `<span class="badge pending">پرریسک (${u.referralRiskScore})</span>` : '<span class="badge approved">عادی</span>'}</td>
               <td>
                 ${u.isBanned
                   ? `<button class="success" onclick="userAction('${u._id}','unban')">رفع مسدودی</button>`
                   : `<button class="danger" onclick="userAction('${u._id}','ban')">مسدود کردن</button>`
                 }
+                ${Number(u.referralRiskScore || 0) >= 50 && !u.referralRiskBlocked ? `<button class="success" onclick="reviewReferral('${u._id}','approve')">تایید Referral</button><button class="danger" onclick="reviewReferral('${u._id}','block')">رد Referral</button>` : ''}
               </td>
             </tr>
           `).join("")}
@@ -1053,6 +1072,18 @@ async function loadUsers() {
 async function userAction(id, action) {
   try {
     await api(`/api/admin/users/${id}/${action}`, { method: "POST", body: JSON.stringify({}) });
+    loadUsers();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+async function reviewReferral(id, action) {
+  const text = action === "approve" ? "Referral این کاربر تایید شود؟" : "Referral این کاربر مسدود شود؟";
+  if (!confirm(text)) return;
+  try {
+    await api(`/api/admin/users/${id}/referral-review`, { method: "POST", body: JSON.stringify({ action }) });
+    showMsg("وضعیت Referral به‌روزرسانی شد.", "success");
     loadUsers();
   } catch (error) {
     showMsg(error.message, "error");

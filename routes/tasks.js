@@ -30,9 +30,19 @@ const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
 async function maybeAwardReferralBonus(userId) {
   const user = await User.findById(userId).select('referredBy referralBonusAwarded firstName username');
   // زبان دعوت‌کننده (نه دعوت‌شده) برای پیام لازم است؛ در ادامه از خود referrer گرفته می‌شود
-  if (!user || !user.referredBy || user.referralBonusAwarded) return;
+  if (!user || !user.referredBy) return;
 
   const approvedCount = await TaskCompletion.countDocuments({ user: userId, status: 'approved' });
+  // دعوت‌شده فقط بعد از تکمیل حداقل یک تسک واقعی «فعال» محسوب می‌شود.
+  // شرط activeReferralIds اتمیک است و در درخواست‌های هم‌زمان شمارش دوباره رخ نمی‌دهد.
+  if (approvedCount >= 1) {
+    await User.findOneAndUpdate(
+      { _id: user.referredBy, activeReferralIds: { $ne: user._id } },
+      { $addToSet: { activeReferralIds: user._id }, $inc: { activeInvitedCount: 1 } }
+    );
+  }
+
+  if (user.referralBonusAwarded) return;
   if (approvedCount < REFERRAL_MIN_TASKS) return;
 
   const locked = await User.findOneAndUpdate(

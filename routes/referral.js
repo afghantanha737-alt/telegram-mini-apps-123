@@ -5,6 +5,8 @@ require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth } = require('../utils/telegramAuth');
 const User = require('../models/User');
 const TaskCompletion = require('../models/TaskCompletion');
+const { recordLedger } = require('../utils/ledger');
+const { referralTaskId, buildReferralTaskProgress, REFERRAL_REWARD_TASKS } = require('../utils/referralRewards');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
@@ -49,6 +51,7 @@ router.get('/me', auth, async (req, res) => {
       username: iu.username,
       createdAt: iu.createdAt,
       completedTasks,
+      active: completedTasks >= 1,
       bonusAwarded: iu.referralBonusAwarded,
       tasksRemaining: iu.referralBonusAwarded ? 0 : Math.max(0, REFERRAL_MIN_TASKS - completedTasks)
     };
@@ -58,11 +61,65 @@ router.get('/me', auth, async (req, res) => {
     success: true,
     referralCode: u.referralCode,
     invitedCount: u.invitedCount,
+    activeInvitedCount: u.activeInvitedCount,
     shareLink,
     botUsernameConfigured: Boolean(botUsername),
     referralMinTasks: REFERRAL_MIN_TASKS,
     referralBonusPoints: REFERRAL_BONUS_POINTS,
+    referralTasks: buildReferralTaskProgress(u.activeInvitedCount, u.referralRewardClaims),
     invited
+  });
+});
+
+// POST /api/referral/claim — دریافت اتمیک پاداش یکی از مراحل دعوت دوستان
+router.post('/claim', auth, async (req, res) => {
+  const taskId = referralTaskId(req.body && req.body.taskId);
+  if (!taskId) {
+    return res.status(400).json({ success: false, message: 'تسک ریفرال نامعتبر است.', code: 'INVALID_REFERRAL_TASK' });
+  }
+
+  const task = REFERRAL_REWARD_TASKS.find(item => item.id === taskId);
+  const updated = await User.findOneAndUpdate(
+    {
+      _id: req.dbUser._id,
+      activeInvitedCount: { $gte: task.requiredInvites },
+      'referralRewardClaims.taskId': { $ne: taskId }
+    },
+    {
+      $inc: { points: task.rewardPoints },
+      $push: { referralRewardClaims: { taskId, claimedAt: new Date() } }
+    },
+    { new: true, runValidators: true }
+  );
+
+  if (!updated) {
+    const latest = await User.findById(req.dbUser._id).select('activeInvitedCount referralRewardClaims');
+    if (!latest || latest.activeInvitedCount < task.requiredInvites) {
+      return res.status(400).json({
+        success: false,
+        message: `${Math.max(0, task.requiredInvites - (latest?.activeInvitedCount || 0))} دعوت‌شده فعال دیگر لازم است.`,
+        code: 'REFERRAL_TASK_LOCKED'
+      });
+    }
+    return res.status(409).json({ success: false, message: 'این پاداش قبلاً دریافت شده است.', code: 'REFERRAL_TASK_ALREADY_CLAIMED' });
+  }
+
+  recordLedger({
+    user: updated._id,
+    type: 'referral_bonus',
+    amount: task.rewardPoints,
+    description: `پاداش تسک دعوت ${task.requiredInvites} نفر`,
+    balanceAfter: updated.points
+  }).catch(() => {});
+
+  res.json({
+    success: true,
+    taskId,
+    rewardPoints: task.rewardPoints,
+    points: updated.points,
+    invitedCount: updated.invitedCount,
+    activeInvitedCount: updated.activeInvitedCount,
+    referralTasks: buildReferralTaskProgress(updated.activeInvitedCount, updated.referralRewardClaims)
   });
 });
 

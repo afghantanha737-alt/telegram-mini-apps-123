@@ -25,6 +25,7 @@ const { sendTestReminder } = require('../utils/dailyReminder');
 const { isValidWeights, resolveWeights, checkSpinSettings, spinModel } = require('../utils/spin');
 const { normalizeSponsorInput, marginInfo } = require('../utils/sponsor');
 const { startOfUtcWeek, endOfUtcWeek, weekKey } = require('../utils/weeklyLeaderboard');
+const { createAdminSession, getAdminSession, revokeAdminSession, SESSION_TTL_MS } = require('../utils/adminSession');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -36,18 +37,32 @@ const upload = multer({
 });
 
 function requireAdmin(req, res, next) {
-  // تگ <img> نمی‌تواند هدر سفارشی بفرستد، پس برای مسیر نمایش تصویر
-  // اجازه می‌دهیم کلید از query هم بیاید (؟key=...).
-  const key = req.headers['x-admin-key'] || req.query.key;
-  if (!isValidAdminKey(typeof key === 'string' ? key : '')) {
+  const session = getAdminSession(req.headers['x-admin-session']);
+  // x-admin-key برای سازگاری با نسخه‌های قدیمی نگه داشته شده، اما پنل جدید
+  // بعد از login فقط session کوتاه‌مدت می‌فرستد و کلید اصلی را تکرار نمی‌کند.
+  const legacyKey = req.headers['x-admin-key'];
+  if (!session && !isValidAdminKey(typeof legacyKey === 'string' ? legacyKey : '')) {
     return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
   }
-  // نامی که ادمین موقع ورود تایپ کرده (اختیاری) — فقط برای لاگ فعالیت، نه احراز هویت واقعی
-  req.adminActor = String(req.headers['x-admin-name'] || '').trim() || 'ادمین';
+  req.adminActor = session?.actor || String(req.headers['x-admin-name'] || '').trim() || 'ادمین';
   next();
 }
 
+// کلید اصلی فقط یک‌بار در لحظه ورود ارسال می‌شود و بعد از آن session کوتاه‌مدت استفاده می‌شود.
+router.post('/login', async (req, res) => {
+  const key = String(req.body?.key || '');
+  if (!isValidAdminKey(key)) return res.status(403).json({ success: false, message: 'کلید ادمین نادرست است.' });
+  const actor = String(req.body?.name || '').trim() || 'ادمین';
+  const session = createAdminSession(actor);
+  res.json({ success: true, sessionToken: session.token, expiresAt: session.expiresAt, ttlMs: SESSION_TTL_MS });
+});
+
 router.use(requireAdmin);
+
+router.post('/logout', (req, res) => {
+  revokeAdminSession(req.headers['x-admin-session']);
+  res.json({ success: true });
+});
 
 /**
  * POST /api/admin/verify-chat — قبل از ساختن تسک، بررسی می‌کند آیا
@@ -650,7 +665,7 @@ router.post('/withdrawals/:id/status', async (req, res) => {
  * جستجو روی نام/یوزرنیم/آیدی تلگرام، فیلتر روی وضعیت بن، مرتب‌سازی.
  */
 router.get('/users', async (req, res) => {
-  const { search, status, sort } = req.query;
+  const { search, status, sort, risk } = req.query;
   const filter = {};
 
   if (search) {
@@ -659,6 +674,7 @@ router.get('/users', async (req, res) => {
   }
   if (status === 'banned') filter.isBanned = true;
   if (status === 'active') filter.isBanned = false;
+  if (risk === 'flagged') filter.referralRiskScore = { $gte: 50 };
 
   const sortMap = { points: { points: -1 }, invited: { invitedCount: -1 }, newest: { createdAt: -1 }, oldest: { createdAt: 1 } };
   const sortBy = sortMap[sort] || sortMap.newest;
@@ -691,6 +707,36 @@ router.post('/users/:id/unban', async (req, res) => {
     targetId: req.params.id,
     details: user ? (user.firstName || user.username || user.telegramId) : ''
   });
+});
+
+// بررسی دستی سیگنال ضدتقلب Referral.
+router.post('/users/:id/referral-review', async (req, res) => {
+  const action = String(req.body?.action || '').trim();
+  if (!['approve', 'block'].includes(action)) return res.status(400).json({ success: false, message: 'action باید approve یا block باشد.' });
+  const user = await User.findById(req.params.id).select('referredBy referralRiskScore referralRiskFlags referralRiskBlocked firstName username');
+  if (!user) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
+  const updated = await User.findOneAndUpdate(
+    { _id: user._id },
+    { $set: {
+      referralRiskBlocked: action === 'block',
+      referralRiskScore: action === 'approve' ? 0 : Math.max(50, Number(user.referralRiskScore || 50)),
+      referralRiskFlags: action === 'approve' ? [] : user.referralRiskFlags,
+      referralRiskReviewedAt: new Date(),
+      referralRiskReviewedBy: req.adminActor
+    } },
+    { new: true }
+  );
+  if (action === 'approve' && user.referredBy) {
+    const approvedCount = await TaskCompletion.countDocuments({ user: user._id, status: 'approved' });
+    if (approvedCount > 0) {
+      await User.findOneAndUpdate(
+        { _id: user.referredBy, activeReferralIds: { $ne: user._id } },
+        { $addToSet: { activeReferralIds: user._id }, $inc: { activeInvitedCount: 1 } }
+      );
+    }
+  }
+  recordAdminLog({ actor: req.adminActor, action: `referral_risk_${action}`, targetType: 'user', targetId: user._id, details: user.firstName || user.username || '' });
+  res.json({ success: true, user: updated });
 });
 
 /* -------------------- REQUIRED CHANNELS (عضویت اجباری) -------------------- */

@@ -28,19 +28,24 @@ const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
  * موفق به آپدیت می‌شود و پاداش هرگز دوبار پرداخت نمی‌شود.
  */
 async function maybeAwardReferralBonus(userId) {
-  const user = await User.findById(userId).select('referredBy referralBonusAwarded firstName username');
+  const user = await User.findById(userId).select('referredBy referralBonusAwarded firstName username referralRiskScore referralRiskFlags referralRiskBlocked');
   // زبان دعوت‌کننده (نه دعوت‌شده) برای پیام لازم است؛ در ادامه از خود referrer گرفته می‌شود
   if (!user || !user.referredBy) return;
 
   const approvedCount = await TaskCompletion.countDocuments({ user: userId, status: 'approved' });
   // دعوت‌شده فقط بعد از تکمیل حداقل یک تسک واقعی «فعال» محسوب می‌شود.
   // شرط activeReferralIds اتمیک است و در درخواست‌های هم‌زمان شمارش دوباره رخ نمی‌دهد.
-  if (approvedCount >= 1) {
+  // دعوت‌های هم‌شبکه برای بررسی دستی علامت‌گذاری می‌شوند و خودکار active/reward نمی‌گیرند.
+  // کاربران قدیمی که این فیلد را ندارند امتیاز ۰ محسوب می‌شوند.
+  const referralRiskScore = Number(user.referralRiskScore || 0);
+  if (approvedCount >= 1 && referralRiskScore < 50 && !user.referralRiskBlocked) {
     await User.findOneAndUpdate(
       { _id: user.referredBy, activeReferralIds: { $ne: user._id } },
       { $addToSet: { activeReferralIds: user._id }, $inc: { activeInvitedCount: 1 } }
     );
   }
+
+  if (referralRiskScore >= 50 || user.referralRiskBlocked) return;
 
   if (user.referralBonusAwarded) return;
   if (approvedCount < REFERRAL_MIN_TASKS) return;

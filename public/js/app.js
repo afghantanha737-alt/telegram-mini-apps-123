@@ -1842,21 +1842,23 @@ function renderReferralRewardTasks() {
 
   const items = state.referralTasks.map(task => {
     const progress = Math.min(100, Math.round((task.invitedCount / task.requiredInvites) * 100));
-    let action;
+    let action = "";
     if (task.status === "claimed") {
       action = `<button class="taskAction done" type="button" disabled>${t("referral_task_claimed")}</button>`;
     } else if (task.status === "claimable") {
       action = `<button class="taskAction" type="button" data-referral-claim="${escapeHTML(task.id)}" onclick="claimReferralTask('${escapeHTML(task.id)}')">${t("referral_claim_button")}</button>`;
-    } else {
-      action = `<button class="taskAction pending" type="button" disabled>${t("referral_task_remaining", { n: formatPoints(task.remaining) })}</button>`;
     }
 
     return `
       <div class="taskItem referralTaskItem" style="margin-bottom:12px">
         <div class="taskIcon">👥</div>
         <div class="taskBody">
-          <div class="taskTitle">${t("referral_task_invite", { n: formatPoints(task.requiredInvites) })}</div>
-          <div class="taskDesc">${t("referral_task_progress", { current: formatPoints(task.invitedCount), total: formatPoints(task.requiredInvites) })}</div>
+          <div class="taskTitle">Invite ${formatPoints(task.requiredInvites)} Active Users</div>
+          <div class="taskDesc" style="display:flex;align-items:center;gap:9px">
+            <span>${formatPoints(task.requiredInvites)}</span>
+            <span style="display:inline-block;width:18px;height:1px;background:var(--text-muted);opacity:.7"></span>
+            <span>${formatPoints(task.invitedCount)} active</span>
+          </div>
           <div class="taskReward">+${formatPoints(task.rewardPoints)} ${t("points_unit")}</div>
           <div style="height:6px;background:var(--surface-3);border-radius:999px;overflow:hidden;margin-top:8px">
             <div style="height:100%;width:${progress}%;background:linear-gradient(90deg,var(--primary),var(--primary-2));border-radius:999px;transition:width .3s ease"></div>

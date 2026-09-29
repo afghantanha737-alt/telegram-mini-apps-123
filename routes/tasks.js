@@ -179,11 +179,18 @@ router.post('/:id/claim', auth, async (req, res) => {
 
     try {
       if (existing) {
-        existing.status = 'approved';
-        existing.reward = task.reward;
-        existing.revenueUsd = revenueUsd;
-        existing.costUsd = costUsd;
-        await existing.save();
+        // فقط یکی از درخواست‌های هم‌زمان اجازه دارد rejected را به approved تبدیل کند.
+        const approved = await TaskCompletion.findOneAndUpdate(
+          { _id: existing._id, status: 'rejected' },
+          { $set: { status: 'approved', reward: task.reward, revenueUsd, costUsd } },
+          { new: true }
+        );
+        if (!approved) {
+          const rollback = { $inc: { completedCount: -1 } };
+          if (weJustFilledCapacity) rollback.$set = { isActive: true };
+          await Task.findByIdAndUpdate(task._id, rollback);
+          return res.status(400).json({ success: false, message: 'این تسک قبلاً تایید شده است.', code: 'ALREADY_DONE' });
+        }
       } else {
         await TaskCompletion.create({ user: u._id, task: task._id, reward: task.reward, status: 'approved', revenueUsd, costUsd });
       }

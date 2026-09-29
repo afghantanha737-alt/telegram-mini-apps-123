@@ -15,6 +15,7 @@ const { recordAdminLog } = require('../utils/adminLog');
 const AdminLog = require('../models/AdminLog');
 const TaskCompletion = require('../models/TaskCompletion');
 const PointsLedger = require('../models/PointsLedger');
+const WeeklyLeaderboardAward = require('../models/WeeklyLeaderboardAward');
 const { isValidAdminKey } = require('../utils/adminKey');
 const RequiredChannel = require('../models/RequiredChannel');
 const { membership, validateChannelRef, normalizeChannelInput } = require('../utils/membership');
@@ -23,6 +24,7 @@ const { COMMON_TIMEZONES, isValidTimezone, targetUtcHour } = require('../utils/t
 const { sendTestReminder } = require('../utils/dailyReminder');
 const { isValidWeights, resolveWeights, checkSpinSettings, spinModel } = require('../utils/spin');
 const { normalizeSponsorInput, marginInfo } = require('../utils/sponsor');
+const { startOfUtcWeek, endOfUtcWeek, weekKey } = require('../utils/weeklyLeaderboard');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -313,6 +315,89 @@ router.delete('/tasks/:id', async (req, res) => {
 });
 
 /* -------------------- WITHDRAWALS -------------------- */
+/* -------------------- WEEKLY LEADERBOARD AWARDS -------------------- */
+router.get('/weekly-leaderboard', async (req, res) => {
+  const requestedKey = String(req.query.weekKey || '').trim();
+  const currentKey = weekKey();
+  const selectedKey = requestedKey || currentKey;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedKey)) {
+    return res.status(400).json({ success: false, message: 'weekKey باید به شکل YYYY-MM-DD باشد.' });
+  }
+  const start = new Date(`${selectedKey}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime())) return res.status(400).json({ success: false, message: 'هفته نامعتبر است.' });
+  const end = new Date(start.getTime() + 7 * 86400000);
+  const positiveTypes = ['task', 'checkin', 'spin', 'referral_bonus'];
+  const settings = await Settings.getGlobal();
+  const standings = await PointsLedger.aggregate([
+    { $match: { createdAt: { $gte: start, $lt: end }, currency: 'points', amount: { $gt: 0 }, type: { $in: positiveTypes } } },
+    { $group: { _id: '$user', points: { $sum: '$amount' } } },
+    { $sort: { points: -1, _id: 1 } },
+    { $limit: 50 },
+    { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+    { $unwind: '$user' },
+    { $match: { 'user.isBanned': false } }
+  ]);
+  const awards = await WeeklyLeaderboardAward.find({ weekKey: selectedKey }).populate('user', 'firstName username telegramId').sort({ rank: 1 }).lean();
+  res.json({ success: true, weekKey: selectedKey, weekStart: start, weekEnd: end, isCurrentWeek: selectedKey === currentKey, prizes: settings.weeklyLeaderboardPrizes || [], standings: standings.map((row, index) => ({ rank: index + 1, points: row.points, user: row.user })), awards });
+});
+
+router.post('/weekly-leaderboard/:selectedWeekKey/pay', async (req, res) => {
+  const selectedKey = String(req.params.selectedWeekKey || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedKey)) return res.status(400).json({ success: false, message: 'weekKey نامعتبر است.' });
+  const start = new Date(`${selectedKey}T00:00:00.000Z`);
+  const end = new Date(start.getTime() + 7 * 86400000);
+  if (Number.isNaN(start.getTime())) return res.status(400).json({ success: false, message: 'هفته نامعتبر است.' });
+  if (end > new Date() && req.body?.force !== true) return res.status(409).json({ success: false, message: 'پرداخت جایزه تا پایان هفته امکان‌پذیر نیست؛ برای تست force=true ارسال کنید.' });
+
+  const settings = await Settings.getGlobal();
+  const prizes = (settings.weeklyLeaderboardPrizes || []).map(Number);
+  const positiveTypes = ['task', 'checkin', 'spin', 'referral_bonus'];
+  const standings = await PointsLedger.aggregate([
+    { $match: { createdAt: { $gte: start, $lt: end }, currency: 'points', amount: { $gt: 0 }, type: { $in: positiveTypes } } },
+    { $group: { _id: '$user', points: { $sum: '$amount' } } },
+    { $sort: { points: -1, _id: 1 } },
+    { $limit: prizes.length },
+    { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+    { $unwind: '$user' },
+    { $match: { 'user.isBanned': false } }
+  ]);
+
+  const results = [];
+  for (let index = 0; index < standings.length; index += 1) {
+    const rank = index + 1;
+    const points = Math.floor(Number(prizes[index]) || 0);
+    if (points <= 0) continue;
+    const row = standings[index];
+    const award = await WeeklyLeaderboardAward.findOneAndUpdate(
+      { weekKey: selectedKey, rank },
+      { $setOnInsert: { user: row._id, points, status: 'pending' } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    if (award.status === 'paid') { results.push({ rank, status: 'already_paid', points }); continue; }
+    const claimed = await WeeklyLeaderboardAward.findOneAndUpdate(
+      { _id: award._id, status: { $in: ['pending', 'failed'] } },
+      { $set: { status: 'processing', error: '' } },
+      { new: true }
+    );
+    if (!claimed) { results.push({ rank, status: award.status, points }); continue; }
+    try {
+      const updatedUser = await User.findByIdAndUpdate(row._id, { $inc: { points } }, { new: true });
+      if (!updatedUser) throw new Error('کاربر برنده پیدا نشد.');
+      await recordLedger({ user: updatedUser._id, type: 'leaderboard_reward', amount: points, description: `جایزه رتبه ${rank} leaderboard هفته ${selectedKey}`, balanceAfter: updatedUser.points });
+      await WeeklyLeaderboardAward.updateOne({ _id: claimed._id, status: 'processing' }, { $set: { status: 'paid', paidAt: new Date() } });
+      if (row.user.telegramId) {
+        notifyUser(row.user.telegramId, botText('leaderboardReward', row.user.language, rank, points, selectedKey)).catch(() => {});
+      }
+      results.push({ rank, status: 'paid', points, user: updatedUser._id });
+    } catch (error) {
+      await WeeklyLeaderboardAward.updateOne({ _id: claimed._id }, { $set: { status: 'failed', error: String(error.message || error) } });
+      results.push({ rank, status: 'failed', points, error: String(error.message || error) });
+    }
+  }
+  recordAdminLog({ actor: req.adminActor, action: 'weekly_leaderboard_pay', targetType: 'settings', details: `هفته ${selectedKey}: ${results.map(item => `${item.rank}:${item.status}`).join(', ')}` });
+  res.json({ success: true, weekKey: selectedKey, results });
+});
+
 router.get('/withdrawals', async (req, res) => {
   const status = req.query.status;
   const filter = status ? { status } : {};

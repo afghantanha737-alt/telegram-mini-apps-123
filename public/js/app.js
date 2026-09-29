@@ -42,6 +42,9 @@ const state = {
   activeInvitedCount: 0,
   gateActive: false,
   totalEarnedPoints: 0,
+  level: null,
+  withdrawalProgress: 0,
+  withdrawalRemainingGram: 0,
   gramUsdPrice: 0,
   invited: [],
   referralMinTasks: 2,
@@ -50,6 +53,10 @@ const state = {
   completions: [],
   leaderboard: [],
   myRank: null,
+  weeklyLeaderboard: [],
+  weeklyMyRank: null,
+  weeklyMyPoints: 0,
+  weeklyLeaderboardMeta: null,
   captchaA: 0,
   captchaB: 0,
   initialized: false
@@ -707,6 +714,9 @@ async function loadUserData() {
   state.minWithdrawGram = Number(data?.minWithdrawGram) || 0;
   state.nextResetAt = Number(data?.nextResetAt) || 0;
   state.totalEarnedPoints = Number(data?.totalEarnedPoints) || 0;
+  state.level = data?.level || null;
+  state.withdrawalProgress = Number(data?.withdrawalProgress) || 0;
+  state.withdrawalRemainingGram = Number(data?.withdrawalRemainingGram) || 0;
   state.gramUsdPrice = Number(data?.gramUsdPrice) || 0;
   if (data?.firstName) state.user = { ...(state.user || {}), first_name: data.firstName };
   updateHeader();
@@ -828,6 +838,22 @@ async function loadLeaderboard() {
   }
 }
 
+async function loadWeeklyLeaderboard() {
+  try {
+    const data = await api("/api/leaderboard/weekly");
+    state.weeklyLeaderboard = Array.isArray(data?.top) ? data.top : [];
+    state.weeklyMyRank = data?.myRank ?? null;
+    state.weeklyMyPoints = Number(data?.myPoints) || 0;
+    state.weeklyLeaderboardMeta = data || null;
+    return state.weeklyLeaderboard;
+  } catch (error) {
+    console.warn("Weekly leaderboard failed:", error);
+    state.weeklyLeaderboard = [];
+    state.weeklyLeaderboardMeta = null;
+    return [];
+  }
+}
+
 /* ================= HOME ================= */
 function completionStatus(taskId) {
   const found = state.completions.find(c => String(c.task) === String(taskId));
@@ -840,6 +866,8 @@ function renderHome() {
   const usdPill = state.gramUsdPrice > 0
     ? `<span class="tbPill tbPillGreen">≈ $${formatFixed(usd, 3)} USD</span>`
     : "";
+  const level = state.level || { badge: "🥉", name: "Bronze" };
+  const withdrawalProgress = Math.min(100, Math.max(0, state.withdrawalProgress));
 
   const content = $("#content");
   content.innerHTML = `
@@ -851,6 +879,7 @@ function renderHome() {
           <div class="tbPills">
             ${usdPill}
             <span class="tbPill tbPillPurple">${t("tb_points_chip", { n: formatPoints(state.points) })}</span>
+            <span class="tbPill tbPillOrange">${level.badge} ${escapeHTML(level.name)}</span>
           </div>
         </div>
         <div class="tbGemRing"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#2f9bf0"/><path d="M20 24h24l6 8-18 20L14 32z" fill="#fff"/><path d="M32 30v10M27 35h10" stroke="#2f9bf0" stroke-width="3" stroke-linecap="round"/></svg></div>
@@ -860,6 +889,17 @@ function renderHome() {
         <button class="tbBtnGhost" type="button" onclick="openHistory()"><span class="tbBtnIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7.5V12l3 2"/></svg></span>${t("tb_history")}</button>
       </div>
     </section>
+
+    <div class="card" style="padding:14px 16px">
+      <div class="cardHeader" style="margin-bottom:8px">
+        <div class="cardTitle">${t("withdrawal_progress_title")}</div>
+        <div class="badge info">${withdrawalProgress}%</div>
+      </div>
+      <div style="height:9px;background:var(--surface-3);border-radius:999px;overflow:hidden">
+        <div style="height:100%;width:${withdrawalProgress}%;background:linear-gradient(90deg,var(--tb-blue),var(--primary));border-radius:999px"></div>
+      </div>
+      <div class="cardSubtitle" style="margin-top:8px">${t("withdrawal_progress_remaining", { n: formatNumber(state.withdrawalRemainingGram, 6) })}</div>
+    </div>
 
     <div class="tbSectionHead">
       <h2 class="tbSectionTitle">${t("tb_your_progress")} <span class="tbSpark">✨</span></h2>
@@ -1009,8 +1049,9 @@ function renderTasks() {
         <div class="taskItem" style="flex-wrap:wrap">
           <div class="taskIcon">${icon}</div>
           <div class="taskBody">
-            <div class="taskTitle">${task.isSponsored ? `<span class="sponsoredTag">${t("task_sponsored_tag")}</span> ` : ""}${escapeHTML(task.title)}</div>
+            <div class="taskTitle">${task.isSpecialOfDay ? `<span class="sponsoredTag">⭐ ${t("special_task_badge")}</span> ` : ""}${task.isSponsored ? `<span class="sponsoredTag">${t("task_sponsored_tag")}</span> ` : ""}${escapeHTML(task.title)}</div>
             ${task.description ? `<div class="taskDesc">${escapeHTML(task.description)}</div>` : ""}
+            ${task.isSpecialOfDay && task.expiresAt ? `<div class="taskDesc" style="color:var(--warning)">⏳ ${t("special_task_deadline", { date: new Date(task.expiresAt).toLocaleString(state.language === "en" ? "en-US" : "fa-IR") })}</div>` : ""}
             <div class="taskReward">+${formatPoints(task.reward)} ${t("points_unit")}</div>
           </div>
           ${actionHtml}
@@ -1740,6 +1781,7 @@ function renderProfileMenu() {
         <div class="tbPills">
           <span class="tbPill tbPillPurple tbPillSm">${t("tb_points_chip", { n: formatPoints(state.points) })}</span>
           <span class="tbPill tbPillOrange tbPillSm">${formatPoints(state.invitedCount)} ${t("tb_referrals")}</span>
+          ${state.level ? `<span class="tbPill tbPillGreen tbPillSm">${state.level.badge} ${escapeHTML(state.level.name)}</span>` : ""}
         </div>
       </div>
     </div>
@@ -1920,8 +1962,18 @@ function renderProfileReferral() {
   `;
 }
 
+let leaderboardMode = "all";
+function setLeaderboardMode(mode) {
+  leaderboardMode = mode === "weekly" ? "weekly" : "all";
+  renderProfile();
+}
+window.setLeaderboardMode = setLeaderboardMode;
+
 function renderProfileLeaderboard() {
-  const rows = state.leaderboard.map((person, index) => {
+  const weekly = leaderboardMode === "weekly";
+  const list = weekly ? state.weeklyLeaderboard : state.leaderboard;
+  const myRank = weekly ? state.weeklyMyRank : state.myRank;
+  const rows = list.map((person, index) => {
     const rank = index + 1;
     const rankClass = rank === 1 ? "top1" : rank === 2 ? "top2" : rank === 3 ? "top3" : "";
     const isMe = Boolean(person.isMe);
@@ -1929,25 +1981,30 @@ function renderProfileLeaderboard() {
       <div class="leaderboardItem ${isMe ? "me" : ""}">
         <div class="rankBadge ${rankClass}">${formatPoints(rank)}</div>
         <div class="leaderName">${escapeHTML(person.firstName || person.username || "—")}</div>
-        <div class="leaderPoints">${formatPoints(person.points)}</div>
+        <div class="leaderPoints">${formatPoints(person.points)}${weekly && person.prizePoints ? `<small style="display:block;color:var(--gold)">+${formatPoints(person.prizePoints)}</small>` : ""}</div>
       </div>`;
   }).join("");
 
   return `
     <div class="sectionHeader">
       <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
-      <h2 class="sectionTitle">${t("leaderboard_title")}</h2>
+      <h2 class="sectionTitle">${weekly ? t("weekly_leaderboard_title") : t("leaderboard_title")}</h2>
       <span></span>
     </div>
 
-    ${state.myRank ? `
+    <div class="card" style="display:flex;gap:8px;padding:8px">
+      <button class="${!weekly ? "primaryBtn" : "secondaryBtn"}" type="button" style="min-height:40px;padding:8px" onclick="setLeaderboardMode('all')">${t("leaderboard_all_time")}</button>
+      <button class="${weekly ? "primaryBtn" : "secondaryBtn"}" type="button" style="min-height:40px;padding:8px" onclick="setLeaderboardMode('weekly')">${t("leaderboard_weekly")}</button>
+    </div>
+    ${myRank ? `
       <div class="card" style="text-align:center">
         <div class="cardSubtitle">${t("leaderboard_rank_label")}</div>
-        <div style="font-size:24px;font-weight:900;margin-top:4px">#${formatPoints(state.myRank)}</div>
+        <div style="font-size:24px;font-weight:900;margin-top:4px">#${formatPoints(myRank)}</div>
+        ${weekly ? `<div class="cardSubtitle">${formatPoints(state.weeklyMyPoints)} ${t("points_unit")}</div>` : ""}
       </div>` : ""
     }
 
-    ${state.leaderboard.length === 0
+    ${list.length === 0
       ? `<div class="card emptyState"><div class="emptyDesc">${t("leaderboard_empty")}</div></div>`
       : rows
     }
@@ -1996,6 +2053,10 @@ async function renderProfile() {
   if (profileView === "leaderboard" && state.leaderboard.length === 0) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadLeaderboard();
+  }
+  if (profileView === "leaderboard" && leaderboardMode === "weekly" && !state.weeklyLeaderboardMeta) {
+    content.innerHTML = `<div class="loading" style="height:300px"></div>`;
+    await loadWeeklyLeaderboard();
   }
   if (profileView === "history" && historyList.length === 0 && !historyLoading) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;

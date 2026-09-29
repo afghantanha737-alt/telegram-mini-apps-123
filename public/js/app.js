@@ -39,11 +39,13 @@ const state = {
   referralCode: "",
   shareLink: "",
   invitedCount: 0,
+  activeInvitedCount: 0,
   gateActive: false,
   totalEarnedPoints: 0,
   gramUsdPrice: 0,
   invited: [],
   referralMinTasks: 2,
+  referralTasks: [],
   tasks: [],
   completions: [],
   leaderboard: [],
@@ -716,12 +718,45 @@ async function loadReferralData() {
     state.referralCode = data?.referralCode || "";
     state.shareLink = data?.shareLink || "";
     state.invitedCount = Number(data?.invitedCount) || 0;
+    state.activeInvitedCount = Number(data?.activeInvitedCount) || 0;
     state.invited = Array.isArray(data?.invited) ? data.invited : [];
     state.referralMinTasks = Number(data?.referralMinTasks) || 2;
+    state.referralTasks = Array.isArray(data?.referralTasks) ? data.referralTasks : [];
   } catch (error) {
     console.warn("Referral data failed:", error);
   }
 }
+
+async function claimReferralTask(taskId) {
+  const task = state.referralTasks.find(item => item.id === taskId);
+  if (!task || task.status !== "claimable") return;
+
+  const button = document.querySelector(`[data-referral-claim="${taskId}"]`);
+  if (button) {
+    button.disabled = true;
+    button.textContent = t("referral_claiming");
+  }
+
+  try {
+    const data = await api("/api/referral/claim", { method: "POST", body: { taskId } });
+    state.points = Number(data?.points) || state.points;
+    state.invitedCount = Number(data?.invitedCount) || state.invitedCount;
+    state.activeInvitedCount = Number(data?.activeInvitedCount) || state.activeInvitedCount;
+    state.referralTasks = Array.isArray(data?.referralTasks) ? data.referralTasks : state.referralTasks;
+    haptic("success");
+    toast(t("referral_claim_success", { n: formatPoints(task.rewardPoints) }), "success");
+    if (state.activeTab === "tasks") renderTasks();
+    else renderProfile();
+  } catch (error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = t("referral_claim_button");
+    }
+    haptic("error");
+    toast(error.message || t("error_generic"), "error");
+  }
+}
+window.claimReferralTask = claimReferralTask;
 
 async function loadTasks() {
   try {
@@ -926,10 +961,12 @@ window.verifyTelegramTask = verifyTelegramTask;
 
 function renderTasks() {
   const content = $("#content");
+  const referralHtml = renderReferralRewardTasks();
 
   if (state.tasks.length === 0) {
     content.innerHTML = `
       <div class="sectionHeader"><h2 class="sectionTitle">${t("tasks_title")}</h2></div>
+      ${referralHtml}
       <div class="card emptyState">
         <div class="emptyIcon">🗂️</div>
         <div class="emptyTitle">${t("tasks_empty_title")}</div>
@@ -946,6 +983,7 @@ function renderTasks() {
       <h2 class="sectionTitle">${t("tasks_title")}</h2>
       <span class="tbPill tbPillPurple">${formatPoints(doneCount)} / ${formatPoints(state.tasks.length)}</span>
     </div>
+    ${referralHtml}
     <div class="taskList">
       ${state.tasks.map(task => {
         const status = completionStatus(task._id);
@@ -1799,6 +1837,51 @@ function renderProfileAbout() {
   `;
 }
 
+function renderReferralRewardTasks() {
+  if (!state.referralTasks.length) return "";
+
+  const cards = state.referralTasks.map(task => {
+    const progress = Math.min(100, Math.round((task.invitedCount / task.requiredInvites) * 100));
+    let status;
+    let action = "";
+    if (task.status === "claimed") {
+      status = `<span class="badge success">${t("referral_task_claimed")}</span>`;
+    } else if (task.status === "claimable") {
+      status = `<span class="badge gold">${t("referral_task_ready")}</span>`;
+      action = `<button class="secondaryBtn" type="button" data-referral-claim="${escapeHTML(task.id)}" onclick="claimReferralTask('${escapeHTML(task.id)}')">${t("referral_claim_button")}</button>`;
+    } else {
+      status = `<span class="badge warning">${t("referral_task_remaining", { n: formatPoints(task.remaining) })}</span>`;
+    }
+
+    return `
+      <div class="historyItem" style="display:block">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div>
+            <div class="historyAmount">${t("referral_task_invite", { n: formatPoints(task.requiredInvites) })}</div>
+            <div class="historyMeta">+${formatPoints(task.rewardPoints)} ${t("points_unit")}</div>
+          </div>
+          ${status}
+        </div>
+        <div style="height:7px;background:var(--surface-3);border-radius:999px;overflow:hidden;margin:10px 0 8px">
+          <div style="height:100%;width:${progress}%;background:linear-gradient(90deg,var(--primary),var(--primary-2));border-radius:999px;transition:width .3s ease"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span class="historyMeta">${task.status === "claimed" ? t("referral_task_completed") : t("referral_task_progress", { current: formatPoints(task.invitedCount), total: formatPoints(task.requiredInvites) })}</span>
+          ${action}
+        </div>
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="card">
+      <div class="cardHeader">
+        <div class="cardTitle">${t("referral_tasks_title")}</div>
+        <div class="badge">${t("referral_tasks_badge")}</div>
+      </div>
+      <div class="stackList">${cards}</div>
+    </div>`;
+}
+
 function renderProfileReferral() {
   return `
     <div class="sectionHeader">
@@ -1818,6 +1901,8 @@ function renderProfileReferral() {
       </div>
       <button class="primaryBtn" type="button" onclick="shareReferralLink()">${t("referral_share_button")}</button>
     </div>
+
+    ${renderReferralRewardTasks()}
 
     <div class="card">
       <div class="cardHeader">
@@ -1946,7 +2031,7 @@ async function renderCurrentTab() {
       await Promise.all([loadUserData(), loadTasks(), loadReferralData()]);
       renderHome();
     } else if (state.activeTab === "tasks") {
-      await loadTasks();
+      await Promise.all([loadTasks(), loadReferralData()]);
       renderTasks();
     } else if (state.activeTab === "daily") {
       await loadUserData();

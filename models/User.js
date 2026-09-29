@@ -19,6 +19,13 @@ const userSchema = new mongoose.Schema(
 
     referralCode: { type: String, required: true, unique: true, index: true },
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    // فقط HMAC هش شبکه ذخیره می‌شود؛ IP خام هرگز در دیتابیس ثبت نمی‌شود.
+    signupIpHash: { type: String, default: '' },
+    referralRiskScore: { type: Number, default: 0, min: 0 },
+    referralRiskFlags: { type: [String], default: [] },
+    referralRiskBlocked: { type: Boolean, default: false },
+    referralRiskReviewedAt: { type: Date, default: null },
+    referralRiskReviewedBy: { type: String, default: '' },
     invitedCount: { type: Number, default: 0, min: 0 },
     // دعوت‌شده‌ای که حداقل یک تسک approved تکمیل کرده است
     activeInvitedCount: { type: Number, default: 0, min: 0 },

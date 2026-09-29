@@ -148,7 +148,7 @@ router.get('/tasks', async (req, res) => {
 });
 
 router.post('/tasks', async (req, res) => {
-  const { title, description, type, url, reward, chatId, maxCompletions, force } = req.body || {};
+  const { title, description, type, url, reward, chatId, maxCompletions, force, isSpecialOfDay } = req.body || {};
   if (!title || !reward) {
     return res.status(400).json({ success: false, message: 'عنوان و مقدار پاداش الزامی است.' });
   }
@@ -191,6 +191,7 @@ router.post('/tasks', async (req, res) => {
     verifyType: 'telegram',
     chatId,
     maxCompletions: finalMaxCompletions,
+    isSpecialOfDay: isSpecialOfDay === true || isSpecialOfDay === 'true',
     isSponsored: sp.isSponsored,
     sponsorName: sp.sponsorName,
     sponsorPriceUsd: sp.sponsorPriceUsd,
@@ -217,7 +218,7 @@ router.post('/tasks', async (req, res) => {
 
 router.put('/tasks/:id', async (req, res) => {
   const body = req.body || {};
-  const allowed = ['title', 'description', 'type', 'verifyType', 'chatId', 'url', 'reward', 'maxCompletions', 'isActive'];
+  const allowed = ['title', 'description', 'type', 'verifyType', 'chatId', 'url', 'reward', 'maxCompletions', 'isActive', 'isSpecialOfDay'];
   const update = {};
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(body, key)) update[key] = body[key];
@@ -828,6 +829,16 @@ router.put('/settings', async (req, res) => {
       return res.status(400).json({ success: false, message: 'متن یادآوری نباید بیشتر از ۵۰۰ کاراکتر باشد.' });
     }
     changes.dailyReminderMessage = msg;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'weeklyLeaderboardEnabled')) {
+    changes.weeklyLeaderboardEnabled = body.weeklyLeaderboardEnabled === true || body.weeklyLeaderboardEnabled === 'true';
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'weeklyLeaderboardPrizes')) {
+    const prizes = Array.isArray(body.weeklyLeaderboardPrizes) ? body.weeklyLeaderboardPrizes.map(Number) : null;
+    if (!prizes || prizes.length < 3 || prizes.length > 10 || prizes.some(value => !Number.isInteger(value) || value < 0 || value > 100000000)) {
+      return res.status(400).json({ success: false, message: 'جوایز leaderboard هفتگی باید ۳ تا ۱۰ عدد صحیح غیرمنفی باشد.' });
+    }
+    changes.weeklyLeaderboardPrizes = prizes;
   }
 
   const settings = await Settings.getGlobal();

@@ -82,7 +82,7 @@ router.get('/', auth, async (req, res) => {
       // قیمت/بودجه‌ی تبلیغ‌دهنده هرگز به کاربر داده نمی‌شود؛ تسک‌های منقضی‌شده هم نمایش داده نمی‌شوند
       Task.find({ isActive: true, $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] })
         .select('-sponsorPriceUsd -sponsorBudgetUsd')
-        .sort({ isSponsored: -1, createdAt: -1 }),
+        .sort({ isSpecialOfDay: -1, isSponsored: -1, createdAt: -1 }),
       TaskCompletion.find({ user: req.dbUser._id })
     ]);
     res.json({ success: true, tasks, completions });

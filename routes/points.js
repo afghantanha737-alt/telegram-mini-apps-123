@@ -43,6 +43,7 @@ const { SPIN_SEGMENTS, resolveWeights, pickWeightedIndex } = require('../utils/s
 const { notifyUser } = require('../utils/bot');
 const { botText } = require('../utils/botMessages');
 const { synthesizeHistory } = require('../utils/withdrawalStatus');
+const { getLevel } = require('../utils/levels');
 
 // GET /api/points/me
 router.get('/me', auth, async (req, res) => {
@@ -58,10 +59,18 @@ router.get('/me', auth, async (req, res) => {
     { $group: { _id: null, total: { $sum: '$amount' } } }
   ]);
   const totalEarnedPoints = earnedAgg.length ? earnedAgg[0].total : 0;
+  const level = getLevel(totalEarnedPoints);
+  const withdrawalProgress = minWithdrawGram > 0
+    ? Math.min(100, Math.round((u.gramBalance / minWithdrawGram) * 100))
+    : 0;
+  const withdrawalRemainingGram = Math.max(0, round6(minWithdrawGram - u.gramBalance));
 
   res.json({
     success: true,
     totalEarnedPoints,
+    level,
+    withdrawalProgress,
+    withdrawalRemainingGram,
     gramUsdPrice: settings.gramUsdPrice || 0,
     spinCostPoints: settings.spinCostPoints || 30,
     points: u.points,

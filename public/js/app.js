@@ -1866,12 +1866,7 @@ function renderReferralRewardTasks() {
       </div>`;
   }).join("");
 
-  return `
-    <div class="sectionHeader referralTasksHeader">
-      <h2 class="sectionTitle">${t("referral_tasks_title")}</h2>
-      <span class="tbPill tbPillPurple">${t("referral_tasks_badge")}</span>
-    </div>
-    <div class="taskList referralTaskList">${items}</div>`;
+  return `<div class="taskList referralTaskList">${items}</div>`;
 }
 
 function renderProfileReferral() {

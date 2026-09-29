@@ -17,6 +17,7 @@ const pointsLedgerSchema = new mongoose.Schema(
         'checkin',         // پاداش ورود روزانه
         'spin',            // برد پوینت از گردونه شانس
         'referral_bonus',  // پاداش دعوت دوست (وقتی دعوت‌شده به حد نصاب تسک برسد)
+        'leaderboard_reward', // جایزه رتبه برتر leaderboard هفتگی
         'exchange_out',    // کسر شده در تبدیل (پوینت->GRAM یا GRAM->پوینت)
         'exchange_in',     // اضافه شده در تبدیل
         'withdraw',        // کسر GRAM بابت درخواست برداشت

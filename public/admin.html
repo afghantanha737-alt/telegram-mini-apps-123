@@ -83,6 +83,7 @@
       <button data-tab="stats" onclick="switchTab('stats')">آمار</button>
       <button data-tab="tasks" onclick="switchTab('tasks')">تسک‌ها</button>
       <button data-tab="withdrawals" onclick="switchTab('withdrawals')">برداشت‌ها</button>
+      <button data-tab="weekly" onclick="switchTab('weekly')">جوایز لیدربورد</button>
       <button data-tab="users" onclick="switchTab('users')">کاربران</button>
       <button data-tab="broadcast" onclick="switchTab('broadcast')">پیام همگانی</button>
       <button data-tab="logs" onclick="switchTab('logs')">لاگ فعالیت</button>
@@ -202,6 +203,20 @@
           </select>
         </div>
         <div id="withdrawalsList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- WEEKLY LEADERBOARD AWARDS -->
+    <div id="tab-weekly" class="tabContent hidden">
+      <div class="card">
+        <div class="flexBetween"><b>جوایز لیدربورد هفتگی</b><button class="secondary" type="button" onclick="loadWeeklyAwards()">به‌روزرسانی</button></div>
+        <p class="small">هفته با تاریخ شروع دوشنبه بر اساس UTC مشخص می‌شود. پرداخت فقط بعد از پایان هفته انجام می‌شود و هر رتبه فقط یک‌بار قابل پرداخت است.</p>
+        <div class="row">
+          <input id="weeklyAwardKey" placeholder="مثلاً 2026-09-28" style="flex:1;margin:0">
+          <button type="button" onclick="loadWeeklyAwards()">نمایش نتایج</button>
+          <button type="button" class="success" onclick="payWeeklyAwards()">پرداخت جوایز</button>
+        </div>
+        <div id="weeklyAwardsList" style="margin-top:12px"></div>
       </div>
     </div>
 
@@ -471,6 +486,7 @@ function switchTab(tab) {
   if (tab === "logs") loadLogs();
   if (tab === "tasks") loadTaskFormSettings();
   if (tab === "channels") loadRequiredChannels();
+  if (tab === "weekly") loadWeeklyAwards();
   if (tab === "settings") loadSettings();
 }
 
@@ -944,6 +960,40 @@ async function withdrawSetStatus(id, target) {
     await api(`/api/admin/withdrawals/${id}/status`, { method: "POST", body: JSON.stringify({ status: target, note }) });
     showMsg("وضعیت به‌روزرسانی شد.", "success");
     loadWithdrawals();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+async function loadWeeklyAwards() {
+  const container = document.getElementById("weeklyAwardsList");
+  if (!container) return;
+  const key = document.getElementById("weeklyAwardKey").value.trim();
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  try {
+    const data = await api(`/api/admin/weekly-leaderboard${key ? `?weekKey=${encodeURIComponent(key)}` : ""}`);
+    if (!key && data.weekKey) document.getElementById("weeklyAwardKey").value = data.weekKey;
+    const awards = new Map((data.awards || []).map(item => [item.rank, item]));
+    const rows = (data.standings || []).slice(0, (data.prizes || []).length).map(row => {
+      const award = awards.get(row.rank);
+      const status = award?.status || "pending";
+      return `<tr><td>${row.rank}</td><td>${escapeHtml(row.user?.firstName || row.user?.username || "—")}</td><td>${row.points}</td><td>${data.prizes?.[row.rank - 1] || 0}</td><td><span class="badge ${status === "paid" ? "paid" : status === "failed" ? "rejected" : "pending"}">${status === "paid" ? "پرداخت‌شده" : status === "failed" ? "ناموفق" : "در انتظار پرداخت"}</span></td></tr>`;
+    }).join("");
+    container.innerHTML = `<div class="small">بازه: ${new Date(data.weekStart).toLocaleDateString("fa-IR")} تا ${new Date(data.weekEnd).toLocaleDateString("fa-IR")}</div>` +
+      (rows ? `<table style="margin-top:8px"><thead><tr><th>رتبه</th><th>کاربر</th><th>امتیاز هفته</th><th>جایزه</th><th>وضعیت</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="empty">برای این هفته رتبه‌ای ثبت نشده است.</div>');
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function payWeeklyAwards() {
+  const key = document.getElementById("weeklyAwardKey").value.trim();
+  if (!key) return showMsg("ابتدا هفته را مشخص کنید.", "error");
+  if (!confirm("جوایز این هفته به موجودی پوینت برندگان اضافه می‌شود و هر رتبه فقط یک‌بار پرداخت خواهد شد. ادامه می‌دهید؟")) return;
+  try {
+    const data = await api(`/api/admin/weekly-leaderboard/${encodeURIComponent(key)}/pay`, { method: "POST", body: JSON.stringify({}) });
+    showMsg(`پرداخت انجام شد: ${(data.results || []).filter(item => item.status === "paid").length} رتبه.`, "success");
+    loadWeeklyAwards();
   } catch (error) {
     showMsg(error.message, "error");
   }

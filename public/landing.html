@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#faf5ff">
 <meta name="color-scheme" content="light">
-<title>Gramup — پوینت جمع کن، به GRAM تبدیل کن</title>
-<meta name="description" content="Gramup: با انجام تسک، دعوت دوستان و ورود روزانه پوینت جمع کن و به GRAM (روی TON) تبدیل و برداشت کن.">
+<title>Gramup — Task & Loyalty App</title>
+<meta name="description" content="Gramup is a Telegram task and loyalty app for points and promotional rewards. Conversion and withdrawal are subject to eligibility and published rules.">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Gramup">
-<meta property="og:description" content="با انجام تسک، دعوت دوستان و ورود روزانه پوینت جمع کن و به GRAM تبدیل کن.">
+<meta property="og:description" content="A Telegram task and loyalty app for points and promotional rewards, subject to eligibility and published rules.">
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -36,7 +36,7 @@
       <p class="landingTagline" data-i18n="tagline">تسک انجام بده، دوست دعوت کن و هر روز وارد شو — پوینت جمع کن و در صورت واجد شرایط بودن طبق قوانین درخواست تبدیل یا برداشت بده.</p>
       <div class="landingCtas">
         <a class="landingCtaPrimary" href="#" id="openAppLink" target="_blank" rel="noopener">🚀 <span data-i18n="ctaOpen">باز کردن Gramup</span></a>
-        <a class="landingCtaGhost" href="proof.html"><span data-i18n="ctaProof">مشاهده‌ی اثبات پرداخت‌ها ↗</span></a>
+        <a class="landingCtaGhost" href="proof.html"><span data-i18n="ctaProof">مشاهده‌ی سوابق پرداخت ↗</span></a>
       </div>
     </div>
 
@@ -87,7 +87,19 @@
     <div class="landingSection">
       <div class="landingTrust">
         <p data-i18n="trustDesc">پرداخت‌های تکمیل‌شده Gramup، در صورت ثبت روی زنجیره، با جزئیات تراکنش و لینک explorer قابل بررسی‌اند.</p>
-        <a class="landingCtaGhost" href="proof.html"><span data-i18n="trustCta">مشاهده‌ی پرداخت‌های واقعی ↗</span></a>
+        <a class="landingCtaGhost" href="proof.html"><span data-i18n="trustCta">مشاهده‌ی سوابق پرداخت ↗</span></a>
+      </div>
+    </div>
+
+    <div class="landingSection">
+      <div class="landingTrust">
+        <div class="landingCtas">
+          <a class="landingCtaGhost" href="terms.html">Terms</a>
+          <a class="landingCtaGhost" href="privacy.html">Privacy</a>
+          <a class="landingCtaGhost" href="rewards.html">Reward Rules</a>
+          <a class="landingCtaGhost" href="withdrawal.html">Withdrawal Rules</a>
+          <a class="landingCtaGhost" href="support.html">Support</a>
+        </div>
       </div>
     </div>
   </div>
@@ -96,7 +108,7 @@
 const I18N = {
   fa: {
     tagline: "تسک انجام بده، دوست دعوت کن و هر روز وارد شو — پوینت جمع کن و در صورت واجد شرایط بودن طبق قوانین درخواست تبدیل یا برداشت بده.",
-    ctaOpen: "باز کردن Gramup", ctaProof: "مشاهده‌ی اثبات پرداخت‌ها ↗",
+    ctaOpen: "باز کردن Gramup", ctaProof: "مشاهده‌ی سوابق پرداخت ↗",
     featuresTitle: "چطور پوینت جمع می‌کنی؟",
     f1Title: "تسک‌ها", f1Desc: "عضویت در کانال یا گروه، با تایید واقعی از خود تلگرام",
     f2Title: "ورود روزانه و گردونه", f2Desc: "هر روز پوینت رایگان بگیر؛ با استریک ۷ روزه شانس گردونه هم می‌گیری",
@@ -107,28 +119,28 @@ const I18N = {
     s2Title: "تسک انجام بده و هر روز سر بزن", s2Desc: "پوینت جمع می‌شود؛ استریک روزانه پاداش بیشتر می‌دهد",
     s3Title: "شرایط تبدیل و برداشت را بررسی کن", s3Desc: "از کیف‌پول اپ، در صورت واجد شرایط بودن به آدرس TON خودت درخواست بده",
     trustDesc: "پرداخت‌های تکمیل‌شده Gramup، در صورت ثبت روی زنجیره، با جزئیات تراکنش و لینک explorer قابل بررسی‌اند.",
-    trustCta: "مشاهده‌ی پرداخت‌های واقعی ↗",
+    trustCta: "مشاهده‌ی سوابق پرداخت ↗",
     langBtn: "English"
   },
   ps: {
-    tagline: "دندې ترسره کړئ، ملګري بلنه وکړئ، هره ورځ ننوځئ — پوائنټونه راټول کړئ او د TON پر بنسټ ریښتینې GRAM ته یې بدل او ایستل کړئ.",
-    ctaOpen: "Gramup خلاصول", ctaProof: "د تادیاتو تایید وګورئ ↗",
+    tagline: "دندې ترسره کړئ، ملګري بلنه وکړئ او هره ورځ ننوځئ — پوائنټونه راټول کړئ او د اوسنیو شرایطو له مخې د بدلون یا ایستلو غوښتنه وکړئ.",
+    ctaOpen: "Gramup خلاصول", ctaProof: "د بشپړو شوو تادیاتو سوابق وګورئ ↗",
     featuresTitle: "پوائنټونه به څنګه راټول کړئ؟",
     f1Title: "دندې", f1Desc: "په چینل یا ګروپ کې غړیتوب، د ټیلیګرام له خوا ریښتیني تایید سره",
     f2Title: "ورځنی ننوتل او ګردونه", f2Desc: "هره ورځ وړیا پوائنټ ترلاسه کړئ؛ د ۷ ورځې پرله‌پسې سره د ګردونې چانس هم ترلاسه کوئ",
     f3Title: "ملګري بلنه", f3Desc: "د هر فعال ملګری سره، د بلنې ګټه ترلاسه کوئ",
-    f4Title: "ریښتینی بدلون او ایستل", f4Desc: "پوائنټونه GRAM ته بدل او خپل TON والټ ته یې ایستل کړئ",
+    f4Title: "د بدلون او ایستلو شرایط", f4Desc: "د شرایطو له پوره کېدو وروسته د GRAM بدلون یا خپل TON والټ ته د ایستلو غوښتنه وکړئ",
     stepsTitle: "په ۳ ګامونو کې پیل",
     s1Title: "اپ په ټیلیګرام کې خلاص کړئ", s1Desc: "د پورتني تڼي سره، مستقیم په ټیلیګرام کې خلاصیږي",
     s2Title: "دنده ترسره کړئ او هره ورځ راشئ", s2Desc: "پوائنټونه راټولیږي؛ ورځنی پرله‌پسې والی ډیره ګټه ورکوي",
     s3Title: "GRAM ته یې بدل او ایستل یې کړئ", s3Desc: "د اپ له والټ څخه، خپل TON پته ته د ایستلو غوښتنه ورکړئ",
-    trustDesc: "هره تادیه چې Gramup یې کوي ریښتینې ده او د TON په زنځیر کې د کتلو وړ ده — یوازې یو ادعا نه ده.",
-    trustCta: "ریښتینې تادیات وګورئ ↗",
+    trustDesc: "بشپړې شوې تادیات، که په زنځیر کې ثبت شي، د تراکنش له جزئیاتو او explorer لینک سره د کتلو وړ دي.",
+    trustCta: "د بشپړو شوو تادیاتو سوابق وګورئ ↗",
     langBtn: "English"
   },
   en: {
     tagline: "Complete tasks, invite friends, and check in daily — earn points and request conversion or withdrawal when eligible under the current rules.",
-    ctaOpen: "Open Gramup", ctaProof: "View proof of payments ↗",
+    ctaOpen: "Open Gramup", ctaProof: "View payment records ↗",
     featuresTitle: "How do you earn points?",
     f1Title: "Tasks", f1Desc: "Join a channel or group, verified for real by Telegram itself",
     f2Title: "Daily check-in & wheel", f2Desc: "Get free points every day; a 7-day streak also earns a spin",
@@ -139,7 +151,7 @@ const I18N = {
     s2Title: "Do tasks & check in daily", s2Desc: "Points add up; a daily streak earns extra rewards",
     s3Title: "Review conversion and withdrawal rules", s3Desc: "From the app's wallet, request a withdrawal to your TON address when eligible",
     trustDesc: "Completed Gramup payments may be verifiable with transaction details and an explorer link when recorded on-chain.",
-    trustCta: "See real payments ↗",
+    trustCta: "View payment records ↗",
     langBtn: "فارسی"
   }
 };
@@ -154,7 +166,7 @@ function applyLang() {
     if (dict[el.dataset.i18n]) el.textContent = dict[el.dataset.i18n];
   });
   document.getElementById("langToggle").textContent = dict.langBtn;
-  document.title = lang === "en" ? "Gramup — Earn points, get real crypto" : "Gramup — پوینت جمع کن، به GRAM تبدیل کن";
+  document.title = lang === "en" ? "Gramup — Task & Loyalty App" : "Gramup — اپ تسک و وفاداری";
 }
 
 function toggleLang() {

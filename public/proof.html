@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#faf5ff">
 <meta name="color-scheme" content="light">
-<title>Gramup — Proof of Payments</title>
-<meta name="description" content="Gramup public proof of payments: real GRAM withdrawals sent to users, independently verifiable on the TON blockchain.">
+<title>Gramup — Completed Payment Records</title>
+<meta name="description" content="Gramup public records of completed payments. Transaction details and TON explorer links are shown when available.">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Gramup — Proof of Payments">
-<meta property="og:description" content="Real GRAM withdrawals sent to Gramup users, independently verifiable on the TON blockchain.">
+<meta property="og:title" content="Gramup — Completed Payment Records">
+<meta property="og:description" content="Public records of completed Gramup payments, with transaction details when available.">
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,9 +34,9 @@
     </div>
 
     <div class="proofHero">
-      <div class="proofHeroBadge">✅ <span data-i18n="badge">Verified on-chain</span></div>
+      <div class="proofHeroBadge">✅ <span data-i18n="badge">Completed payment records</span></div>
       <h1 class="proofHeroTitle" data-i18n="title">Proof of Payments</h1>
-      <p class="proofHeroDesc" data-i18n="desc">Every payment below was actually sent to a real Gramup user's TON wallet. Addresses are shortened for user privacy, but every transaction hash is complete and can be independently checked on a public TON block explorer — nothing here is self-reported.</p>
+      <p class="proofHeroDesc" data-i18n="desc">This page lists completed Gramup payment records. Wallet addresses are shortened for privacy, and a TON explorer link is shown when a transaction hash is available.</p>
     </div>
 
     <div class="proofStats" id="proofStats">
@@ -62,24 +62,24 @@
 const I18N = {
   en: {
     badge: "Verified on-chain", title: "Proof of Payments",
-    desc: "Every payment below was actually sent to a real Gramup user's TON wallet. Addresses are shortened for user privacy, but every transaction hash is complete and can be independently checked on a public TON block explorer — nothing here is self-reported.",
-    statTotal: "Total paid out", statCount: "Payments shown", statVerified: "On-chain verified",
+    desc: "This page lists completed Gramup payment records. Wallet addresses are shortened for privacy, and a TON explorer link is shown when a transaction hash is available.",
+    statTotal: "Total in records", statCount: "Records shown", statVerified: "With transaction hash",
     listTitle: "Recent payments", loading: "Loading…", cta: "Open Gramup",
-    note: "Full wallet addresses are withheld to protect users' privacy — this matches Gramup's published privacy policy. Transaction hashes are shown in full and link directly to a public TON explorer for independent verification.",
-    empty: "No completed withdrawals yet. Once the first real payment is sent, it will appear here automatically.",
+    note: "Full wallet addresses are withheld to protect users' privacy. When a transaction hash is available, it links directly to a public TON explorer for independent review.",
+    empty: "No completed payment records yet. Records will appear here after a payment is completed and recorded.",
     to: "To", from: "From", txid: "Tx hash", view: "View on Tonviewer ↗",
-    verified: "Amount & address verified", pending: "Sent — manual review",
+    verified: "Transaction record available", pending: "Record available — no hash",
     langBtn: "فارسی"
   },
   fa: {
-    badge: "تایید روی زنجیره", title: "تاریخچه‌ی عمومی پرداخت‌ها",
-    desc: "هر پرداخت زیر واقعاً به کیف‌پول TON یک کاربر واقعی Gramup ارسال شده است. آدرس‌ها برای حفظ حریم خصوصی کاربران کوتاه شده‌اند، اما هش هر تراکنش کامل است و روی یک explorer عمومی TON قابل بررسی مستقل است — هیچ‌کدام از این اطلاعات خوداظهاری نیست.",
-    statTotal: "مجموع پرداختی", statCount: "تعداد نمایش‌داده‌شده", statVerified: "تاییدشده روی زنجیره",
+    badge: "سوابق پرداخت تکمیل‌شده", title: "سوابق عمومی پرداخت‌ها",
+    desc: "این صفحه سوابق پرداخت‌های تکمیل‌شده Gramup را نشان می‌دهد. آدرس کیف‌پول‌ها برای حفظ حریم خصوصی کوتاه شده‌اند و هر زمان هش تراکنش موجود باشد، لینک explorer نمایش داده می‌شود.",
+    statTotal: "مجموع ثبت‌شده", statCount: "سوابق نمایش‌داده‌شده", statVerified: "دارای هش تراکنش",
     listTitle: "پرداخت‌های اخیر", loading: "در حال بارگذاری...", cta: "باز کردن Gramup",
-    note: "آدرس کامل کیف‌پول‌ها برای حفظ حریم خصوصی کاربران نمایش داده نمی‌شود — این دقیقاً مطابق سیاست حریم خصوصی منتشرشده‌ی Gramup است. هش هر تراکنش کامل نمایش داده می‌شود و مستقیم به یک explorer عمومی TON برای بررسی مستقل وصل است.",
-    empty: "هنوز برداشت تکمیل‌شده‌ای وجود ندارد. به‌محض اولین پرداخت واقعی، همین‌جا نمایش داده می‌شود.",
+    note: "آدرس کامل کیف‌پول‌ها برای حفظ حریم خصوصی نمایش داده نمی‌شود. وقتی هش تراکنش در دسترس باشد، لینک مستقیم explorer برای بررسی عمومی نشان داده می‌شود.",
+    empty: "هنوز سابقه پرداخت تکمیل‌شده‌ای وجود ندارد. پس از تکمیل و ثبت پرداخت، سابقه در اینجا نمایش داده می‌شود.",
     to: "به آدرس", from: "از آدرس", txid: "هش تراکنش", view: "مشاهده در Tonviewer ↗",
-    verified: "مبلغ و مقصد تایید شد", pending: "ارسال شد — بررسی دستی",
+    verified: "رکورد تراکنش موجود است", pending: "رکورد موجود است — هش در دسترس نیست",
     langBtn: "English"
   }
 };

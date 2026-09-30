@@ -1543,13 +1543,15 @@ function escapeHtml(value) {
 }
 
 /* ---------- INIT ---------- */
-if (ADMIN_KEY) {
+if (ADMIN_SESSION) {
   api("/api/admin/settings").then(() => {
     document.getElementById("loginBox").classList.add("hidden");
     document.getElementById("panel").classList.remove("hidden");
     switchTab("stats");
   }).catch(() => {
-    localStorage.removeItem("adminKey");
+    sessionStorage.removeItem("adminSession");
+    sessionStorage.removeItem("adminName");
+    ADMIN_SESSION = "";
   });
 }
 </script>

@@ -599,6 +599,21 @@ html[data-theme="light"] .progressTrack { background: rgba(20,22,28,.08); }
 .rankBadge.top3 { background: linear-gradient(145deg, #e5a879, #b9743f); color: #2c1a0c; }
 .leaderName { font-size: 12px; font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .leaderPoints { font-size: 12px; font-weight: 800; color: var(--gold); white-space: nowrap; }
+.leaderPrize { display: block; color: var(--gold); font-size: 10px; margin-top: 2px; }
+
+/* WEEKLY COMPETITION — فقط در نمای Weekly Leaderboard نمایش داده می‌شود */
+.weeklyCompetitionBanner {
+  padding: 16px; margin-bottom: 13px; border-radius: var(--radius-lg);
+  border: 1px solid rgba(139, 92, 246, .22);
+  background: linear-gradient(145deg, rgba(139, 92, 246, .13), rgba(217, 70, 239, .08) 58%, var(--surface));
+  box-shadow: 0 8px 24px rgba(139, 92, 246, .08);
+}
+.weeklyCompetitionTitle { font-size: 16px; font-weight: 900; color: var(--text); }
+.weeklyCompetitionDescription { margin-top: 7px; font-size: 11px; line-height: 1.7; color: var(--text-soft); }
+.weeklyCompetitionRewardsTitle { margin-top: 12px; font-size: 11px; font-weight: 900; color: var(--text); }
+.weeklyCompetitionRewards { display: grid; gap: 4px; margin-top: 6px; font-size: 11px; font-weight: 800; color: var(--gold); }
+.weeklyCompetitionCountdownLabel { margin-top: 14px; font-size: 10px; color: var(--text-muted); font-weight: 800; }
+.weeklyCompetitionCountdown { margin-top: 4px; font-size: 19px; line-height: 1.25; font-weight: 900; color: var(--primary-2); direction: ltr; text-align: left; font-variant-numeric: tabular-nums; }
 
 /* OVERLAYS / MODALS */
 .overlay {

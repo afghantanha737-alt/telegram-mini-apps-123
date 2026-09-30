@@ -8,7 +8,9 @@ const PointsLedger = require('../models/PointsLedger');
  */
 async function recordLedger({ user, type, amount, currency = 'points', description = '', balanceAfter = null, sourceId = null }) {
   try {
-    const entry = await PointsLedger.create({ user, type, amount, currency, description, balanceAfter, sourceId });
+    const payload = { user, type, amount, currency, description, balanceAfter };
+    if (sourceId) payload.sourceId = String(sourceId);
+    const entry = await PointsLedger.create(payload);
     return { ok: true, created: true, entry };
   } catch (error) {
     if (error?.code === 11000 && sourceId) {

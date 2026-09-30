@@ -57,6 +57,7 @@ const state = {
   weeklyMyRank: null,
   weeklyMyPoints: 0,
   weeklyLeaderboardMeta: null,
+  weeklyServerOffsetMs: 0,
   captchaA: 0,
   captchaB: 0,
   initialized: false
@@ -791,6 +792,7 @@ const LEDGER_TYPE_UI = {
   checkin: { icon: "📅" },
   spin: { icon: "🎡" },
   referral_bonus: { icon: "👥" },
+  leaderboard_reward: { icon: "🏆" },
   exchange_out: { icon: "⇄" },
   exchange_in: { icon: "⇄" },
   withdraw: { icon: "➤" },
@@ -845,11 +847,14 @@ async function loadWeeklyLeaderboard() {
     state.weeklyMyRank = data?.myRank ?? null;
     state.weeklyMyPoints = Number(data?.myPoints) || 0;
     state.weeklyLeaderboardMeta = data || null;
+    const serverNow = Number(data?.serverNow);
+    state.weeklyServerOffsetMs = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
     return state.weeklyLeaderboard;
   } catch (error) {
     console.warn("Weekly leaderboard failed:", error);
     state.weeklyLeaderboard = [];
     state.weeklyLeaderboardMeta = null;
+    state.weeklyServerOffsetMs = 0;
     return [];
   }
 }
@@ -1969,6 +1974,81 @@ function setLeaderboardMode(mode) {
 }
 window.setLeaderboardMode = setLeaderboardMode;
 
+let weeklyCountdownTimer = null;
+let weeklyRolloverLoading = false;
+
+function stopWeeklyCompetitionCountdown() {
+  if (weeklyCountdownTimer) clearInterval(weeklyCountdownTimer);
+  weeklyCountdownTimer = null;
+}
+
+function formatWeeklyCountdown(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+}
+
+function renderWeeklyCompetitionBanner() {
+  const prizes = Array.isArray(state.weeklyLeaderboardMeta?.prizes)
+    ? state.weeklyLeaderboardMeta.prizes.slice(0, 3)
+    : [500, 250, 100];
+  return `
+    <div class="weeklyCompetitionBanner">
+      <div class="weeklyCompetitionTitle">🏆 ${t("weekly_competition_title")}</div>
+      <div class="weeklyCompetitionDescription">${t("weekly_competition_description")}</div>
+      <div class="weeklyCompetitionRewardsTitle">🎁 ${t("weekly_rewards_title")}</div>
+      <div class="weeklyCompetitionRewards">
+        <span>🥇 ${t("weekly_reward_first", { n: formatPoints(prizes[0] || 0) })}</span>
+        <span>🥈 ${t("weekly_reward_second", { n: formatPoints(prizes[1] || 0) })}</span>
+        <span>🥉 ${t("weekly_reward_third", { n: formatPoints(prizes[2] || 0) })}</span>
+      </div>
+      <div class="weeklyCompetitionCountdownLabel">⏳ ${t("weekly_competition_ends_in")}</div>
+      <div id="weeklyCompetitionCountdown" class="weeklyCompetitionCountdown">${t("weekly_competition_calculating")}</div>
+    </div>
+  `;
+}
+
+async function startWeeklyCompetitionCountdown() {
+  stopWeeklyCompetitionCountdown();
+  if (leaderboardMode !== "weekly") return;
+
+  const countdown = document.getElementById("weeklyCompetitionCountdown");
+  const endAt = new Date(state.weeklyLeaderboardMeta?.weekEnd || 0).getTime();
+  if (!countdown || !Number.isFinite(endAt) || endAt <= 0) return;
+
+  const tick = async () => {
+    const remaining = endAt - (Date.now() + Number(state.weeklyServerOffsetMs || 0));
+    if (remaining <= 0) {
+      countdown.textContent = t("weekly_competition_refreshing");
+      stopWeeklyCompetitionCountdown();
+      if (weeklyRolloverLoading) return;
+      weeklyRolloverLoading = true;
+      try {
+        await loadWeeklyLeaderboard();
+        if (profileView === "leaderboard" && leaderboardMode === "weekly") {
+          const content = $("#content");
+          if (content) {
+            content.innerHTML = renderProfileLeaderboard();
+            startWeeklyCompetitionCountdown();
+          }
+        }
+      } finally {
+        weeklyRolloverLoading = false;
+      }
+      return;
+    }
+    countdown.textContent = formatWeeklyCountdown(remaining);
+  };
+
+  await tick();
+  if (!weeklyCountdownTimer && document.getElementById("weeklyCompetitionCountdown")) {
+    weeklyCountdownTimer = setInterval(tick, 1000);
+  }
+}
+
 function renderProfileLeaderboard() {
   const weekly = leaderboardMode === "weekly";
   const list = weekly ? state.weeklyLeaderboard : state.leaderboard;
@@ -1981,7 +2061,7 @@ function renderProfileLeaderboard() {
       <div class="leaderboardItem ${isMe ? "me" : ""}">
         <div class="rankBadge ${rankClass}">${formatPoints(rank)}</div>
         <div class="leaderName">${escapeHTML(person.firstName || person.username || "—")}</div>
-        <div class="leaderPoints">${formatPoints(person.points)}${weekly && person.prizePoints ? `<small style="display:block;color:var(--gold)">+${formatPoints(person.prizePoints)}</small>` : ""}</div>
+        <div class="leaderPoints">${formatPoints(person.points)}${weekly && person.prizePoints ? `<small class="leaderPrize">+${formatPoints(person.prizePoints)}</small>` : ""}</div>
       </div>`;
   }).join("");
 
@@ -1996,6 +2076,7 @@ function renderProfileLeaderboard() {
       <button class="${!weekly ? "primaryBtn" : "secondaryBtn"}" type="button" style="min-height:40px;padding:8px" onclick="setLeaderboardMode('all')">${t("leaderboard_all_time")}</button>
       <button class="${weekly ? "primaryBtn" : "secondaryBtn"}" type="button" style="min-height:40px;padding:8px" onclick="setLeaderboardMode('weekly')">${t("leaderboard_weekly")}</button>
     </div>
+    ${weekly ? renderWeeklyCompetitionBanner() : ""}
     ${myRank ? `
       <div class="card" style="text-align:center">
         <div class="cardSubtitle">${t("leaderboard_rank_label")}</div>
@@ -2050,6 +2131,7 @@ function renderProfileHistory() {
 
 async function renderProfile() {
   const content = $("#content");
+  if (profileView !== "leaderboard" || leaderboardMode !== "weekly") stopWeeklyCompetitionCountdown();
   if (profileView === "leaderboard" && state.leaderboard.length === 0) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadLeaderboard();
@@ -2066,6 +2148,7 @@ async function renderProfile() {
     content.innerHTML = renderProfileReferral();
   } else if (profileView === "leaderboard") {
     content.innerHTML = renderProfileLeaderboard();
+    if (leaderboardMode === "weekly") startWeeklyCompetitionCountdown();
   } else if (profileView === "about") {
     content.innerHTML = renderProfileAbout();
   } else if (profileView === "history") {

@@ -7,7 +7,7 @@ const Task = require('../models/Task');
 const Withdrawal = require('../models/Withdrawal');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
-const { bot, notifyUser, broadcastToActiveUsers } = require('../utils/bot');
+const { bot, notifyUser, markTelegramBlocked, isTelegramDeliveryBlocked, broadcastToActiveUsers } = require('../utils/bot');
 const { botText } = require('../utils/botMessages');
 const { verifyTonTransaction } = require('../utils/tonVerify');
 const { recordLedger } = require('../utils/ledger');
@@ -1177,7 +1177,7 @@ router.post('/broadcast', upload.single('image'), async (req, res) => {
     return res.status(400).json({ success: false, message: 'متن پیام الزامی است.' });
   }
 
-  const users = await User.find({ isBanned: false }, 'telegramId');
+  const users = await User.find({ isBanned: false, telegramBlockedAt: null }, 'telegramId');
   let sent = 0;
   let failed = 0;
 
@@ -1211,6 +1211,7 @@ router.post('/broadcast', upload.single('image'), async (req, res) => {
           }
           sent += 1;
         } catch (error) {
+          if (isTelegramDeliveryBlocked(error)) await markTelegramBlocked(user.telegramId);
           failed += 1;
         }
       })

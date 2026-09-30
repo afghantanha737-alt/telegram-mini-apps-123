@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "for f in tests/*.test.js; do node \"$f\" || exit 1; done"
   },
   "dependencies": {
     "express": "^4.19.2",

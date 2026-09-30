@@ -6,6 +6,7 @@ const path = require('path');
 const { startRequest } = require('./utils/metrics');
 
 const app = express();
+app.disable('x-powered-by');
 
 /* =========================================================
    CONFIG
@@ -27,6 +28,12 @@ if (!process.env.BOT_TOKEN) {
 ========================================================= */
 app.set('trust proxy', 1);
 app.use(startRequest);
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 
 const allowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
   .split(',')
@@ -177,7 +184,12 @@ let server;
 
 async function startServer() {
   try {
-    await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 10000 });
+    await mongoose.connect(MONGO_URI, {
+      serverSelectionTimeoutMS: 10000,
+      maxPoolSize: Number(process.env.MONGO_MAX_POOL_SIZE || 20),
+      minPoolSize: Number(process.env.MONGO_MIN_POOL_SIZE || 2),
+      heartbeatFrequencyMS: 10000
+    });
     console.log('✅ MongoDB connected');
 
     // پاک‌سازی ایندکس‌های قدیمی/ناسازگار که ممکن است از نسخه‌های قبلی
@@ -200,6 +212,9 @@ async function startServer() {
     }, 10 * 60 * 1000);
 
     server = app.listen(PORT, () => {
+      server.requestTimeout = 120000;
+      server.headersTimeout = 125000;
+      server.keepAliveTimeout = 5000;
       console.log(`🚀 Server running on port ${PORT}`);
     });
   } catch (error) {
@@ -213,13 +228,12 @@ async function cleanupStaleIndexes() {
     const collection = mongoose.connection.collection('taskcompletions');
     const indexes = await collection.indexes();
 
-    // نام درست ایندکس فعلی که مدل باید داشته باشد
-    const validIndexName = 'user_1_task_1';
+    // فقط نام‌های قدیمی و شناخته‌شده حذف می‌شوند؛ indexهای جدید مدل نباید
+    // در هر startup حذف و دوباره ساخته شوند.
+    const staleNames = new Set(['userId_1_taskId_1', 'taskId_1_userId_1']);
 
     for (const index of indexes) {
-      const isPrimaryKey = index.name === '_id_';
-      const isValid = index.name === validIndexName;
-      if (!isPrimaryKey && !isValid) {
+      if (staleNames.has(index.name)) {
         await collection.dropIndex(index.name);
         console.log(`🧹 Dropped stale index "${index.name}" from taskcompletions`);
       }

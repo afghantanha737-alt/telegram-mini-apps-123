@@ -215,6 +215,15 @@ async function startServer() {
       runDailyReminderSweep().catch(error => console.error('Daily reminder sweep failed:', error));
     }, 10 * 60 * 1000);
 
+    // پایان هفته و پرداخت جوایز هفتگی مستقل از بازشدن صفحه‌ی کاربر اجرا می‌شود.
+    // خود Settlement با Award و Ledger یکتا است؛ بنابراین restart یا اجرای هم‌زمان
+    // دو نمونه باعث پرداخت دوباره نمی‌شود.
+    const { settleClosedWeeks } = require('./utils/weeklyLeaderboardSettlement');
+    settleClosedWeeks().catch(error => console.error('Initial weekly settlement failed:', error));
+    setInterval(() => {
+      settleClosedWeeks().catch(error => console.error('Scheduled weekly settlement failed:', error));
+    }, 60 * 1000);
+
     server = app.listen(PORT, () => {
       server.requestTimeout = 120000;
       server.headersTimeout = 125000;

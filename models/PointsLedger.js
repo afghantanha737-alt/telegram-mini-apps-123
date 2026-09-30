@@ -39,6 +39,8 @@ const pointsLedgerSchema = new mongoose.Schema(
 
 pointsLedgerSchema.index({ user: 1, createdAt: -1 });
 pointsLedgerSchema.index({ createdAt: 1, currency: 1, type: 1 });
+pointsLedgerSchema.index({ user: 1, currency: 1, createdAt: 1 });
+pointsLedgerSchema.index({ currency: 1, type: 1, createdAt: 1 });
 pointsLedgerSchema.index({ sourceId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('PointsLedger', pointsLedgerSchema);

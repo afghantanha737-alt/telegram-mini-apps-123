@@ -42,4 +42,7 @@ const taskSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+taskSchema.index({ isActive: 1, expiresAt: 1, isSpecialOfDay: -1, isSponsored: -1, createdAt: -1 });
+taskSchema.index({ isActive: 1, type: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Task', taskSchema);

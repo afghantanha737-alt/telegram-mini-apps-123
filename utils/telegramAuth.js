@@ -27,13 +27,16 @@ function verifyInitData(initData, botToken) {
   const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
   const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
 
-  if (computedHash !== hash) return null;
+  const expected = Buffer.from(computedHash, 'hex');
+  const received = Buffer.from(hash, 'hex');
+  if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) return null;
 
   const authDate = Number(params.get('auth_date') || 0);
   const maxAgeSeconds = Number(process.env.INIT_DATA_MAX_AGE || 86400);
   if (maxAgeSeconds > 0 && authDate > 0) {
     const nowSeconds = Math.floor(Date.now() / 1000);
-    if (nowSeconds - authDate > maxAgeSeconds) return null;
+    const futureSkewSeconds = Math.min(300, Math.max(30, Number(process.env.INIT_DATA_FUTURE_SKEW || 120)));
+    if (nowSeconds - authDate > maxAgeSeconds || authDate - nowSeconds > futureSkewSeconds) return null;
   }
 
   let user = null;

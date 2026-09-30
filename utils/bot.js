@@ -1,90 +1,112 @@
 'use strict';
-const TelegramBot = require('node-telegram-bot-api');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
+class TelegramApiError extends Error {
+  constructor(message, statusCode, body) {
+    super(message);
+    this.name = 'TelegramApiError';
+    this.response = { statusCode, body };
+  }
+}
+
+class TelegramBotClient {
+  constructor(token) {
+    this.token = token;
+    this.baseUrl = `https://api.telegram.org/bot${token}`;
+  }
+
+  async call(method, payload = {}, options = {}) {
+    const response = await fetch(`${this.baseUrl}/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(options.headers || {}) },
+      body: JSON.stringify(payload)
+    });
+    let body = {};
+    try { body = await response.json(); } catch { body = {}; }
+    if (!response.ok || body.ok === false) {
+      throw new TelegramApiError(body.description || `Telegram API ${method} failed`, response.status, body);
+    }
+    return body.result;
+  }
+
+  sendMessage(chatId, text, options = {}) {
+    return this.call('sendMessage', { chat_id: chatId, text, ...options });
+  }
+
+  async sendPhoto(chatId, buffer, options = {}) {
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    form.append('photo', new Blob([buffer]), 'broadcast.jpg');
+    for (const [key, value] of Object.entries(options || {})) {
+      if (value !== undefined && value !== null) form.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+    }
+    const response = await fetch(`${this.baseUrl}/sendPhoto`, { method: 'POST', body: form });
+    let body = {};
+    try { body = await response.json(); } catch { body = {}; }
+    if (!response.ok || body.ok === false) {
+      throw new TelegramApiError(body.description || 'Telegram sendPhoto failed', response.status, body);
+    }
+    return body.result;
+  }
+
+  copyMessage(chatId, fromChatId, messageId, options = {}) {
+    return this.call('copyMessage', { chat_id: chatId, from_chat_id: fromChatId, message_id: messageId, ...options });
+  }
+
+  answerCallbackQuery(callbackQueryId, options = {}) {
+    return this.call('answerCallbackQuery', { callback_query_id: callbackQueryId, ...options });
+  }
+
+  setWebHook(url, options = {}) {
+    const headers = {};
+    if (options.secret_token) headers['x-telegram-bot-api-secret-token'] = options.secret_token;
+    const payload = { url, ...options };
+    delete payload.secret_token;
+    return this.call('setWebhook', payload, { headers });
+  }
+
+  getChat(chatId) { return this.call('getChat', { chat_id: chatId }); }
+  getMe() { return this.call('getMe'); }
+  getChatMember(chatId, userId) { return this.call('getChatMember', { chat_id: chatId, user_id: userId }); }
+}
+
 // یک instance مشترک ربات برای کل پروژه (webhook, verify عضویت, ارسال عکس, پیام همگانی)
-const bot = BOT_TOKEN ? new TelegramBot(BOT_TOKEN) : null;
+const bot = BOT_TOKEN ? new TelegramBotClient(BOT_TOKEN) : null;
 
-/**
- * یک Promise را با سقف زمانی مشخص اجرا می‌کند تا در صورت کندی/بی‌جوابی
- * API تلگرام (مثلاً وقتی سرویس رایگان تازه از خواب بیدار شده)، درخواست
- * کاربر برای همیشه معطل نماند.
- */
 function withTimeout(promise, ms, fallbackValue) {
-  // اگر promise اصلی بعد از سررسید timeout هم رد شود (reject)، بدون این خط
-  // آن خطا "بی‌صاحب" (unhandled rejection) می‌ماند و می‌تواند در برخی محیط‌ها
-  // باعث بی‌ثباتی پردازش کل سرور شود؛ این خط آن را بی‌خطر می‌کند.
   promise.catch(() => {});
-
   return Promise.race([
     promise,
     new Promise(resolve => setTimeout(() => resolve(fallbackValue), ms))
   ]);
 }
 
-/**
- * بررسی می‌کند آیا کاربر عضو یک کانال/گروه هست یا نه.
- * نکته: ربات باید ادمین همان کانال/گروه باشد تا این متد کار کند.
- *
- * به‌جای true/false ساده، جزئیات کامل برمی‌گرداند تا اگر خطای واقعی
- * (chatId اشتباه، ربات بدون دسترسی و ...) رخ داد، بشود آن را از حالت
- * عادیِ «هنوز عضو نشده» تشخیص داد.
- */
 async function checkChatMembership(chatId, telegramUserId) {
-  if (!bot) {
-    return { joined: false, configError: 'BOT_TOKEN تنظیم نشده است.' };
-  }
-  if (!chatId) {
-    return { joined: false, configError: 'برای این تسک chatId ثبت نشده است.' };
-  }
+  if (!bot) return { joined: false, configError: 'BOT_TOKEN تنظیم نشده است.' };
+  if (!chatId) return { joined: false, configError: 'برای این تسک chatId ثبت نشده است.' };
 
   try {
-    const member = await withTimeout(
-      bot.getChatMember(chatId, telegramUserId),
-      25000,
-      'TIMEOUT'
-    );
-
+    const member = await withTimeout(bot.getChatMember(chatId, telegramUserId), 25000, 'TIMEOUT');
     if (member === 'TIMEOUT') {
       console.warn(`getChatMember timed out for chat=${chatId} user=${telegramUserId}`);
       return { joined: false, configError: 'پاسخ تلگرام کند بود (Timeout). دوباره تلاش کن.' };
     }
-
-    const joined = ['member', 'administrator', 'creator'].includes(member.status);
-    return { joined };
+    return { joined: ['member', 'administrator', 'creator'].includes(member.status) };
   } catch (error) {
     const raw = error.message || '';
     console.warn(`getChatMember failed for chat=${chatId} user=${telegramUserId}:`, raw);
-
-    // خطاهایی که یعنی مشکل از تنظیمات تسک/ربات است، نه از کاربر
-    const isConfigIssue =
-      /chat not found/i.test(raw) ||
-      /not enough rights/i.test(raw) ||
-      /member list is inaccessible/i.test(raw) ||
-      /bot is not a member/i.test(raw) ||
-      /kicked/i.test(raw);
-
-    if (isConfigIssue) {
-      return { joined: false, configError: `مشکل تنظیمات تسک: ${raw}` };
-    }
-
-    // کاربر پیدا نشد یعنی معمولاً واقعاً عضو نیست
+    const isConfigIssue = /chat not found/i.test(raw) || /not enough rights/i.test(raw) || /member list is inaccessible/i.test(raw) || /bot is not a member/i.test(raw) || /kicked/i.test(raw);
+    if (isConfigIssue) return { joined: false, configError: `مشکل تنظیمات تسک: ${raw}` };
     return { joined: false };
   }
 }
 
-// نگه‌داشتن نام قدیمی برای سازگاری با کدهای دیگر (اگر جایی صدا زده شده)
 async function isChatMember(chatId, telegramUserId) {
   const result = await checkChatMembership(chatId, telegramUserId);
   return result.joined;
 }
 
-/**
- * ارسال امن یک پیام به یک کاربر مشخص (مثلاً برای اطلاع‌رسانی تایید/رد برداشت).
- * خطاها را می‌بلعد و فقط true/false برمی‌گرداند تا هیچ‌وقت باعث خرابی جریان اصلی
- * (مثل تایید برداشت در پنل ادمین) نشود — مثلاً اگر کاربر ربات را بلاک کرده باشد.
- */
 async function notifyUser(telegramId, text, options = {}) {
   if (!bot || !telegramId) return false;
   try {
@@ -128,48 +150,30 @@ async function copyMessageSafe(User, telegramId, fromChatId, messageId) {
   }
 }
 
-/**
- * ارسال دسته‌ای یک پیام به همه‌ی کاربران فعال (غیربن‌شده)، با رعایت محدودیت نرخ تلگرام.
- * برای اطلاع‌رسانی رویدادهای عمومی مثل «تسک جدید اضافه شد» استفاده می‌شود.
- * fire-and-forget است؛ منتظرش نمی‌مانیم تا پاسخ اصلی API کند نشود.
- */
 async function broadcastToActiveUsers(User, textOrFn) {
   if (!bot) return;
-  // زبان هر کاربر هم لازم است تا اگر textOrFn تابع باشد، پیام به همان زبان ساخته شود
   const users = await User.find({ isBanned: false, telegramBlockedAt: null }, 'telegramId language');
   const BATCH_SIZE = 20;
   const DELAY_MS = 1100;
   const textFor = typeof textOrFn === 'function' ? textOrFn : () => textOrFn;
-
   for (let i = 0; i < users.length; i += BATCH_SIZE) {
     const batch = users.slice(i, i + BATCH_SIZE);
     await Promise.all(batch.map(u => notifyUser(u.telegramId, textFor(u))));
-    if (i + BATCH_SIZE < users.length) {
-      await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-    }
+    if (i + BATCH_SIZE < users.length) await new Promise(resolve => setTimeout(resolve, DELAY_MS));
   }
 }
 
-/**
- * مثل broadcastToActiveUsers ولی برای «کپی کردن» یک پیام دلخواه (متن، عکس، پست فوروادشده از
- * کانال و ...) به همه‌ی کاربران — برای دکمه‌ی «ارسال پیام همگانی» در دستور /admin ربات.
- * از copyMessage استفاده می‌شود (نه forwardMessage) تا برچسب «Forwarded from» روی پیام کاربر نیفتد.
- * برمی‌گرداند: تعداد کاربرانی که با موفقیت پیام گرفتند.
- */
 async function broadcastCopyToActiveUsers(User, fromChatId, messageId) {
   if (!bot) return 0;
   const users = await User.find({ isBanned: false, telegramBlockedAt: null }, 'telegramId');
   const BATCH_SIZE = 20;
   const DELAY_MS = 1100;
   let sent = 0;
-
   for (let i = 0; i < users.length; i += BATCH_SIZE) {
     const batch = users.slice(i, i + BATCH_SIZE);
     const results = await Promise.all(batch.map(u => copyMessageSafe(User, u.telegramId, fromChatId, messageId)));
     sent += results.filter(Boolean).length;
-    if (i + BATCH_SIZE < users.length) {
-      await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-    }
+    if (i + BATCH_SIZE < users.length) await new Promise(resolve => setTimeout(resolve, DELAY_MS));
   }
   return sent;
 }

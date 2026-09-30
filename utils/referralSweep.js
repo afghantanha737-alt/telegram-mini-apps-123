@@ -19,7 +19,14 @@ async function runReferralSweep() {
     { $group: { _id: '$user' } },
     { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
     { $unwind: '$user' },
-    { $match: { 'user.referredBy': { $ne: null } } },
+    {
+      $match: {
+        'user.referredBy': { $ne: null },
+        'user.isBanned': { $ne: true },
+        'user.referralRiskBlocked': { $ne: true },
+        'user.referralRiskScore': { $lt: 50 }
+      }
+    },
     { $group: { _id: '$user.referredBy', ids: { $addToSet: '$_id' } } }
   ]);
   const activeMap = new Map(activeUsers.map(item => [String(item._id), item.ids]));

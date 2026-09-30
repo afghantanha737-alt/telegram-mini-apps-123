@@ -84,6 +84,7 @@
       <button data-tab="tasks" onclick="switchTab('tasks')">تسک‌ها</button>
       <button data-tab="withdrawals" onclick="switchTab('withdrawals')">برداشت‌ها</button>
       <button data-tab="weekly" onclick="switchTab('weekly')">جوایز لیدربورد</button>
+      <button data-tab="audit" onclick="switchTab('audit')">حسابرسی مالی</button>
       <button data-tab="users" onclick="switchTab('users')">کاربران</button>
       <button data-tab="broadcast" onclick="switchTab('broadcast')">پیام همگانی</button>
       <button data-tab="logs" onclick="switchTab('logs')">لاگ فعالیت</button>
@@ -217,6 +218,15 @@
           <button type="button" class="success" onclick="payWeeklyAwards()">پرداخت جوایز</button>
         </div>
         <div id="weeklyAwardsList" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- FINANCIAL AUDIT -->
+    <div id="tab-audit" class="tabContent hidden">
+      <div class="card">
+        <div class="flexBetween"><b>حسابرسی موجودی و Ledger</b><button class="secondary" type="button" onclick="loadFinancialAudit()">اجرای حسابرسی</button></div>
+        <p class="small">این گزارش فقط‌خواندنی است و اختلاف بین موجودی فعلی کاربران و جمع تراکنش‌های Ledger را نشان می‌دهد. قبل از اصلاح دستی موجودی، علت هر اختلاف را بررسی کنید.</p>
+        <div id="financialAuditList"><div class="empty">برای شروع روی اجرای حسابرسی بزنید.</div></div>
       </div>
     </div>
 
@@ -502,6 +512,7 @@ function switchTab(tab) {
   if (tab === "tasks") loadTaskFormSettings();
   if (tab === "channels") loadRequiredChannels();
   if (tab === "weekly") loadWeeklyAwards();
+  if (tab === "audit") loadFinancialAudit();
   if (tab === "settings") loadSettings();
 }
 
@@ -1011,6 +1022,22 @@ async function payWeeklyAwards() {
     loadWeeklyAwards();
   } catch (error) {
     showMsg(error.message, "error");
+  }
+}
+
+async function loadFinancialAudit() {
+  const container = document.getElementById("financialAuditList");
+  if (!container) return;
+  container.innerHTML = '<div class="empty">در حال حسابرسی...</div>';
+  try {
+    const data = await api("/api/admin/financial-audit?limit=200");
+    if (!data.discrepancies?.length) {
+      container.innerHTML = `<div class="empty">اختلافی پیدا نشد. ${data.checkedUsers} کاربر بررسی شد.</div>`;
+      return;
+    }
+    container.innerHTML = `<div class="small" style="margin-bottom:8px">${data.checkedUsers} کاربر بررسی شد؛ ${data.discrepancyCount} اختلاف نمایش داده می‌شود.</div><table><thead><tr><th>کاربر</th><th>موجودی پوینت</th><th>Ledger پوینت</th><th>اختلاف پوینت</th><th>موجودی GRAM</th><th>Ledger GRAM</th><th>اختلاف GRAM</th></tr></thead><tbody>${data.discrepancies.map(row => `<tr><td>${escapeHtml(row.name || row.telegramId || "—")}</td><td>${row.pointsBalance}</td><td>${row.pointsLedger}</td><td style="color:var(--danger)">${row.pointsDifference}</td><td>${row.gramBalance}</td><td>${row.gramLedger}</td><td style="color:var(--danger)">${row.gramDifference}</td></tr>`).join("")}</tbody></table>`;
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }
 }
 

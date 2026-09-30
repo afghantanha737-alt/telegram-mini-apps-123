@@ -32,6 +32,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   next();
 });
 
@@ -44,7 +45,9 @@ app.use(
   cors({
     origin(origin, callback) {
       if (!origin) return callback(null, true);
-      if (allowedOrigins.length === 0) return callback(null, true);
+      if (allowedOrigins.length === 0) {
+        return callback(process.env.NODE_ENV === 'production' ? new Error('CORS origin not configured') : null, process.env.NODE_ENV !== 'production');
+      }
       if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error('CORS origin not allowed'));
     },

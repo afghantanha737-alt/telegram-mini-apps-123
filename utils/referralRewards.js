@@ -5,9 +5,12 @@
  * بعد از دیپلوی‌های بعدی نیز قابل تشخیص و idempotent بمانند.
  */
 const REFERRAL_REWARD_TASKS = Object.freeze([
-  Object.freeze({ id: 'referral_10', requiredInvites: 10, rewardPoints: 100 }),
-  Object.freeze({ id: 'referral_20', requiredInvites: 20, rewardPoints: 250 }),
-  Object.freeze({ id: 'referral_50', requiredInvites: 50, rewardPoints: 1000 })
+  Object.freeze({ id: 'referral_10',   requiredInvites: 10,   rewardPoints: 50 }),
+  Object.freeze({ id: 'referral_20',   requiredInvites: 20,   rewardPoints: 150 }),
+  Object.freeze({ id: 'referral_50',   requiredInvites: 50,   rewardPoints: 300 }),
+  Object.freeze({ id: 'referral_250',  requiredInvites: 250,  rewardPoints: 1000 }),
+  Object.freeze({ id: 'referral_500',  requiredInvites: 500,  rewardPoints: 2500 }),
+  Object.freeze({ id: 'referral_1000', requiredInvites: 1000, rewardPoints: 5000 })
 ]);
 
 function referralTaskId(value) {

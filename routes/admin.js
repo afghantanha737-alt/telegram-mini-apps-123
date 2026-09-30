@@ -10,7 +10,7 @@ const Settings = require('../models/Settings');
 const { bot, notifyUser, markTelegramBlocked, isTelegramDeliveryBlocked, broadcastToActiveUsers } = require('../utils/bot');
 const { botText } = require('../utils/botMessages');
 const { verifyTonTransaction } = require('../utils/tonVerify');
-const { recordLedger } = require('../utils/ledger');
+const { recordLedgerRequired } = require('../utils/ledger');
 const { recordAdminLog } = require('../utils/adminLog');
 const AdminLog = require('../models/AdminLog');
 const TaskCompletion = require('../models/TaskCompletion');
@@ -28,6 +28,8 @@ const { startOfUtcWeek, endOfUtcWeek, weekKey } = require('../utils/weeklyLeader
 const { createAdminSession, getAdminSession, revokeAdminSession, SESSION_TTL_MS } = require('../utils/adminSession');
 const { buildDiscrepancy, isDiscrepant } = require('../utils/financialAudit');
 const { snapshot: metricsSnapshot } = require('../utils/metrics');
+const { withMongoTransaction } = require('../utils/mongoTransaction');
+const { transitionWithdrawalWithRefund } = require('../utils/withdrawalFinance');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -48,7 +50,8 @@ function requireAdmin(req, res, next) {
   // x-admin-key برای سازگاری با نسخه‌های قدیمی نگه داشته شده، اما پنل جدید
   // بعد از login فقط session کوتاه‌مدت می‌فرستد و کلید اصلی را تکرار نمی‌کند.
   const legacyKey = req.headers['x-admin-key'];
-  if (!session && !isValidAdminKey(typeof legacyKey === 'string' ? legacyKey : '')) {
+  const legacyAllowed = process.env.ALLOW_LEGACY_ADMIN_KEY === 'true';
+  if (!session && (!legacyAllowed || !isValidAdminKey(typeof legacyKey === 'string' ? legacyKey : ''))) {
     return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
   }
   req.adminActor = session?.actor || String(req.headers['x-admin-name'] || '').trim() || 'ادمین';
@@ -212,6 +215,8 @@ router.post('/tasks', async (req, res) => {
 
   const task = await Task.create({
     title, description, type, url, reward,
+    // در نسخه production فقط verification خودکار Telegram فعال است؛
+    // Manual Task بدون storage امن Proof و workflow بررسی ساخته نمی‌شود.
     verifyType: 'telegram',
     chatId,
     maxCompletions: finalMaxCompletions,
@@ -390,29 +395,72 @@ router.post('/weekly-leaderboard/:selectedWeekKey/pay', async (req, res) => {
     const points = Math.floor(Number(prizes[index]) || 0);
     if (points <= 0) continue;
     const row = standings[index];
-    const award = await WeeklyLeaderboardAward.findOneAndUpdate(
-      { weekKey: selectedKey, rank },
-      { $setOnInsert: { user: row._id, points, status: 'pending' } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
-    if (award.status === 'paid') { results.push({ rank, status: 'already_paid', points }); continue; }
-    const claimed = await WeeklyLeaderboardAward.findOneAndUpdate(
-      { _id: award._id, status: { $in: ['pending', 'failed'] } },
-      { $set: { status: 'processing', error: '' } },
-      { new: true }
-    );
-    if (!claimed) { results.push({ rank, status: award.status, points }); continue; }
     try {
-      const updatedUser = await User.findByIdAndUpdate(row._id, { $inc: { points } }, { new: true });
-      if (!updatedUser) throw new Error('کاربر برنده پیدا نشد.');
-      await recordLedger({ user: updatedUser._id, type: 'leaderboard_reward', amount: points, description: `جایزه رتبه ${rank} leaderboard هفته ${selectedKey}`, balanceAfter: updatedUser.points, sourceId: `weekly-leaderboard:${selectedKey}:${rank}` });
-      await WeeklyLeaderboardAward.updateOne({ _id: claimed._id, status: 'processing' }, { $set: { status: 'paid', paidAt: new Date() } });
+      const payment = await withMongoTransaction(async session => {
+        const award = await WeeklyLeaderboardAward.findOneAndUpdate(
+          { weekKey: selectedKey, rank },
+          { $setOnInsert: { user: row._id, points, status: 'pending' } },
+          { upsert: true, new: true, setDefaultsOnInsert: true, session }
+        );
+        if (award.status === 'paid') return { status: 'already_paid', user: award.user };
+
+        const claimed = await WeeklyLeaderboardAward.findOneAndUpdate(
+          { _id: award._id, status: { $in: ['pending', 'failed'] } },
+          { $set: { status: 'processing', error: '' } },
+          { new: true, session }
+        );
+        if (!claimed) return { status: award.status, user: award.user };
+
+        const sourceId = `weekly-leaderboard:${selectedKey}:${rank}`;
+        const existingLedger = await PointsLedger.findOne({ sourceId }).session(session);
+        let updatedUser;
+        if (existingLedger) {
+          // مهاجرت امن Awardهایی که قبل از این اصلاح، User را افزایش داده
+          // اما در retry دوباره وارد مسیر پرداخت شده‌اند.
+          updatedUser = await User.findById(row._id).session(session);
+          if (!updatedUser) throw new Error('کاربر برنده پیدا نشد.');
+        } else {
+          updatedUser = await User.findOneAndUpdate(
+            { _id: row._id, isBanned: false },
+            { $inc: { points } },
+            { new: true, session }
+          );
+          if (!updatedUser) throw new Error('کاربر برنده پیدا نشد.');
+          await recordLedgerRequired({
+            user: updatedUser._id,
+            type: 'leaderboard_reward',
+            amount: points,
+            description: `جایزه رتبه ${rank} leaderboard هفته ${selectedKey}`,
+            balanceAfter: updatedUser.points,
+            sourceId,
+            session
+          });
+        }
+        await WeeklyLeaderboardAward.updateOne(
+          { _id: claimed._id, status: 'processing' },
+          { $set: { status: 'paid', paidAt: new Date(), error: '' } },
+          { session }
+        );
+        return { status: 'paid', user: updatedUser._id };
+      });
+
+      if (payment.status === 'already_paid') {
+        results.push({ rank, status: 'already_paid', points });
+        continue;
+      }
+      if (payment.status !== 'paid') {
+        results.push({ rank, status: payment.status, points });
+        continue;
+      }
       if (row.user.telegramId) {
         notifyUser(row.user.telegramId, botText('leaderboardReward', row.user.language, rank, points, selectedKey)).catch(() => {});
       }
-      results.push({ rank, status: 'paid', points, user: updatedUser._id });
+      results.push({ rank, status: 'paid', points, user: payment.user });
     } catch (error) {
-      await WeeklyLeaderboardAward.updateOne({ _id: claimed._id }, { $set: { status: 'failed', error: String(error.message || error) } });
+      await WeeklyLeaderboardAward.updateOne(
+        { weekKey: selectedKey, rank, status: 'processing' },
+        { $set: { status: 'failed', error: String(error.message || error).slice(0, 500) } }
+      );
       results.push({ rank, status: 'failed', points, error: String(error.message || error) });
     }
   }
@@ -564,34 +612,18 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
   const existing = await Withdrawal.findById(req.params.id);
   if (!existing) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
 
-  // atomic: فقط درخواستی که هنوز پرداخت/رد/لغو نشده رد می‌شود (pending، approved یا processing)
-  const withdrawal = await Withdrawal.findOneAndUpdate(
-    { _id: existing._id, status: { $in: ['pending', 'approved', 'processing'] } },
-    {
-      $set: { status: 'rejected', adminNote: reason },
-      $push: { statusHistory: { status: 'rejected', at: new Date(), note: reason } }
-    },
-    { new: true }
-  );
-  if (!withdrawal) {
-    return res.status(400).json({ success: false, message: 'این درخواست قبلاً پردازش شده است و قابل رد کردن نیست.' });
-  }
-
-  // مبلغ در زمان درخواست از «موجودی GRAM» کسر شده، پس همان ارز برگردانده می‌شود
-  const refunded = await User.findByIdAndUpdate(
-    withdrawal.user,
-    { $inc: { gramBalance: withdrawal.cryptoAmount } },
-    { new: true }
-  );
-  if (refunded) {
-    recordLedger({
-      user: refunded._id,
-      type: 'admin_adjust',
-      currency: 'gram',
-      amount: withdrawal.cryptoAmount,
-      description: 'بازگشت GRAM بابت رد درخواست برداشت',
-      balanceAfter: refunded.gramBalance
-    }).catch(() => {});
+  let withdrawal;
+  try {
+    ({ withdrawal } = await transitionWithdrawalWithRefund({
+      withdrawalId: existing._id,
+      targetStatus: 'rejected',
+      reason,
+      expectedStatus: existing.status,
+      allowedStatuses: ['pending', 'approved', 'processing']
+    }));
+  } catch (error) {
+    const status = error.code === 'WITHDRAWAL_NOT_FOUND' ? 404 : error.code === 'WITHDRAWAL_CONFLICT' ? 409 : 400;
+    return res.status(status).json({ success: false, message: error.message || 'بازگشت وجه انجام نشد.' });
   }
 
   res.json({ success: true, withdrawal });
@@ -636,38 +668,29 @@ router.post('/withdrawals/:id/status', async (req, res) => {
     return res.status(400).json({ success: false, message: `امکان تغییر وضعیت از «${existing.status}» به «${targetStatus}» وجود ندارد.` });
   }
 
-  // atomic: فقط اگر وضعیت فعلی هنوز همان است که خواندیم اعمال می‌شود (جلوگیری از تغییر هم‌زمان)
-  const update = {
-    $set: { status: targetStatus },
-    $push: { statusHistory: { status: targetStatus, at: new Date(), note: reason } }
-  };
-  if (targetStatus === 'cancelled') update.$set.adminNote = reason;
-
-  const withdrawal = await Withdrawal.findOneAndUpdate(
-    { _id: existing._id, status: existing.status },
-    update,
-    { new: true }
-  );
-  if (!withdrawal) {
-    return res.status(400).json({ success: false, message: 'وضعیت این درخواست هم‌زمان توسط جای دیگری تغییر کرده؛ صفحه را رفرش کنید.' });
-  }
-
-  // لغو هم مثل رد، وجه را برمی‌گرداند (چون از لحظه‌ی درخواست کسر شده بود)
+  let withdrawal;
   if (shouldRefund(targetStatus)) {
-    const refunded = await User.findByIdAndUpdate(
-      withdrawal.user,
-      { $inc: { gramBalance: withdrawal.cryptoAmount } },
+    try {
+      ({ withdrawal } = await transitionWithdrawalWithRefund({
+        withdrawalId: existing._id,
+        targetStatus,
+        reason,
+        expectedStatus: existing.status,
+        allowedStatuses: [existing.status]
+      }));
+    } catch (error) {
+      const status = error.code === 'WITHDRAWAL_NOT_FOUND' ? 404 : error.code === 'WITHDRAWAL_CONFLICT' ? 409 : 400;
+      return res.status(status).json({ success: false, message: error.message || 'لغو و بازگشت وجه انجام نشد.' });
+    }
+  } else {
+    // تغییر وضعیت غیرمالی همچنان با شرط وضعیت قبلی atomic است.
+    withdrawal = await Withdrawal.findOneAndUpdate(
+      { _id: existing._id, status: existing.status },
+      { $set: { status: targetStatus }, $push: { statusHistory: { status: targetStatus, at: new Date(), note: reason } } },
       { new: true }
     );
-    if (refunded) {
-      recordLedger({
-        user: refunded._id,
-        type: 'admin_adjust',
-        currency: 'gram',
-        amount: withdrawal.cryptoAmount,
-        description: 'بازگشت GRAM بابت لغو درخواست برداشت',
-        balanceAfter: refunded.gramBalance
-      }).catch(() => {});
+    if (!withdrawal) {
+      return res.status(400).json({ success: false, message: 'وضعیت این درخواست هم‌زمان توسط جای دیگری تغییر کرده؛ صفحه را رفرش کنید.' });
     }
   }
 
@@ -771,6 +794,11 @@ router.post('/users/:id/referral-review', async (req, res) => {
         { $addToSet: { activeReferralIds: user._id }, $inc: { activeInvitedCount: 1 } }
       );
     }
+  } else if (action === 'block' && user.referredBy) {
+    await User.findOneAndUpdate(
+      { _id: user.referredBy, activeReferralIds: user._id, activeInvitedCount: { $gt: 0 } },
+      { $pull: { activeReferralIds: user._id }, $inc: { activeInvitedCount: -1 } }
+    );
   }
   recordAdminLog({ actor: req.adminActor, action: `referral_risk_${action}`, targetType: 'user', targetId: user._id, details: user.firstName || user.username || '' });
   res.json({ success: true, user: updated });

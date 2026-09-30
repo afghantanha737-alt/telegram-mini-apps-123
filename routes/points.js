@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth } = require('../utils/telegramAuth');
-const { recordLedger } = require('../utils/ledger');
+const { recordLedgerRequired } = require('../utils/ledger');
 const Settings = require('../models/Settings');
 const User = require('../models/User');
 const Withdrawal = require('../models/Withdrawal');
@@ -44,6 +44,7 @@ const { notifyUser } = require('../utils/bot');
 const { botText } = require('../utils/botMessages');
 const { synthesizeHistory } = require('../utils/withdrawalStatus');
 const { getLevel } = require('../utils/levels');
+const { withMongoTransaction } = require('../utils/mongoTransaction');
 
 // GET /api/points/me
 router.get('/me', auth, async (req, res) => {
@@ -89,49 +90,60 @@ router.get('/me', auth, async (req, res) => {
 
 // POST /api/points/checkin
 router.post('/checkin', auth, async (req, res) => {
-  const u = req.dbUser;
   const settings = await Settings.getGlobal();
   const todayKey = utcDayKey(new Date());
+  let result;
+  try {
+    result = await withMongoTransaction(async session => {
+      const current = await User.findById(req.dbUser._id).session(session);
+      if (!current) throw new Error('کاربر پیدا نشد.');
+      if (current.lastCheckIn && utcDayKey(current.lastCheckIn) === todayKey) {
+        const error = new Error('امروز قبلاً ورود روزانه ثبت شده است.');
+        error.code = 'ALREADY_CHECKED_IN';
+        throw error;
+      }
 
-  if (u.lastCheckIn && utcDayKey(u.lastCheckIn) === todayKey) {
-    return res.status(400).json({ success: false, message: 'امروز قبلاً ورود روزانه ثبت شده است.', code: 'ALREADY_CHECKED_IN' });
+      const wasYesterday = current.lastCheckIn && utcDayKey(current.lastCheckIn) === todayKey - 1;
+      const newStreak = wasYesterday ? current.streak + 1 : 1;
+      const bonus = Math.min(newStreak, 30) * settings.streakBonusPoints;
+      const earned = settings.dailyCheckInPoints + bonus;
+      const gotSpin = newStreak > 0 && newStreak % 7 === 0;
+      const inc = { points: earned, totalCheckins: 1 };
+      if (gotSpin) inc.spinChances = 1;
+
+      const updated = await User.findOneAndUpdate(
+        { _id: current._id, lastCheckIn: current.lastCheckIn || null },
+        { $set: { streak: newStreak, lastCheckIn: new Date() }, $inc: inc },
+        { new: true, session }
+      );
+      if (!updated) {
+        const error = new Error('امروز قبلاً ورود روزانه ثبت شده است.');
+        error.code = 'ALREADY_CHECKED_IN';
+        throw error;
+      }
+      await recordLedgerRequired({
+        user: updated._id,
+        type: 'checkin',
+        amount: earned,
+        description: `ورود روزانه (استریک ${updated.streak})`,
+        balanceAfter: updated.points,
+        sourceId: `checkin:${updated._id}:${todayKey}`,
+        session
+      });
+      return { updated, earned, gotSpin };
+    });
+  } catch (error) {
+    if (error.code === 'ALREADY_CHECKED_IN') return res.status(400).json({ success: false, message: error.message, code: error.code });
+    throw error;
   }
-
-  const wasYesterday = u.lastCheckIn && utcDayKey(u.lastCheckIn) === todayKey - 1;
-  const newStreak = wasYesterday ? u.streak + 1 : 1;
-  const bonus = Math.min(newStreak, 30) * settings.streakBonusPoints;
-  const earned = settings.dailyCheckInPoints + bonus;
-  const gotSpin = newStreak > 0 && newStreak % 7 === 0;
-
-  const inc = { points: earned, totalCheckins: 1 };
-  if (gotSpin) inc.spinChances = 1;
-
-  // atomic: فقط اگر lastCheckIn هنوز همان مقداری باشد که خواندیم، اعمال می‌شود.
-  // پس دو درخواست هم‌زمان نمی‌توانند هر دو پاداش روز را بگیرند.
-  const updated = await User.findOneAndUpdate(
-    { _id: u._id, lastCheckIn: u.lastCheckIn || null },
-    { $set: { streak: newStreak, lastCheckIn: new Date() }, $inc: inc },
-    { new: true }
-  );
-  if (!updated) {
-    return res.status(400).json({ success: false, message: 'امروز قبلاً ورود روزانه ثبت شده است.', code: 'ALREADY_CHECKED_IN' });
-  }
-
-  recordLedger({
-    user: updated._id,
-    type: 'checkin',
-    amount: earned,
-    description: `ورود روزانه (استریک ${updated.streak})`,
-    balanceAfter: updated.points
-  }).catch(() => {});
 
   res.json({
     success: true,
-    earned,
-    points: updated.points,
-    streak: updated.streak,
-    spinChances: updated.spinChances,
-    gotSpin,
+    earned: result.earned,
+    points: result.updated.points,
+    streak: result.updated.streak,
+    spinChances: result.updated.spinChances,
+    gotSpin: result.gotSpin,
     nextResetAt: nextResetTimestamp()
   });
 });
@@ -142,55 +154,53 @@ router.post('/spin', auth, async (req, res) => {
   const paid = Boolean(req.body && req.body.paid);
   const settings = await Settings.getGlobal();
   const cost = Math.max(1, Math.floor(settings.spinCostPoints || 30));
-
-  let claimed;
-  if (paid) {
-    // atomic: پوینت فقط اگر کافی باشد کم می‌شود؛ درخواست‌های هم‌زمان نمی‌توانند بیشتر از موجودی خرج کنند
-    claimed = await User.findOneAndUpdate(
-      { _id: req.dbUser._id, points: { $gte: cost } },
-      { $inc: { points: -cost } },
-      { new: true }
-    );
-    if (!claimed) {
-      return res.status(400).json({ success: false, message: `برای چرخاندن گردونه حداقل ${cost} پوینت لازم است.`, code: 'INSUFFICIENT_BALANCE' });
-    }
-    recordLedger({
-      user: claimed._id,
-      type: 'spin',
-      amount: -cost,
-      description: 'هزینه‌ی چرخاندن گردونه شانس',
-      balanceAfter: claimed.points
-    }).catch(() => {});
-  } else {
-    // atomic: شانس فقط اگر واقعاً موجود باشد کم می‌شود؛ درخواست‌های هم‌زمان نمی‌توانند یک شانس را چندبار خرج کنند.
-    claimed = await User.findOneAndUpdate(
-      { _id: req.dbUser._id, spinChances: { $gt: 0 } },
-      { $inc: { spinChances: -1 } },
-      { new: true }
-    );
-    if (!claimed) {
-      return res.status(400).json({ success: false, message: 'شانس چرخ‌گردون نداری.', code: 'NO_SPINS' });
-    }
-  }
-
   const segmentIndex = paid ? pickWeightedIndex(resolveWeights(settings.paidSpinWeights)) : crypto.randomInt(0, SPIN_SEGMENTS.length);
   const segment = SPIN_SEGMENTS[segmentIndex];
+  const spinId = String(req.get('Idempotency-Key') || crypto.randomUUID()).replace(/[^A-Za-z0-9:_-]/g, '').slice(0, 120);
+  let updated;
+  try {
+    updated = await withMongoTransaction(async session => {
+      let claimed;
+      if (paid) {
+        claimed = await User.findOneAndUpdate(
+          { _id: req.dbUser._id, points: { $gte: cost } },
+          { $inc: { points: -cost } },
+          { new: true, session }
+        );
+        if (!claimed) {
+          const error = new Error(`برای چرخاندن گردونه حداقل ${cost} پوینت لازم است.`);
+          error.code = 'INSUFFICIENT_BALANCE';
+          throw error;
+        }
+        await recordLedgerRequired({ user: claimed._id, type: 'spin', amount: -cost, description: 'هزینه‌ی چرخاندن گردونه شانس', balanceAfter: claimed.points, sourceId: `spin:${spinId}:cost`, session });
+      } else {
+        claimed = await User.findOneAndUpdate(
+          { _id: req.dbUser._id, spinChances: { $gt: 0 } },
+          { $inc: { spinChances: -1 } },
+          { new: true, session }
+        );
+        if (!claimed) {
+          const error = new Error('شانس چرخ‌گردون نداری.');
+          error.code = 'NO_SPINS';
+          throw error;
+        }
+      }
 
-  let updated = claimed;
-  if (segment.type === 'points') {
-    updated = await User.findByIdAndUpdate(claimed._id, { $inc: { points: segment.value } }, { new: true });
-  } else if (segment.type === 'spin') {
-    updated = await User.findByIdAndUpdate(claimed._id, { $inc: { spinChances: 1 } }, { new: true }); // شانس دوباره (رایگان)
-  }
-
-  if (segment.type === 'points' && segment.value > 0) {
-    recordLedger({
-      user: updated._id,
-      type: 'spin',
-      amount: segment.value,
-      description: 'برد از گردونه شانس',
-      balanceAfter: updated.points
-    }).catch(() => {});
+      let result = claimed;
+      if (segment.type === 'points') {
+        result = await User.findByIdAndUpdate(claimed._id, { $inc: { points: segment.value } }, { new: true, session });
+      } else if (segment.type === 'spin') {
+        result = await User.findByIdAndUpdate(claimed._id, { $inc: { spinChances: 1 } }, { new: true, session });
+      }
+      if (!result) throw new Error('کاربر برای ثبت نتیجه Spin پیدا نشد.');
+      if (segment.type === 'points' && segment.value > 0) {
+        await recordLedgerRequired({ user: result._id, type: 'spin', amount: segment.value, description: 'برد از گردونه شانس', balanceAfter: result.points, sourceId: `spin:${spinId}:reward`, session });
+      }
+      return result;
+    });
+  } catch (error) {
+    if (error.code === 'INSUFFICIENT_BALANCE' || error.code === 'NO_SPINS') return res.status(400).json({ success: false, message: error.message, code: error.code });
+    throw error;
   }
 
   res.json({
@@ -231,19 +241,28 @@ router.post('/exchange', auth, async (req, res) => {
     }
 
     const gramGained = round6(points * settings.rate);
-
-    // atomic: کسر و اضافه در یک عملیات، فقط اگر موجودی کافی باشد
-    const updated = await User.findOneAndUpdate(
-      { _id: u._id, points: { $gte: points } },
-      { $inc: { points: -points, gramBalance: gramGained } },
-      { new: true }
-    );
-    if (!updated) {
-      return res.status(400).json({ success: false, message: 'موجودی پوینت کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
+    const exchangeId = String(req.get('Idempotency-Key') || crypto.randomUUID()).replace(/[^A-Za-z0-9:_-]/g, '').slice(0, 120);
+    let updated;
+    try {
+      updated = await withMongoTransaction(async session => {
+        const result = await User.findOneAndUpdate(
+          { _id: u._id, points: { $gte: points } },
+          { $inc: { points: -points, gramBalance: gramGained } },
+          { new: true, session }
+        );
+        if (!result) {
+          const error = new Error('موجودی پوینت کافی نیست.');
+          error.code = 'INSUFFICIENT_BALANCE';
+          throw error;
+        }
+        await recordLedgerRequired({ user: u._id, type: 'exchange_out', currency: 'points', amount: -points, description: 'تبدیل پوینت به GRAM', balanceAfter: result.points, sourceId: `exchange:${exchangeId}:out`, session });
+        await recordLedgerRequired({ user: u._id, type: 'exchange_in', currency: 'gram', amount: gramGained, description: 'تبدیل پوینت به GRAM', balanceAfter: result.gramBalance, sourceId: `exchange:${exchangeId}:in`, session });
+        return result;
+      });
+    } catch (error) {
+      if (error.code === 'INSUFFICIENT_BALANCE') return res.status(400).json({ success: false, message: error.message, code: error.code });
+      throw error;
     }
-
-    recordLedger({ user: u._id, type: 'exchange_out', currency: 'points', amount: -points, description: 'تبدیل پوینت به GRAM', balanceAfter: updated.points }).catch(() => {});
-    recordLedger({ user: u._id, type: 'exchange_in', currency: 'gram', amount: gramGained, description: 'تبدیل پوینت به GRAM', balanceAfter: updated.gramBalance }).catch(() => {});
 
     return res.json({
       success: true,
@@ -270,17 +289,28 @@ router.post('/exchange', auth, async (req, res) => {
 
   const gramSpent = round6(pointsGained * settings.rate);
 
-  const updated = await User.findOneAndUpdate(
-    { _id: u._id, gramBalance: { $gte: gramSpent } },
-    { $inc: { gramBalance: -gramSpent, points: pointsGained } },
-    { new: true }
-  );
-  if (!updated) {
-    return res.status(400).json({ success: false, message: 'موجودی GRAM کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
+  const exchangeId = String(req.get('Idempotency-Key') || crypto.randomUUID()).replace(/[^A-Za-z0-9:_-]/g, '').slice(0, 120);
+  let updated;
+  try {
+    updated = await withMongoTransaction(async session => {
+      const result = await User.findOneAndUpdate(
+        { _id: u._id, gramBalance: { $gte: gramSpent } },
+        { $inc: { gramBalance: -gramSpent, points: pointsGained } },
+        { new: true, session }
+      );
+      if (!result) {
+        const error = new Error('موجودی GRAM کافی نیست.');
+        error.code = 'INSUFFICIENT_BALANCE';
+        throw error;
+      }
+      await recordLedgerRequired({ user: u._id, type: 'exchange_out', currency: 'gram', amount: -gramSpent, description: 'تبدیل GRAM به پوینت', balanceAfter: result.gramBalance, sourceId: `exchange:${exchangeId}:out`, session });
+      await recordLedgerRequired({ user: u._id, type: 'exchange_in', currency: 'points', amount: pointsGained, description: 'تبدیل GRAM به پوینت', balanceAfter: result.points, sourceId: `exchange:${exchangeId}:in`, session });
+      return result;
+    });
+  } catch (error) {
+    if (error.code === 'INSUFFICIENT_BALANCE') return res.status(400).json({ success: false, message: error.message, code: error.code });
+    throw error;
   }
-
-  recordLedger({ user: u._id, type: 'exchange_out', currency: 'gram', amount: -gramSpent, description: 'تبدیل GRAM به پوینت', balanceAfter: updated.gramBalance }).catch(() => {});
-  recordLedger({ user: u._id, type: 'exchange_in', currency: 'points', amount: pointsGained, description: 'تبدیل GRAM به پوینت', balanceAfter: updated.points }).catch(() => {});
 
   res.json({
     success: true,
@@ -315,39 +345,45 @@ router.post('/withdraw', auth, async (req, res) => {
     });
   }
 
-  // atomic: موجودی فقط در صورت کافی بودن کم می‌شود (جلوگیری از برداشت دوباره با درخواست هم‌زمان)
-  const updated = await User.findOneAndUpdate(
-    { _id: u._id, gramBalance: { $gte: amount } },
-    { $inc: { gramBalance: -amount }, $set: { walletAddress } },
-    { new: true }
-  );
-  if (!updated) {
-    return res.status(400).json({ success: false, message: 'موجودی GRAM کافی نیست.', code: 'INSUFFICIENT_BALANCE' });
-  }
-
+  let updated;
   let withdrawal;
   try {
-    withdrawal = await Withdrawal.create({
-      user: u._id,
-      pointsSpent: settings.rate > 0 ? Math.round(amount / settings.rate) : 0,
-      cryptoAmount: amount,
-      address: walletAddress,
-      statusHistory: [{ status: 'pending', at: new Date() }]
-    });
+    ({ updated, withdrawal } = await withMongoTransaction(async session => {
+      const nextUser = await User.findOneAndUpdate(
+        { _id: u._id, gramBalance: { $gte: amount } },
+        { $inc: { gramBalance: -amount }, $set: { walletAddress } },
+        { new: true, session }
+      );
+      if (!nextUser) {
+        const error = new Error('موجودی GRAM کافی نیست.');
+        error.code = 'INSUFFICIENT_BALANCE';
+        throw error;
+      }
+
+      const nextWithdrawal = await new Withdrawal({
+        user: u._id,
+        pointsSpent: settings.rate > 0 ? Math.round(amount / settings.rate) : 0,
+        cryptoAmount: amount,
+        address: walletAddress,
+        statusHistory: [{ status: 'pending', at: new Date() }]
+      }).save({ session });
+
+      await recordLedgerRequired({
+        user: u._id,
+        type: 'withdraw',
+        currency: 'gram',
+        amount: -amount,
+        description: `درخواست برداشت به ${truncateAddress(walletAddress)}`,
+        balanceAfter: nextUser.gramBalance,
+        sourceId: `withdrawal:${nextWithdrawal._id}`,
+        session
+      });
+      return { updated: nextUser, withdrawal: nextWithdrawal };
+    }));
   } catch (error) {
-    // اگر ثبت درخواست شکست خورد، مبلغ کسرشده را برگردان تا کاربر ضرر نکند
-    await User.findByIdAndUpdate(u._id, { $inc: { gramBalance: amount } });
+    if (error.code === 'INSUFFICIENT_BALANCE') return res.status(400).json({ success: false, message: error.message, code: error.code });
     throw error;
   }
-
-  recordLedger({
-    user: u._id,
-    type: 'withdraw',
-    currency: 'gram',
-    amount: -amount,
-    description: `درخواست برداشت به ${truncateAddress(walletAddress)}`,
-    balanceAfter: updated.gramBalance
-  }).catch(() => {});
 
   res.json({
     success: true,

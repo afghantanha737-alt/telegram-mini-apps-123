@@ -5,7 +5,8 @@ require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth } = require('../utils/telegramAuth');
 const User = require('../models/User');
 const TaskCompletion = require('../models/TaskCompletion');
-const { recordLedger } = require('../utils/ledger');
+const { recordLedgerRequired } = require('../utils/ledger');
+const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { referralTaskId, buildReferralTaskProgress, REFERRAL_REWARD_TASKS } = require('../utils/referralRewards');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
@@ -79,18 +80,36 @@ router.post('/claim', auth, async (req, res) => {
   }
 
   const task = REFERRAL_REWARD_TASKS.find(item => item.id === taskId);
-  const updated = await User.findOneAndUpdate(
-    {
-      _id: req.dbUser._id,
-      activeInvitedCount: { $gte: task.requiredInvites },
-      'referralRewardClaims.taskId': { $ne: taskId }
-    },
-    {
-      $inc: { points: task.rewardPoints },
-      $push: { referralRewardClaims: { taskId, claimedAt: new Date() } }
-    },
-    { new: true, runValidators: true }
-  );
+  let updated;
+  try {
+    updated = await withMongoTransaction(async session => {
+      const result = await User.findOneAndUpdate(
+        {
+          _id: req.dbUser._id,
+          activeInvitedCount: { $gte: task.requiredInvites },
+          'referralRewardClaims.taskId': { $ne: taskId }
+        },
+        {
+          $inc: { points: task.rewardPoints },
+          $push: { referralRewardClaims: { taskId, claimedAt: new Date() } }
+        },
+        { new: true, runValidators: true, session }
+      );
+      if (!result) return null;
+      await recordLedgerRequired({
+        user: result._id,
+        type: 'referral_bonus',
+        amount: task.rewardPoints,
+        description: `پاداش تسک دعوت ${task.requiredInvites} نفر`,
+        balanceAfter: result.points,
+        sourceId: `referral-task:${result._id}:${taskId}`,
+        session
+      });
+      return result;
+    });
+  } catch (error) {
+    throw error;
+  }
 
   if (!updated) {
     const latest = await User.findById(req.dbUser._id).select('activeInvitedCount referralRewardClaims');
@@ -103,14 +122,6 @@ router.post('/claim', auth, async (req, res) => {
     }
     return res.status(409).json({ success: false, message: 'این پاداش قبلاً دریافت شده است.', code: 'REFERRAL_TASK_ALREADY_CLAIMED' });
   }
-
-  recordLedger({
-    user: updated._id,
-    type: 'referral_bonus',
-    amount: task.rewardPoints,
-    description: `پاداش تسک دعوت ${task.requiredInvites} نفر`,
-    balanceAfter: updated.points
-  }).catch(() => {});
 
   res.json({
     success: true,

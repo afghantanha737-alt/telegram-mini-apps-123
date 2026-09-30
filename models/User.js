@@ -40,6 +40,8 @@ const userSchema = new mongoose.Schema(
     walletAddress: { type: String, default: '' },
     language: { type: String, enum: ['fa', 'ps', 'en'], default: 'fa' },
     isBanned: { type: Boolean, default: false },
+    // اگر تلگرام 403 بدهد (ربات بلاک شده یا حساب غیرفعال است)، از ارسال‌های بعدی حذف می‌شود.
+    telegramBlockedAt: { type: Date, default: null },
     // آخرین باری که یادآوری ورود روزانه برایش ارسال شد (برای جلوگیری از ارسال تکراری در همان روز)
     lastReminderSentAt: { type: Date, default: null }
   },
@@ -50,5 +52,6 @@ userSchema.index({ isBanned: 1, points: -1 });
 userSchema.index({ isBanned: 1, createdAt: -1 });
 userSchema.index({ referralRiskScore: -1, createdAt: -1 });
 userSchema.index({ referredBy: 1, createdAt: -1 });
+userSchema.index({ isBanned: 1, telegramBlockedAt: 1 });
 
 module.exports = mongoose.model('User', userSchema);

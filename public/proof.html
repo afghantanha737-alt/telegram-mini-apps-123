@@ -61,14 +61,14 @@
 <script>
 const I18N = {
   en: {
-    badge: "Verified on-chain", title: "Proof of Payments",
+    badge: "Completed payment records", title: "Completed Payment Records",
     desc: "This page lists completed Gramup payment records. Wallet addresses are shortened for privacy, and a TON explorer link is shown when a transaction hash is available.",
     statTotal: "Total in records", statCount: "Records shown", statVerified: "With transaction hash",
     listTitle: "Recent payments", loading: "Loading…", cta: "Open Gramup",
     note: "Full wallet addresses are withheld to protect users' privacy. When a transaction hash is available, it links directly to a public TON explorer for independent review.",
     empty: "No completed payment records yet. Records will appear here after a payment is completed and recorded.",
     to: "To", from: "From", txid: "Tx hash", view: "View on Tonviewer ↗",
-    verified: "Transaction record available", pending: "Record available — no hash",
+    verified: "Transaction hash available", pending: "Payment record — hash unavailable",
     langBtn: "فارسی"
   },
   fa: {
@@ -79,7 +79,7 @@ const I18N = {
     note: "آدرس کامل کیف‌پول‌ها برای حفظ حریم خصوصی نمایش داده نمی‌شود. وقتی هش تراکنش در دسترس باشد، لینک مستقیم explorer برای بررسی عمومی نشان داده می‌شود.",
     empty: "هنوز سابقه پرداخت تکمیل‌شده‌ای وجود ندارد. پس از تکمیل و ثبت پرداخت، سابقه در اینجا نمایش داده می‌شود.",
     to: "به آدرس", from: "از آدرس", txid: "هش تراکنش", view: "مشاهده در Tonviewer ↗",
-    verified: "رکورد تراکنش موجود است", pending: "رکورد موجود است — هش در دسترس نیست",
+    verified: "هش تراکنش موجود است", pending: "رکورد پرداخت — هش موجود نیست",
     langBtn: "English"
   }
 };
@@ -144,7 +144,7 @@ function renderList(history) {
   }
 
   list.innerHTML = history.map(item => {
-    const badge = item.verified
+    const badge = item.txHash
       ? `<span class="proofBadgeOk">✓ ${escapeHTML(dict.verified)}</span>`
       : `<span class="proofBadgeWarn">${escapeHTML(dict.pending)}</span>`;
     const explorerLink = item.txHash
@@ -172,18 +172,18 @@ async function load() {
     lastHistory = history;
 
     const totalsByToken = {};
-    let verifiedCount = 0;
+    let hashCount = 0;
     history.forEach(item => {
       const token = item.token || "";
       totalsByToken[token] = (totalsByToken[token] || 0) + (Number(item.amount) || 0);
-      if (item.verified) verifiedCount += 1;
+      if (item.txHash) hashCount += 1;
     });
     const totalText = Object.entries(totalsByToken).map(([token, sum]) =>
       `${sum.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${token}`).join(" + ") || "0";
 
     document.getElementById("statTotal").textContent = totalText;
     document.getElementById("statCount").textContent = history.length;
-    document.getElementById("statVerified").textContent = `${verifiedCount}/${history.length || 0}`;
+    document.getElementById("statVerified").textContent = `${hashCount}/${history.length || 0}`;
     document.querySelectorAll(".proofSkeleton").forEach(el => el.classList.remove("proofSkeleton"));
 
     renderList(history);

@@ -32,6 +32,11 @@ const { snapshot: metricsSnapshot } = require('../utils/metrics');
 const MAX_REQUIRED_CHANNELS = 5;
 
 const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function pageParams(query, defaultLimit = 100, maxLimit = 300) {
+  const page = Math.max(1, Math.floor(Number(query.page) || 1));
+  const limit = Math.min(maxLimit, Math.max(1, Math.floor(Number(query.limit) || defaultLimit)));
+  return { page, limit, skip: (page - 1) * limit };
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -438,13 +443,19 @@ router.get('/ops-metrics', (req, res) => {
 router.get('/withdrawals', async (req, res) => {
   const status = req.query.status;
   const filter = status ? { status } : {};
-  const list = await Withdrawal.find(filter)
-    .populate('user', 'firstName username telegramId')
-    .sort({ createdAt: -1 })
-    .limit(200);
+  const { page, limit, skip } = pageParams(req.query, 100, 300);
+  const [list, total] = await Promise.all([
+    Withdrawal.find(filter)
+      .populate('user', 'firstName username telegramId')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    Withdrawal.countDocuments(filter)
+  ]);
   res.json({
     success: true,
-    withdrawals: list.map(w => ({ ...w.toObject(), timeline: synthesizeHistory(w) }))
+    withdrawals: list.map(w => ({ ...w.toObject(), timeline: synthesizeHistory(w) })),
+    pagination: { page, limit, total, pages: Math.ceil(total / limit) }
   });
 });
 
@@ -701,8 +712,12 @@ router.get('/users', async (req, res) => {
   const sortMap = { points: { points: -1 }, invited: { invitedCount: -1 }, newest: { createdAt: -1 }, oldest: { createdAt: 1 } };
   const sortBy = sortMap[sort] || sortMap.newest;
 
-  const users = await User.find(filter).select('-__v').sort(sortBy).limit(200);
-  res.json({ success: true, users });
+  const { page, limit, skip } = pageParams(req.query, 100, 300);
+  const [users, total] = await Promise.all([
+    User.find(filter).select('-__v').sort(sortBy).skip(skip).limit(limit).lean(),
+    User.countDocuments(filter)
+  ]);
+  res.json({ success: true, users, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
 });
 
 router.post('/users/:id/ban', async (req, res) => {
@@ -1144,9 +1159,12 @@ router.get('/logs', async (req, res) => {
   if (action) filter.action = action;
   if (targetType) filter.targetType = targetType;
 
-  const limit = Math.min(Number(req.query.limit) || 100, 300);
-  const logs = await AdminLog.find(filter).sort({ createdAt: -1 }).limit(limit);
-  res.json({ success: true, logs });
+  const { page, limit, skip } = pageParams(req.query, 100, 300);
+  const [logs, total] = await Promise.all([
+    AdminLog.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    AdminLog.countDocuments(filter)
+  ]);
+  res.json({ success: true, logs, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
 });
 
 /* -------------------- BROADCAST (پیام همگانی) -------------------- */

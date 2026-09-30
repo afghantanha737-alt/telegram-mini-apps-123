@@ -114,6 +114,10 @@ async function getOrCreateUser(tgUser, startParam, requestIp = '') {
       dbUser.photoUrl = tgUser.photo_url;
       changed = true;
     }
+    if (dbUser.telegramBlockedAt) {
+      dbUser.telegramBlockedAt = null;
+      changed = true;
+    }
     if (changed) await dbUser.save();
   }
 

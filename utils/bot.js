@@ -91,7 +91,39 @@ async function notifyUser(telegramId, text, options = {}) {
     await bot.sendMessage(telegramId, text, options);
     return true;
   } catch (error) {
+    if (isTelegramDeliveryBlocked(error)) {
+      await markTelegramBlocked(telegramId);
+      return false;
+    }
     console.warn(`notifyUser failed for telegramId=${telegramId}:`, error.message || error);
+    return false;
+  }
+}
+
+function isTelegramDeliveryBlocked(error) {
+  const code = error?.response?.body?.error_code || error?.response?.statusCode;
+  const message = String(error?.message || error || '');
+  return Number(code) === 403 || /bot was blocked|user is deactivated|chat not found/i.test(message);
+}
+
+async function markTelegramBlocked(telegramId) {
+  try {
+    const User = require('../models/User');
+    await User.updateOne(
+      { telegramId: String(telegramId), telegramBlockedAt: null },
+      { $set: { telegramBlockedAt: new Date() } }
+    );
+  } catch (error) {
+    console.warn('Failed to mark Telegram-blocked user:', error.message || error);
+  }
+}
+
+async function copyMessageSafe(User, telegramId, fromChatId, messageId) {
+  try {
+    await bot.copyMessage(telegramId, fromChatId, messageId);
+    return true;
+  } catch (error) {
+    if (isTelegramDeliveryBlocked(error)) await markTelegramBlocked(telegramId);
     return false;
   }
 }
@@ -104,7 +136,7 @@ async function notifyUser(telegramId, text, options = {}) {
 async function broadcastToActiveUsers(User, textOrFn) {
   if (!bot) return;
   // زبان هر کاربر هم لازم است تا اگر textOrFn تابع باشد، پیام به همان زبان ساخته شود
-  const users = await User.find({ isBanned: false }, 'telegramId language');
+  const users = await User.find({ isBanned: false, telegramBlockedAt: null }, 'telegramId language');
   const BATCH_SIZE = 20;
   const DELAY_MS = 1100;
   const textFor = typeof textOrFn === 'function' ? textOrFn : () => textOrFn;
@@ -126,17 +158,15 @@ async function broadcastToActiveUsers(User, textOrFn) {
  */
 async function broadcastCopyToActiveUsers(User, fromChatId, messageId) {
   if (!bot) return 0;
-  const users = await User.find({ isBanned: false }, 'telegramId');
+  const users = await User.find({ isBanned: false, telegramBlockedAt: null }, 'telegramId');
   const BATCH_SIZE = 20;
   const DELAY_MS = 1100;
   let sent = 0;
 
   for (let i = 0; i < users.length; i += BATCH_SIZE) {
     const batch = users.slice(i, i + BATCH_SIZE);
-    const results = await Promise.allSettled(
-      batch.map(u => bot.copyMessage(u.telegramId, fromChatId, messageId))
-    );
-    sent += results.filter(r => r.status === 'fulfilled').length;
+    const results = await Promise.all(batch.map(u => copyMessageSafe(User, u.telegramId, fromChatId, messageId)));
+    sent += results.filter(Boolean).length;
     if (i + BATCH_SIZE < users.length) {
       await new Promise(resolve => setTimeout(resolve, DELAY_MS));
     }
@@ -144,4 +174,4 @@ async function broadcastCopyToActiveUsers(User, fromChatId, messageId) {
   return sent;
 }
 
-module.exports = { bot, isChatMember, checkChatMembership, notifyUser, broadcastToActiveUsers, broadcastCopyToActiveUsers };
+module.exports = { bot, isChatMember, checkChatMembership, notifyUser, markTelegramBlocked, isTelegramDeliveryBlocked, broadcastToActiveUsers, broadcastCopyToActiveUsers };

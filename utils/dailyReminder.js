@@ -59,6 +59,7 @@ async function runDailyReminderSweep(now = new Date()) {
 
   const filter = {
     isBanned: false,
+    telegramBlockedAt: null,
     $and: [
       { $or: [{ lastCheckIn: null }, { lastCheckIn: { $lt: startOfToday } }] },
       { $or: [{ lastReminderSentAt: null }, { lastReminderSentAt: { $lt: startOfToday } }] }

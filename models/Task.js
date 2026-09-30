@@ -15,7 +15,7 @@ const taskSchema = new mongoose.Schema(
     verifyType: {
       type: String,
       enum: ['telegram', 'manual'],
-      default: 'manual'
+      default: 'telegram'
     },
     // آیدی عددی یا یوزرنیم کانال/گروه مقصد (فقط برای verifyType=telegram)
     // مثال: "@mychannel" یا "-1001234567890"

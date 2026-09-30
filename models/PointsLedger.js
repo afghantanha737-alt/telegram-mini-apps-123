@@ -29,7 +29,7 @@ const pointsLedgerSchema = new mongoose.Schema(
     // مقدار با علامت: مثبت یعنی اضافه شدن، منفی یعنی کسر شدن
     amount: { type: Number, required: true },
     // شناسه یکتای اختیاری برای جلوگیری از ثبت دوباره‌ی یک رویداد مالی
-    sourceId: { type: String, default: null },
+    sourceId: { type: String, default: undefined },
     description: { type: String, default: '' },
     // موجودی همان ارز بلافاصله بعد از این رویداد (برای نمایش در UI، اختیاری)
     balanceAfter: { type: Number, default: null }

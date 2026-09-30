@@ -85,6 +85,7 @@
       <button data-tab="withdrawals" onclick="switchTab('withdrawals')">برداشت‌ها</button>
       <button data-tab="weekly" onclick="switchTab('weekly')">جوایز لیدربورد</button>
       <button data-tab="audit" onclick="switchTab('audit')">حسابرسی مالی</button>
+      <button data-tab="ops" onclick="switchTab('ops')">وضعیت سیستم</button>
       <button data-tab="users" onclick="switchTab('users')">کاربران</button>
       <button data-tab="broadcast" onclick="switchTab('broadcast')">پیام همگانی</button>
       <button data-tab="logs" onclick="switchTab('logs')">لاگ فعالیت</button>
@@ -227,6 +228,14 @@
         <div class="flexBetween"><b>حسابرسی موجودی و Ledger</b><button class="secondary" type="button" onclick="loadFinancialAudit()">اجرای حسابرسی</button></div>
         <p class="small">این گزارش فقط‌خواندنی است و اختلاف بین موجودی فعلی کاربران و جمع تراکنش‌های Ledger را نشان می‌دهد. قبل از اصلاح دستی موجودی، علت هر اختلاف را بررسی کنید.</p>
         <div id="financialAuditList"><div class="empty">برای شروع روی اجرای حسابرسی بزنید.</div></div>
+      </div>
+    </div>
+
+    <!-- OPERATIONS -->
+    <div id="tab-ops" class="tabContent hidden">
+      <div class="card">
+        <div class="flexBetween"><b>وضعیت production</b><button class="secondary" type="button" onclick="loadOpsMetrics()">به‌روزرسانی</button></div>
+        <div id="opsMetricsList"><div class="empty">در حال بارگذاری...</div></div>
       </div>
     </div>
 
@@ -513,6 +522,7 @@ function switchTab(tab) {
   if (tab === "channels") loadRequiredChannels();
   if (tab === "weekly") loadWeeklyAwards();
   if (tab === "audit") loadFinancialAudit();
+  if (tab === "ops") loadOpsMetrics();
   if (tab === "settings") loadSettings();
 }
 
@@ -1036,6 +1046,23 @@ async function loadFinancialAudit() {
       return;
     }
     container.innerHTML = `<div class="small" style="margin-bottom:8px">${data.checkedUsers} کاربر بررسی شد؛ ${data.discrepancyCount} اختلاف نمایش داده می‌شود.</div><table><thead><tr><th>کاربر</th><th>موجودی پوینت</th><th>Ledger پوینت</th><th>اختلاف پوینت</th><th>موجودی GRAM</th><th>Ledger GRAM</th><th>اختلاف GRAM</th></tr></thead><tbody>${data.discrepancies.map(row => `<tr><td>${escapeHtml(row.name || row.telegramId || "—")}</td><td>${row.pointsBalance}</td><td>${row.pointsLedger}</td><td style="color:var(--danger)">${row.pointsDifference}</td><td>${row.gramBalance}</td><td>${row.gramLedger}</td><td style="color:var(--danger)">${row.gramDifference}</td></tr>`).join("")}</tbody></table>`;
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function loadOpsMetrics() {
+  const container = document.getElementById("opsMetricsList");
+  if (!container) return;
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  try {
+    const [ready, metrics] = await Promise.all([
+      fetch("/api/ready").then(async response => ({ ok: response.ok, data: await response.json() })),
+      api("/api/admin/ops-metrics")
+    ]);
+    const m = metrics.metrics || {};
+    const memoryMb = Math.round(Number(m.memory?.rss || 0) / 1024 / 1024);
+    container.innerHTML = `<div class="statsGrid"><div class="card" style="margin-bottom:0"><div class="small">Readiness</div><div style="font-size:20px;font-weight:800;color:${ready.ok ? "var(--success)" : "var(--danger)"}">${ready.ok ? "READY" : "NOT READY"}</div></div><div class="card" style="margin-bottom:0"><div class="small">Uptime</div><div style="font-size:20px;font-weight:800">${m.uptimeSeconds || 0}s</div></div><div class="card" style="margin-bottom:0"><div class="small">درخواست‌ها</div><div style="font-size:20px;font-weight:800">${m.requests || 0}</div></div><div class="card" style="margin-bottom:0"><div class="small">خطاهای ۵۰۰</div><div style="font-size:20px;font-weight:800;color:${m.errors ? "var(--danger)" : "var(--success)"}">${m.errors || 0}</div></div><div class="card" style="margin-bottom:0"><div class="small">میانگین پاسخ</div><div style="font-size:20px;font-weight:800">${m.averageLatencyMs || 0}ms</div></div><div class="card" style="margin-bottom:0"><div class="small">مصرف RSS</div><div style="font-size:20px;font-weight:800">${memoryMb}MB</div></div></div><div class="small" style="margin-top:12px">Node: ${escapeHtml(metrics.node || "—")} · محیط: ${escapeHtml(metrics.environment || "—")} · آخرین بررسی: ${new Date().toLocaleString("fa-IR")}</div>`;
   } catch (error) {
     container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }

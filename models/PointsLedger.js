@@ -28,6 +28,8 @@ const pointsLedgerSchema = new mongoose.Schema(
     currency: { type: String, enum: ['points', 'gram'], default: 'points' },
     // مقدار با علامت: مثبت یعنی اضافه شدن، منفی یعنی کسر شدن
     amount: { type: Number, required: true },
+    // شناسه یکتای اختیاری برای جلوگیری از ثبت دوباره‌ی یک رویداد مالی
+    sourceId: { type: String, default: null },
     description: { type: String, default: '' },
     // موجودی همان ارز بلافاصله بعد از این رویداد (برای نمایش در UI، اختیاری)
     balanceAfter: { type: Number, default: null }
@@ -37,5 +39,6 @@ const pointsLedgerSchema = new mongoose.Schema(
 
 pointsLedgerSchema.index({ user: 1, createdAt: -1 });
 pointsLedgerSchema.index({ createdAt: 1, currency: 1, type: 1 });
+pointsLedgerSchema.index({ sourceId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('PointsLedger', pointsLedgerSchema);

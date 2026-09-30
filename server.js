@@ -197,6 +197,7 @@ async function startServer() {
     // userId/taskId که در مدل فعلی وجود ندارند و باعث خطای duplicate
     // key کاذب می‌شوند).
     await cleanupStaleIndexes();
+    await repairLedgerSourceIdIndex();
 
     const runReferralSweep = require('./utils/referralSweep');
     runReferralSweep().catch(error => console.error('Initial referral sweep failed:', error));
@@ -242,6 +243,24 @@ async function cleanupStaleIndexes() {
     // این عملیات صرفاً پاک‌سازی است؛ اگر کالکشن هنوز وجود ندارد یا خطای
     // بی‌ضرر دیگری رخ دهد، نباید جلوی بالا آمدن سرور را بگیرد.
     console.warn('Index cleanup skipped (non-fatal):', error.message);
+  }
+}
+
+async function repairLedgerSourceIdIndex() {
+  try {
+    const collection = mongoose.connection.collection('pointsledgers');
+    const indexes = await collection.indexes();
+    const sourceIndex = indexes.find(index => index.name === 'sourceId_1');
+    const nullCount = await collection.countDocuments({ sourceId: null });
+    if (sourceIndex && nullCount === 0) return;
+    if (sourceIndex) await collection.dropIndex('sourceId_1');
+    // نسخه قبلی sourceId را به‌صورت صریح null ذخیره می‌کرد؛ sparse unique
+    // مقدار missing را نادیده می‌گیرد اما null صریح را index می‌کند.
+    await collection.updateMany({ sourceId: null }, { $unset: { sourceId: '' } });
+    await collection.createIndex({ sourceId: 1 }, { unique: true, sparse: true, name: 'sourceId_1' });
+    console.log(`🧹 Repaired pointsledgers sourceId index; removed ${nullCount} null sourceIds`);
+  } catch (error) {
+    console.warn('Ledger sourceId index repair skipped (non-fatal):', error.message);
   }
 }
 

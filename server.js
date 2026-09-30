@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const { startRequest } = require('./utils/metrics');
 
 const app = express();
 
@@ -25,6 +26,7 @@ if (!process.env.BOT_TOKEN) {
    SECURITY / MIDDLEWARE
 ========================================================= */
 app.set('trust proxy', 1);
+app.use(startRequest);
 
 const allowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
   .split(',')
@@ -123,9 +125,16 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     service: 'telegram-mini-app',
     mongodb: mongoStatus,
+    readiness: mongoState === 1 ? 'ready' : 'not_ready',
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString()
   });
+});
+
+app.get('/api/ready', (req, res) => {
+  const mongoState = mongoose.connection.readyState;
+  const ready = mongoState === 1 && Boolean(process.env.BOT_TOKEN);
+  res.status(ready ? 200 : 503).json({ success: ready, status: ready ? 'ready' : 'not_ready', mongodb: mongoState === 1 ? 'connected' : 'disconnected', botConfigured: Boolean(process.env.BOT_TOKEN), timestamp: new Date().toISOString() });
 });
 
 app.use('/api', (req, res) => {

@@ -27,6 +27,7 @@ const { normalizeSponsorInput, marginInfo } = require('../utils/sponsor');
 const { startOfUtcWeek, endOfUtcWeek, weekKey } = require('../utils/weeklyLeaderboard');
 const { createAdminSession, getAdminSession, revokeAdminSession, SESSION_TTL_MS } = require('../utils/adminSession');
 const { buildDiscrepancy, isDiscrepant } = require('../utils/financialAudit');
+const { snapshot: metricsSnapshot } = require('../utils/metrics');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -428,6 +429,10 @@ router.get('/financial-audit', async (req, res) => {
   const byUser = new Map(sums.map(row => [String(row._id), Object.fromEntries(row.values.map(item => [item.currency, item.total]))]));
   const discrepancies = users.map(user => buildDiscrepancy(user, byUser.get(String(user._id)) || {})).filter(isDiscrepant).slice(0, limit);
   res.json({ success: true, checkedUsers: users.length, discrepancyCount: discrepancies.length, discrepancies, generatedAt: new Date().toISOString() });
+});
+
+router.get('/ops-metrics', (req, res) => {
+  res.json({ success: true, metrics: metricsSnapshot(), node: process.version, environment: process.env.NODE_ENV || 'production', timestamp: new Date().toISOString() });
 });
 
 router.get('/withdrawals', async (req, res) => {

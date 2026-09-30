@@ -26,6 +26,7 @@ const { isValidWeights, resolveWeights, checkSpinSettings, spinModel } = require
 const { normalizeSponsorInput, marginInfo } = require('../utils/sponsor');
 const { startOfUtcWeek, endOfUtcWeek, weekKey } = require('../utils/weeklyLeaderboard');
 const { createAdminSession, getAdminSession, revokeAdminSession, SESSION_TTL_MS } = require('../utils/adminSession');
+const { buildDiscrepancy, isDiscrepant } = require('../utils/financialAudit');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -398,7 +399,7 @@ router.post('/weekly-leaderboard/:selectedWeekKey/pay', async (req, res) => {
     try {
       const updatedUser = await User.findByIdAndUpdate(row._id, { $inc: { points } }, { new: true });
       if (!updatedUser) throw new Error('کاربر برنده پیدا نشد.');
-      await recordLedger({ user: updatedUser._id, type: 'leaderboard_reward', amount: points, description: `جایزه رتبه ${rank} leaderboard هفته ${selectedKey}`, balanceAfter: updatedUser.points });
+      await recordLedger({ user: updatedUser._id, type: 'leaderboard_reward', amount: points, description: `جایزه رتبه ${rank} leaderboard هفته ${selectedKey}`, balanceAfter: updatedUser.points, sourceId: `weekly-leaderboard:${selectedKey}:${rank}` });
       await WeeklyLeaderboardAward.updateOne({ _id: claimed._id, status: 'processing' }, { $set: { status: 'paid', paidAt: new Date() } });
       if (row.user.telegramId) {
         notifyUser(row.user.telegramId, botText('leaderboardReward', row.user.language, rank, points, selectedKey)).catch(() => {});
@@ -411,6 +412,22 @@ router.post('/weekly-leaderboard/:selectedWeekKey/pay', async (req, res) => {
   }
   recordAdminLog({ actor: req.adminActor, action: 'weekly_leaderboard_pay', targetType: 'settings', details: `هفته ${selectedKey}: ${results.map(item => `${item.rank}:${item.status}`).join(', ')}` });
   res.json({ success: true, weekKey: selectedKey, results });
+});
+
+// گزارش فقط‌خواندنی برای پیدا کردن اختلاف بین موجودی فعلی و جمع Ledger.
+// این endpoint هیچ موجودی را تغییر نمی‌دهد و برای کنترل قبل از پرداخت/برداشت است.
+router.get('/financial-audit', async (req, res) => {
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+  const [users, sums] = await Promise.all([
+    User.find({}).select('telegramId firstName username points gramBalance').limit(10000).lean(),
+    PointsLedger.aggregate([
+      { $group: { _id: { user: '$user', currency: '$currency' }, total: { $sum: '$amount' } } },
+      { $group: { _id: '$_id.user', values: { $push: { currency: '$_id.currency', total: '$total' } } } }
+    ])
+  ]);
+  const byUser = new Map(sums.map(row => [String(row._id), Object.fromEntries(row.values.map(item => [item.currency, item.total]))]));
+  const discrepancies = users.map(user => buildDiscrepancy(user, byUser.get(String(user._id)) || {})).filter(isDiscrepant).slice(0, limit);
+  res.json({ success: true, checkedUsers: users.length, discrepancyCount: discrepancies.length, discrepancies, generatedAt: new Date().toISOString() });
 });
 
 router.get('/withdrawals', async (req, res) => {

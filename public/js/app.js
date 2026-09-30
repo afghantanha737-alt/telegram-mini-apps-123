@@ -1769,6 +1769,14 @@ function setProfileView(view) {
 }
 window.setProfileView = setProfileView;
 
+// ورود مستقیم به همان نمای Weekly Leaderboard موجود؛ سیستم داده یا رتبه‌بندی جداگانه‌ای ساخته نمی‌شود.
+function openWeeklyCompetition() {
+  leaderboardMode = "weekly";
+  profileView = "leaderboard";
+  renderProfile();
+}
+window.openWeeklyCompetition = openWeeklyCompetition;
+
 function renderProfileMenu() {
   const telegramUser = getTelegramUser();
   const user = state.user || telegramUser || {};
@@ -1801,6 +1809,11 @@ function renderProfileMenu() {
         <div class="profileItem" onclick="setProfileView('leaderboard')">
           <div class="profileIcon">🏆</div>
           <div class="profileText">${t("menu_leaderboard")}</div>
+          <div class="profileChevron">‹</div>
+        </div>
+        <div class="profileItem" onclick="openWeeklyCompetition()">
+          <div class="profileIcon">🏆</div>
+          <div class="profileText">${t("menu_weekly_competition")}</div>
           <div class="profileChevron">‹</div>
         </div>
         <div class="profileItem" onclick="setProfileView('history')">
@@ -2007,6 +2020,8 @@ function renderWeeklyCompetitionBanner() {
       </div>
       <div class="weeklyCompetitionCountdownLabel">⏳ ${t("weekly_competition_ends_in")}</div>
       <div id="weeklyCompetitionCountdown" class="weeklyCompetitionCountdown">${t("weekly_competition_calculating")}</div>
+      <div class="weeklyCompetitionDescription" style="margin-top:10px">📌 ${t("weekly_competition_rules")}</div>
+      <div class="weeklyCompetitionDescription" style="margin-top:5px">🎁 ${t("weekly_competition_auto_payment")}</div>
     </div>
   `;
 }

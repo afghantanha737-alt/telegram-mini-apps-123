@@ -251,12 +251,13 @@ async function repairLedgerSourceIdIndex() {
     const collection = mongoose.connection.collection('pointsledgers');
     const indexes = await collection.indexes();
     const sourceIndex = indexes.find(index => index.name === 'sourceId_1');
-    const nullCount = await collection.countDocuments({ sourceId: null });
+    const explicitNullFilter = { sourceId: { $type: 'null' } };
+    const nullCount = await collection.countDocuments(explicitNullFilter);
     if (sourceIndex && nullCount === 0) return;
     if (sourceIndex) await collection.dropIndex('sourceId_1');
     // نسخه قبلی sourceId را به‌صورت صریح null ذخیره می‌کرد؛ sparse unique
     // مقدار missing را نادیده می‌گیرد اما null صریح را index می‌کند.
-    await collection.updateMany({ sourceId: null }, { $unset: { sourceId: '' } });
+    await collection.updateMany(explicitNullFilter, { $unset: { sourceId: '' } });
     await collection.createIndex({ sourceId: 1 }, { unique: true, sparse: true, name: 'sourceId_1' });
     console.log(`🧹 Repaired pointsledgers sourceId index; removed ${nullCount} null sourceIds`);
   } catch (error) {

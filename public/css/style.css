@@ -1760,3 +1760,41 @@ html[data-theme="light"] .bottomNav button::before { background: #5a4bdd; box-sh
 .referralMilestonesList { display: grid; gap: 12px; }
 .referralMilestonesList .referralTaskItem { margin: 0 !important; width: 100%; }
 html[data-theme="light"] .referralMilestonesList .referralTaskItem { background: #fff; border: 1px solid rgba(17,24,39,.08); box-shadow: 0 4px 20px rgba(0,0,0,.05); }
+
+/* Tasks category filter — Dark Mode Aurora */
+.taskCategoryTabs {
+  position: sticky;
+  top: var(--header-height, 68px);
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 -16px 16px;
+  padding: 16px;
+  background: rgba(11, 14, 20, .94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.taskCategoryTabs::-webkit-scrollbar { display: none; }
+.taskCategoryTab {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgba(255,255,255,.05);
+  border-radius: 50px;
+  color: var(--aurora-text-secondary, #a0a5b1);
+  background: var(--aurora-bg-surface, #151a23);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.taskCategoryTab:active { transform: scale(.97); }
+.taskCategoryTab.active {
+  border-color: transparent;
+  color: #fff;
+  background: var(--aurora-grad-primary, linear-gradient(135deg, #4f8cff, #6c5ce7));
+  box-shadow: var(--aurora-shadow-glow, 0 0 18px rgba(108,92,231,.28));
+}

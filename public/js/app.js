@@ -38,6 +38,10 @@ const state = {
   nextResetAt: 0,
   referralCode: "",
   shareLink: "",
+  referralTelegramId: "",
+  referralMiniAppConfigured: false,
+  referralLevelRates: [],
+  referralStats: null,
   invitedCount: 0,
   activeInvitedCount: 0,
   referralInitialRewardPoints: 10,
@@ -729,6 +733,10 @@ async function loadReferralData() {
     const data = await api("/api/referral/me");
     state.referralCode = data?.referralCode || "";
     state.shareLink = data?.shareLink || "";
+    state.referralTelegramId = String(data?.telegramId || "");
+    state.referralMiniAppConfigured = Boolean(data?.miniAppConfigured);
+    state.referralLevelRates = Array.isArray(data?.referralLevelRates) ? data.referralLevelRates.map(Number).filter(Number.isFinite) : [];
+    state.referralStats = data?.referralStats && typeof data.referralStats === "object" ? data.referralStats : null;
     state.invitedCount = Number(data?.invitedCount) || 0;
     state.activeInvitedCount = Number(data?.activeInvitedCount) || 0;
     state.invited = Array.isArray(data?.invited) ? data.invited : [];
@@ -756,6 +764,7 @@ async function claimReferralTask(taskId) {
     state.invitedCount = Number(data?.invitedCount) || state.invitedCount;
     state.activeInvitedCount = Number(data?.activeInvitedCount) || state.activeInvitedCount;
     state.referralTasks = Array.isArray(data?.referralTasks) ? data.referralTasks : state.referralTasks;
+    await loadReferralData();
     haptic("success");
     toast(t("referral_claim_success", { n: formatPoints(task.rewardPoints) }), "success");
     if (state.activeTab === "tasks") renderTasks();
@@ -1716,8 +1725,8 @@ window.openWithdrawalDetail = openWithdrawalDetail;
 
 /* ================= PROFILE ================= */
 function copyReferralLink() {
-  const link = state.shareLink || state.referralCode;
-  if (!link) return;
+  const link = state.shareLink;
+  if (!link) return toast(t("referral_link_unavailable"), "error");
 
   const finish = () => {
     haptic("success");
@@ -1744,9 +1753,9 @@ function fallbackCopy(text, onDone) {
 }
 
 function shareReferralLink() {
-  const link = state.shareLink || state.referralCode;
-  if (!link) return;
-  const text = "🎁";
+  const link = state.shareLink;
+  if (!link) return toast(t("referral_link_unavailable"), "error");
+  const text = t("referral_share_message", { n: formatPoints(state.referralInitialRewardPoints) });
   if (tg?.openTelegramLink) {
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
   } else if (navigator.share) {
@@ -1917,11 +1926,11 @@ function renderReferralRewardTasks() {
       <div class="taskItem referralTaskItem" style="margin-bottom:12px">
         <div class="taskIcon">👥</div>
         <div class="taskBody">
-          <div class="taskTitle">Invite ${formatPoints(task.requiredInvites)} Active Users</div>
+          <div class="taskTitle">${t("referral_task_invite", { n: formatPoints(task.requiredInvites) })}</div>
           <div class="taskDesc" style="display:flex;align-items:center;gap:9px">
             <span>${formatPoints(task.requiredInvites)}</span>
             <span style="display:inline-block;width:18px;height:1px;background:var(--text-muted);opacity:.7"></span>
-            <span>${formatPoints(task.invitedCount)} active</span>
+            <span>${formatPoints(task.invitedCount)} ${t("referral_active_label")}</span>
           </div>
           <div class="taskReward">+${formatPoints(task.rewardPoints)} ${t("points_unit")}</div>
           <div style="height:6px;background:var(--surface-3);border-radius:999px;overflow:hidden;margin-top:8px">
@@ -1934,7 +1943,47 @@ function renderReferralRewardTasks() {
 
   // هر آیتم مستقیماً و بدون wrapper مشترک برگردانده می‌شود تا هر تسک
   // دقیقاً یک کارت مستقل، مشابه تسک‌های کانال، داشته باشد.
-  return items;
+  return `
+    <div class="card">
+      <div class="cardHeader"><div class="cardTitle">${t("referral_milestones_title")}</div></div>
+      ${items}
+    </div>`;
+}
+
+function renderTeamCommissionCard() {
+  if (!state.referralLevelRates.length) return "";
+  const rows = state.referralLevelRates.map((rate, index) => `
+    <div class="flexBetween" style="padding:10px 12px;border:1px solid var(--line);border-radius:13px;background:var(--surface-2);margin-top:8px">
+      <span style="font-weight:700">${t("referral_level_label", { n: index + 1 })}</span>
+      <span class="badge gold">${formatNumber(rate)}%</span>
+    </div>`).join("");
+  return `
+    <div class="card">
+      <div class="cardHeader"><div class="cardTitle">💰 ${t("referral_team_commission_title")}</div></div>
+      <p class="cardSubtitle" style="line-height:1.8">${t("referral_team_commission_desc")}</p>
+      ${rows}
+    </div>`;
+}
+
+function renderReferralStatsCard() {
+  const stats = state.referralStats;
+  if (!stats) return "";
+  const levelRows = state.referralLevelRates.map((_, index) => `
+    <div class="card" style="margin:0;padding:12px;background:var(--surface-2)">
+      <div class="cardSubtitle">${t("referral_level_label", { n: index + 1 })}</div>
+      <div style="font-size:18px;font-weight:850;margin-top:5px">${formatNumber(Number(stats.levelCounts?.[String(index + 1)]) || 0)}</div>
+    </div>`).join("");
+  return `
+    <div class="card">
+      <div class="cardHeader"><div class="cardTitle">${t("referral_stats_title")}</div></div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:10px">
+        <div class="card" style="margin:0;padding:12px;background:var(--surface-2)"><div class="cardSubtitle">${t("referral_total_count")}</div><div style="font-size:18px;font-weight:850;margin-top:5px">${formatNumber(Number(stats.totalReferrals) || 0)}</div></div>
+        <div class="card" style="margin:0;padding:12px;background:var(--surface-2)"><div class="cardSubtitle">${t("referral_active_count")}</div><div style="font-size:18px;font-weight:850;margin-top:5px">${formatNumber(Number(stats.activeReferrals) || 0)}</div></div>
+        ${levelRows}
+        <div class="card" style="margin:0;padding:12px;background:var(--surface-2)"><div class="cardSubtitle">${t("referral_total_invite_rewards")}</div><div style="font-size:17px;font-weight:850;margin-top:5px">${formatPoints(Number(stats.totalInviteRewardsPoints) || 0)} ${t("points_unit")}</div></div>
+        <div class="card" style="margin:0;padding:12px;background:var(--surface-2)"><div class="cardSubtitle">${t("referral_total_team_commission")}</div><div style="font-size:17px;font-weight:850;margin-top:5px">${formatPoints(Number(stats.totalTeamCommissionPoints) || 0)} ${t("points_unit")}</div></div>
+      </div>
+    </div>`;
 }
 
 function renderProfileReferral() {
@@ -1947,17 +1996,28 @@ function renderProfileReferral() {
 
     <div class="card">
       <div class="cardHeader">
-        <div class="cardTitle">${t("referral_code_title")}</div>
+        <div class="cardTitle">🎁 ${t("referral_invite_reward_title")}</div>
         <div class="badge success">${t("referral_code_bonus_badge", { n: formatPoints(state.referralInitialRewardPoints) })}</div>
       </div>
+      <p class="cardSubtitle" style="line-height:1.8">${t("referral_invite_reward_desc", { n: formatPoints(state.referralInitialRewardPoints) })}</p>
+    </div>
+
+    ${renderTeamCommissionCard()}
+
+    <div class="card">
+      <div class="cardHeader"><div class="cardTitle">${t("referral_link_title")}</div></div>
+      <p class="cardSubtitle">${t("referral_telegram_id_label")}</p>
       <div class="referralCodeBox">
-        <span class="referralCodeText">${escapeHTML(state.referralCode || "—")}</span>
-        <button class="copyBtn" type="button" onclick="copyReferralLink()">${t("referral_copy_button")}</button>
+        <span class="referralCodeText">${escapeHTML(state.referralTelegramId || "—")}</span>
+        <button class="copyBtn" type="button" onclick="copyReferralLink()" ${state.shareLink ? "" : "disabled"}>${t("referral_copy_button")}</button>
       </div>
-      <button class="primaryBtn" type="button" onclick="shareReferralLink()">${t("referral_share_button")}</button>
+      ${state.referralMiniAppConfigured ? "" : `<p class="cardSubtitle" style="color:var(--warning);margin-top:10px">${t("referral_link_config_missing")}</p>`}
+      <button class="primaryBtn" type="button" onclick="shareReferralLink()" ${state.shareLink ? "" : "disabled"}>${t("referral_share_button")}</button>
     </div>
 
     ${renderReferralRewardTasks()}
+
+    ${renderReferralStatsCard()}
 
     <div class="card">
       <div class="cardHeader">

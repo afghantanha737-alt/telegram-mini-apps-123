@@ -1457,3 +1457,184 @@ html[data-theme="dark"] .landingTitle span { color: #a78bfa; }
 }
 
 .referralTotalEarningsNote { margin: -9px 0 13px; color: #aeb8c7; font-size: 9px; line-height: 1.5; }
+
+/* =========================================================
+   AURORA FINTECH LAYER — video reference implementation
+   Visual-only overrides: no API, state, reward or wallet logic.
+========================================================= */
+:root {
+  --aurora-bg-base: #0b0e14;
+  --aurora-bg-surface: #151a23;
+  --aurora-bg-elevated: #1f2633;
+  --aurora-brand-primary: #4f8cff;
+  --aurora-brand-secondary: #00d2ff;
+  --aurora-accent: #fdc06b;
+  --aurora-success: #00d889;
+  --aurora-warning: #ffb85c;
+  --aurora-error: #ff7675;
+  --aurora-text: #ffffff;
+  --aurora-text-secondary: #a0a5b1;
+  --aurora-text-muted: #6b7280;
+  --aurora-grad-primary: linear-gradient(135deg, #6c5ce7 0%, #00d2ff 100%);
+  --aurora-grad-reward: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%);
+  --aurora-shadow-card: 0 8px 32px rgba(0, 0, 0, .34);
+  --aurora-shadow-glow: 0 0 20px rgba(79, 140, 255, .22);
+  --aurora-radius-card: 16px;
+  --aurora-radius-btn: 12px;
+}
+
+html[data-theme="dark"] {
+  --bg: var(--aurora-bg-base);
+  --bg-soft: #10151e;
+  --surface: rgba(21, 26, 35, .94);
+  --surface-2: var(--aurora-bg-elevated);
+  --surface-3: #1b222e;
+  --text: var(--aurora-text);
+  --text-soft: #c4cad5;
+  --text-muted: var(--aurora-text-secondary);
+  --line: rgba(255, 255, 255, .075);
+  --line-strong: rgba(255, 255, 255, .14);
+  --primary: var(--aurora-brand-primary);
+  --primary-2: #6c5ce7;
+  --primary-soft: rgba(79, 140, 255, .14);
+  --success: var(--aurora-success);
+  --warning: var(--aurora-warning);
+  --danger: var(--aurora-error);
+  --gold: var(--aurora-accent);
+  --shadow: var(--aurora-shadow-card);
+  --shadow-soft: 0 5px 22px rgba(0, 0, 0, .24);
+}
+
+html[data-theme="dark"] body {
+  background:
+    radial-gradient(circle at 100% -10%, rgba(0, 210, 255, .08), transparent 29%),
+    radial-gradient(circle at 0% 35%, rgba(108, 92, 231, .12), transparent 31%),
+    var(--aurora-bg-base);
+  color: var(--aurora-text);
+}
+
+#appHeader {
+  height: 68px;
+  background: rgba(11, 14, 20, .82) !important;
+  border-bottom-color: rgba(255, 255, 255, .07);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.headerInner { padding-inline: 16px; gap: 10px; }
+.brandBlock { flex: 1; }
+.brandLogo { width: 34px; height: 34px; filter: drop-shadow(0 4px 12px rgba(79, 140, 255, .25)); }
+.brandName { font-size: 18px; letter-spacing: -.45px; }
+.brandName span { color: var(--aurora-brand-secondary); }
+.brandId { color: var(--aurora-text-muted); font-size: 9px; }
+.headerIconBtn {
+  position: relative; width: 38px; height: 38px; display: grid; place-items: center;
+  color: var(--aurora-text-secondary); border: 1px solid rgba(255,255,255,.09);
+  border-radius: 12px; background: rgba(255,255,255,.035);
+}
+.headerIconBtn svg { width: 19px; height: 19px; }
+.notificationDot { position: absolute; top: 8px; right: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--aurora-accent); box-shadow: 0 0 8px rgba(253,192,107,.7); }
+.avatar { width: 38px; height: 38px; flex-basis: 38px; font-size: 14px; box-shadow: 0 5px 16px rgba(79,140,255,.24); }
+
+.appContent { padding-top: 16px; }
+.card, .tbCard, .taskItem, .streakBox { border-radius: var(--aurora-radius-card); box-shadow: var(--aurora-shadow-card); }
+.tbCard.tbBalance {
+  background: linear-gradient(145deg, rgba(31, 38, 51, .98), rgba(17, 24, 35, .98));
+  border: 1px solid rgba(79, 140, 255, .28);
+  box-shadow: var(--aurora-shadow-card), var(--aurora-shadow-glow);
+}
+.tbAmountNum { color: var(--aurora-text); }
+.tbAmountUnit { color: var(--aurora-accent); }
+.tbGemRing { background: linear-gradient(135deg, var(--aurora-brand-primary), var(--aurora-brand-secondary)); box-shadow: 0 0 26px rgba(0,210,255,.24); }
+.tbBtnPrimary { background: var(--aurora-grad-primary); border-radius: var(--aurora-radius-btn); }
+.tbBtnGhost { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.12); border-radius: var(--aurora-radius-btn); }
+.tbPillPurple { color: #a9bfff; background: rgba(79,140,255,.13); }
+.tbPillGreen { color: var(--aurora-success); background: rgba(0,216,137,.12); }
+.tbPillOrange { color: var(--aurora-accent); background: rgba(253,192,107,.12); }
+
+.auroraQuickActions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 12px 0; }
+.auroraQuickAction { min-height: 76px; padding: 10px 5px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border: 1px solid rgba(255,255,255,.08); border-radius: var(--aurora-radius-card); color: var(--aurora-text); background: var(--aurora-bg-surface); box-shadow: 0 5px 18px rgba(0,0,0,.17); font-size: 10px; font-weight: 800; }
+.auroraQuickAction:active { transform: scale(.97); }
+.auroraQuickIcon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px; color: #fff; font-size: 20px; font-weight: 500; }
+.auroraQuickDeposit .auroraQuickIcon { background: linear-gradient(135deg, #00d2ff, #2f80ed); }
+.auroraQuickExchange .auroraQuickIcon { background: var(--aurora-grad-reward); }
+.auroraQuickTasks .auroraQuickIcon { background: linear-gradient(135deg, #00d889, #00a878); }
+.auroraDailyCard { display: flex; align-items: center; gap: 10px; min-height: 73px; margin-bottom: 13px; padding: 12px 13px; border: 1px solid rgba(253,192,107,.18); border-radius: var(--aurora-radius-card); background: linear-gradient(100deg, rgba(253,192,107,.11), rgba(21,26,35,.95) 44%); box-shadow: var(--aurora-shadow-card); }
+.auroraDailyIcon { width: 39px; height: 39px; display: grid; place-items: center; flex: 0 0 39px; border-radius: 13px; background: rgba(253,192,107,.16); font-size: 22px; }
+.auroraDailyCopy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.auroraDailyCopy strong { font-size: 12px; }
+.auroraDailyCopy span { color: var(--aurora-text-secondary); font-size: 9px; line-height: 1.45; }
+.auroraInlineBtn { padding: 9px 10px; border-radius: 10px; color: #20180b; background: var(--aurora-grad-reward); font-size: 9px; font-weight: 900; white-space: nowrap; }
+
+.taskItem { background: var(--aurora-bg-surface); border: 1px solid rgba(255,255,255,.075); }
+.taskAction { border-radius: var(--aurora-radius-btn); background: var(--aurora-grad-primary); }
+.taskAction.done { color: var(--aurora-success); background: rgba(0,216,137,.12); border-color: rgba(0,216,137,.22); }
+.streakBox { background: linear-gradient(135deg, rgba(253,192,107,.14), rgba(21,26,35,.96)); border-color: rgba(253,192,107,.2); }
+
+.bottomNav { height: calc(74px + env(safe-area-inset-bottom)); background: rgba(11,14,20,.91) !important; border-top-color: rgba(255,255,255,.08); }
+.bottomNav button { height: 57px; color: #737c8c; }
+.bottomNav button.active { color: var(--aurora-brand-secondary); }
+.bottomNav button::before { background: var(--aurora-brand-secondary); box-shadow: 0 0 12px rgba(0,210,255,.55); }
+.tabSvg { width: 21px; height: 21px; }
+
+@media (max-width: 360px) {
+  .auroraQuickAction { min-height: 70px; font-size: 9px; }
+  .auroraInlineBtn { padding-inline: 8px; font-size: 8px; }
+}
+
+/* Screen-specific finishing layer from the reference video */
+.auroraTaskPreview { margin: 15px 0; padding: 15px; border: 1px solid rgba(255,255,255,.08); border-radius: var(--aurora-radius-card); background: rgba(21,26,35,.86); box-shadow: var(--aurora-shadow-card); }
+.auroraSectionHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
+.auroraSectionHead h2 { margin: 0; font-size: 15px; }
+.auroraSectionHead span { color: var(--aurora-text-muted); font-size: 9px; }
+.auroraSectionHead button { color: var(--aurora-brand-secondary); font-size: 10px; font-weight: 800; }
+.auroraTaskPreviewList { display: grid; gap: 7px; }
+.auroraPreviewTask { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px 0; color: var(--aurora-text); text-align: start; border-top: 1px solid rgba(255,255,255,.055); }
+.auroraPreviewTask:first-child { border-top: 0; }
+.auroraPreviewTaskIcon { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 34px; border-radius: 10px; background: rgba(79,140,255,.13); font-size: 17px; }
+.auroraPreviewTaskCopy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.auroraPreviewTaskCopy strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.auroraPreviewTaskCopy small { color: var(--aurora-accent); font-size: 9px; }
+.auroraPreviewStatus { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; color: var(--aurora-brand-secondary); background: rgba(79,140,255,.12); font-size: 16px; }
+.auroraPreviewStatus.done { color: var(--aurora-success); background: rgba(0,216,137,.13); }
+.auroraPreviewEmpty { color: var(--aurora-text-muted); font-size: 10px; text-align: center; padding: 10px; }
+
+.sectionTitle { font-size: 19px; letter-spacing: -.25px; }
+.taskList { display: grid; gap: 10px; }
+.taskItem { padding: 14px !important; gap: 11px; }
+.taskIcon { width: 42px; height: 42px; display: grid; place-items: center; flex: 0 0 42px; border-radius: 13px; background: linear-gradient(135deg, rgba(79,140,255,.18), rgba(0,210,255,.08)); font-size: 21px; }
+.taskTitle { font-size: 12px; }
+.taskDesc { color: var(--aurora-text-secondary); font-size: 10px; }
+.taskReward { color: var(--aurora-accent); font-weight: 900; }
+
+.tbWalletGrid { gap: 10px; }
+.tbWalletCard { border: 1px solid rgba(255,255,255,.08); border-radius: var(--aurora-radius-card); background: var(--aurora-bg-surface); box-shadow: var(--aurora-shadow-card); }
+.tbWalletCard:first-child { border-color: rgba(253,192,107,.2); }
+.tbWalletCard:last-child { border-color: rgba(79,140,255,.22); }
+.tbWalletValue { font-size: 21px; }
+.tbWalletActions { gap: 8px; }
+.tbAct { min-height: 72px; border: 1px solid rgba(255,255,255,.08); border-radius: var(--aurora-radius-card); background: var(--aurora-bg-surface); font-size: 10px; }
+.tbActPrimary { background: var(--aurora-grad-primary); color: #fff; border-color: transparent; }
+.tbActIcon { width: 29px; height: 29px; border-radius: 9px; background: rgba(79,140,255,.14); color: var(--aurora-brand-secondary); }
+.tbActPrimary .tbActIcon { background: rgba(255,255,255,.16); color: #fff; }
+.historyItem { border-bottom-color: rgba(255,255,255,.07); }
+.publicTxCard { border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.025); }
+
+.profileHeaderCard { border: 1px solid rgba(79,140,255,.2); background: linear-gradient(135deg, rgba(79,140,255,.12), rgba(21,26,35,.95) 55%); }
+.profileAvatarLg { border-color: rgba(0,210,255,.7); box-shadow: 0 0 0 3px rgba(79,140,255,.16), 0 8px 24px rgba(0,0,0,.28); }
+.profileItem { border-bottom-color: rgba(255,255,255,.065); }
+.profileIcon { background: rgba(79,140,255,.12); }
+.profileChevron { color: var(--aurora-brand-secondary); transform: scaleX(-1); }
+
+.dailyGrid { gap: 6px; }
+.dayCell { border-radius: 12px; border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.035); }
+.dayCell.filled, .dayCell.today { border-color: rgba(253,192,107,.32); background: rgba(253,192,107,.12); }
+.wheelOuter { filter: drop-shadow(0 12px 25px rgba(0,0,0,.3)); }
+.wheelDisc { border: 8px solid rgba(255,255,255,.08); box-shadow: 0 0 0 5px rgba(79,140,255,.13), inset 0 0 20px rgba(0,0,0,.25); }
+.wheelHub { box-shadow: 0 0 0 4px rgba(255,255,255,.14), 0 0 18px rgba(0,210,255,.36); }
+.wheelSpinBtn { background: var(--aurora-grad-primary); border-radius: var(--aurora-radius-btn); }
+.wheelPaidBtn { border-radius: var(--aurora-radius-btn); border-color: rgba(253,192,107,.35); color: var(--aurora-accent); background: rgba(253,192,107,.08); }
+
+@media (max-width: 360px) {
+  .tbAct { font-size: 9px; }
+  .auroraTaskPreview { padding: 12px; }
+}

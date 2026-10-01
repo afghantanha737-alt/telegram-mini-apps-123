@@ -31,6 +31,7 @@ const { snapshot: metricsSnapshot } = require('../utils/metrics');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { transitionWithdrawalWithRefund } = require('../utils/withdrawalFinance');
 const { evaluateReferralEligibility } = require('../utils/referralEligibility');
+const { buildReferralAudit, persistReferralAudit } = require('../utils/referralAudit');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -1180,6 +1181,35 @@ router.get('/stats', async (req, res) => {
       tasksTrend: buildTrend(tasksTrend)
     }
   });
+});
+
+/* -------------------- REFERRAL AUDIT (non-destructive) -------------------- */
+/**
+ * GET /api/admin/referral-audit?status=high&minScore=30&limit=500
+ * فقط گزارش می‌سازد؛ هیچ موجودی، Withdrawal یا وضعیت Ban را تغییر نمی‌دهد.
+ */
+router.get('/referral-audit', async (req, res) => {
+  const report = await buildReferralAudit({ userId: req.query.userId || null, limit: req.query.limit });
+  const minScore = Math.max(0, Number(req.query.minScore) || 0);
+  const status = String(req.query.status || '').trim();
+  const users = report.users.filter(user => (!status || user.status === status) && user.score >= minScore);
+  res.json({ success: true, ...report, users, filteredTotal: users.length, mode: 'report_only' });
+});
+
+/**
+ * POST /api/admin/referral-audit/run
+ * دسته‌بندی را در User ذخیره می‌کند تا در پنل قابل فیلتر باشد؛ هنوز هیچ اقدام تنبیهی انجام نمی‌دهد.
+ */
+router.post('/referral-audit/run', async (req, res) => {
+  const report = await buildReferralAudit({ userId: req.body?.userId || null, limit: req.body?.limit });
+  await persistReferralAudit(report);
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'referral_audit_run',
+    targetType: 'referral_audit',
+    details: `گزارش غیرمخرب Referral: total=${report.total}, high=${report.summary.high}, review=${report.summary.review}, low=${report.summary.low}`
+  });
+  res.json({ success: true, ...report, mode: 'classified_only', message: 'دسته‌بندی ذخیره شد؛ هیچ Ban، کسر امتیاز یا رد خودکاری انجام نشد.' });
 });
 
 /* -------------------- ADMIN ACTIVITY LOG -------------------- */

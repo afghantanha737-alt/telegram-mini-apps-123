@@ -25,6 +25,13 @@ function createSignedReferralIdentifier(telegramId, secret = process.env.REFERRA
   return `${id}_${signature}`;
 }
 
+function createMiniAppReferralLink(botUsername, telegramId) {
+  const bot = String(botUsername || '').trim().replace(/^@/, '');
+  const id = String(telegramId || '').trim();
+  if (!/^[A-Za-z0-9_]{5,32}$/.test(bot) || !/^\d{1,20}$/.test(id)) return '';
+  return `https://t.me/${bot}?startapp=${encodeURIComponent(id)}`;
+}
+
 function referralIdentifierQuery(value, secret = process.env.REFERRAL_LINK_SECRET || process.env.BOT_TOKEN || '') {
   let identifier = String(value || '').trim();
   if (identifier.startsWith('ref_')) identifier = identifier.slice(4);
@@ -38,7 +45,7 @@ function referralIdentifierQuery(value, secret = process.env.REFERRAL_LINK_SECRE
     }
     return null;
   }
-  if (/^\d{1,20}$/.test(identifier)) return null;
+  if (/^\d{1,20}$/.test(identifier)) return { telegramId: identifier };
   if (/^[a-z\d]{1,64}$/i.test(identifier)) return { referralCode: identifier.toUpperCase() };
   return null;
 }
@@ -67,6 +74,7 @@ module.exports = {
   ELIGIBLE_ORIGINAL_EARN_TYPES,
   normalizeReferralRates,
   createSignedReferralIdentifier,
+  createMiniAppReferralLink,
   referralIdentifierQuery,
   isEligibleOriginalEarn,
   calculateReferralCommission,

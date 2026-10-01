@@ -13,6 +13,7 @@ const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { referralTaskId, buildReferralTaskProgress, REFERRAL_REWARD_TASKS } = require('../utils/referralRewards');
 const { evaluateReferralEligibility, REFERRAL_MIN_TASKS, REFERRAL_MIN_ACTIVE_DAYS, REFERRAL_WAIT_DAYS } = require('../utils/referralEligibility');
 const { normalizeReferralRates, createSignedReferralIdentifier } = require('../utils/referralCore');
+const { buildReferralViewData, calculateReferralEarningsTotal } = require('../utils/referralView');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
@@ -47,7 +48,7 @@ router.get('/me', auth, async (req, res) => {
   let referralLevelRates;
   try { referralLevelRates = normalizeReferralRates(referralSettings.referralLevelRates); }
   catch { referralLevelRates = [10, 5, 3, 2]; }
-  const [totalReferralCount, networkRows, referralLedgerRows] = await Promise.all([
+  const [totalReferralCount, networkRows, referralLedgerRows, commissionSummaryRows] = await Promise.all([
     User.countDocuments({ referredBy: u._id }),
     User.aggregate([
       { $match: { _id: u._id } },
@@ -65,14 +66,29 @@ router.get('/me', auth, async (req, res) => {
     PointsLedger.aggregate([
       { $match: { user: u._id, currency: 'points', amount: { $gt: 0 }, type: { $in: ['referral_initial', 'referral_bonus', 'referral_commission'] } } },
       { $group: { _id: '$type', total: { $sum: '$amount' } } }
+    ]),
+    PointsLedger.aggregate([
+      { $match: { user: u._id, currency: 'points', type: 'referral_commission', amount: { $gt: 0 } } },
+      { $facet: {
+        byLevel: [
+          { $group: { _id: '$referralLevel', earnedPoints: { $sum: '$amount' } } }
+        ],
+        byFriend: [
+          { $match: { sourceUserId: { $ne: null } } },
+          { $group: { _id: '$sourceUserId', earnedPoints: { $sum: '$amount' } } }
+        ]
+      } }
     ])
   ]);
-  const levelCounts = Object.fromEntries(referralLevelRates.map((_, index) => [String(index + 1), 0]));
-  for (const descendant of networkRows[0]?.descendants || []) {
-    if (String(descendant._id) === String(u._id)) continue;
-    const level = Number(descendant.depth) + 1;
-    if (Object.prototype.hasOwnProperty.call(levelCounts, String(level))) levelCounts[String(level)] += 1;
-  }
+  const commissionSummary = commissionSummaryRows[0] || {};
+  const referralView = buildReferralViewData({
+    rates: referralLevelRates,
+    descendants: networkRows[0]?.descendants || [],
+    earningsByLevel: commissionSummary.byLevel || [],
+    earningsByFriend: commissionSummary.byFriend || [],
+    rootUserId: u._id
+  });
+  const levelCounts = referralView.levelCounts;
   const ledgerTotals = Object.fromEntries(referralLedgerRows.map(row => [row._id, Number(row.total) || 0]));
   const initialInviteRewardPoints = ledgerTotals.referral_initial || 0;
   const milestoneRewardPoints = ledgerTotals.referral_bonus || 0;
@@ -124,9 +140,12 @@ router.get('/me', auth, async (req, res) => {
     referralInitialRewardPoints: Number(referralSettings.referralInitialRewardPoints ?? 10),
     referralLevelRates,
     referralStats: {
-      totalReferrals: totalReferralCount,
+      totalReferrals: referralView.totalReferrals,
       activeReferrals: Number(u.activeInvitedCount) || 0,
       levelCounts,
+      earningsByLevel: referralView.earningsByLevel,
+      totalReferralEarningsPoints: calculateReferralEarningsTotal({ initialInviteRewardPoints, milestoneRewardPoints, teamCommissionPoints: totalTeamCommissionPoints }),
+      totalReferralCommissionPoints: totalTeamCommissionPoints,
       initialInviteRewardPoints,
       milestoneRewardPoints,
       totalInviteRewardsPoints: initialInviteRewardPoints + milestoneRewardPoints,
@@ -138,7 +157,8 @@ router.get('/me', auth, async (req, res) => {
       waitDays: REFERRAL_WAIT_DAYS
     },
     referralTasks: buildReferralTaskProgress(u.activeInvitedCount, u.referralRewardClaims),
-    invited
+    invited,
+    team: referralView.team
   });
 });
 

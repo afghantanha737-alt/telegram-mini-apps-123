@@ -16,6 +16,8 @@
     <div class="row">
       <input id="key" type="password" placeholder="ADMIN_KEY">
       <input id="limit" type="number" value="500" min="1" max="5000" placeholder="تعداد کاربران">
+      <select id="status"><option value="">همه وضعیت‌ها</option><option value="high">فقط High</option><option value="review">فقط Review</option><option value="low">فقط Low</option></select>
+      <input id="minScore" type="number" value="0" min="0" placeholder="حداقل Score">
       <button onclick="runAudit(false)">گزارش آزمایشی</button>
       <button class="danger" onclick="runAudit(true)">ذخیره دسته‌بندی</button>
     </div>
@@ -36,7 +38,8 @@ async function runAudit(apply){
     const url=apply?'/api/admin/referral-audit/run':'/api/admin/referral-audit';
     const options={method:apply?'POST':'GET',headers:{'x-admin-session':loginData.sessionToken,'Content-Type':'application/json'}};
     if(apply) options.body=JSON.stringify({limit:Number($('limit').value)||500});
-    const response=await fetch(apply?url:`${url}?limit=${encodeURIComponent(Number($('limit').value)||500)}`,options);
+    const query=`limit=${encodeURIComponent(Number($('limit').value)||500)}&status=${encodeURIComponent($('status').value)}&minScore=${encodeURIComponent(Number($('minScore').value)||0)}`;
+    const response=await fetch(apply?url:`${url}?${query}`,options);
     const data=await response.json(); if(!response.ok) throw new Error(data.message||`HTTP ${response.status}`);
     $('message').textContent=apply?'دسته‌بندی‌ها ذخیره شدند؛ هیچ اقدام تنبیهی انجام نشد.':'گزارش آزمایشی آماده شد.';
     render(data);

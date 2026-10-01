@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Referral Audit — Gramup</title>
+  <style>
+    body{margin:0;background:#f7f0ff;color:#172033;font-family:Arial,sans-serif;padding:24px}.wrap{max-width:1100px;margin:auto}.card{background:#fff;border-radius:20px;padding:20px;margin:14px 0;box-shadow:0 8px 28px #5d22a015}h1{margin-top:0}.row{display:flex;gap:10px;flex-wrap:wrap}input,button{font:inherit;padding:11px 13px;border-radius:10px;border:1px solid #ddd}input{min-width:220px}button{background:#7c3aed;color:white;border:0;cursor:pointer}.muted{color:#687386}.stats{display:flex;gap:10px;flex-wrap:wrap}.stat{padding:14px 18px;border-radius:14px;background:#f2eaff}.high{border-right:5px solid #dc2626}.review{border-right:5px solid #f59e0b}.low{border-right:5px solid #16a34a}.error{color:#b91c1c;white-space:pre-wrap}.user{padding:15px;border:1px solid #eee;border-radius:14px;margin:10px 0}.pill{display:inline-block;padding:4px 9px;border-radius:20px;background:#eee;margin-left:5px}.pill.high{background:#fee2e2;color:#991b1b}.pill.review{background:#fef3c7;color:#92400e}.pill.low{background:#dcfce7;color:#166534}.danger{background:#b91c1c}.notice{background:#fff7ed;border:1px solid #fed7aa;padding:12px;border-radius:12px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Referral Audit</h1>
+    <p class="muted">گزارش فقط برای شناسایی کاربران مشکوک است. این صفحه هیچ امتیاز، برداشت یا وضعیت Ban را تغییر نمی‌دهد.</p>
+    <div class="row">
+      <input id="key" type="password" placeholder="ADMIN_KEY">
+      <input id="limit" type="number" value="500" min="1" max="5000" placeholder="تعداد کاربران">
+      <button onclick="runAudit(false)">گزارش آزمایشی</button>
+      <button class="danger" onclick="runAudit(true)">ذخیره دسته‌بندی</button>
+    </div>
+    <p id="message" class="muted"></p>
+  </div>
+  <div id="result"></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+function esc(value){return String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function runAudit(apply){
+  const key=$('key').value.trim(); if(!key){$('message').textContent='ابتدا ADMIN_KEY را وارد کنید.';return;}
+  if(apply && !confirm('فقط دسته‌بندی Audit ذخیره می‌شود؛ هیچ امتیاز یا کاربری تغییر نمی‌کند. ادامه؟')) return;
+  $('message').textContent='در حال بررسی...'; $('result').innerHTML='';
+  try{
+    const login=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,name:'Referral Audit'})});
+    const loginData=await login.json(); if(!login.ok) throw new Error(loginData.message||`Login HTTP ${login.status}`);
+    const url=apply?'/api/admin/referral-audit/run':'/api/admin/referral-audit';
+    const options={method:apply?'POST':'GET',headers:{'x-admin-session':loginData.sessionToken,'Content-Type':'application/json'}};
+    if(apply) options.body=JSON.stringify({limit:Number($('limit').value)||500});
+    const response=await fetch(apply?url:`${url}?limit=${encodeURIComponent(Number($('limit').value)||500)}`,options);
+    const data=await response.json(); if(!response.ok) throw new Error(data.message||`HTTP ${response.status}`);
+    $('message').textContent=apply?'دسته‌بندی‌ها ذخیره شدند؛ هیچ اقدام تنبیهی انجام نشد.':'گزارش آزمایشی آماده شد.';
+    render(data);
+  }catch(error){$('message').innerHTML='<span class="error">'+esc(error.message)+'</span>';}
+}
+function render(data){
+  const s=data.summary||{};
+  let html=`<div class="card"><div class="stats"><div class="stat">کل: <b>${data.total||0}</b></div><div class="stat">High: <b>${s.high||0}</b></div><div class="stat">Review: <b>${s.review||0}</b></div><div class="stat">Low: <b>${s.low||0}</b></div></div></div>`;
+  for(const u of (data.users||[])) html+=`<div class="card user ${esc(u.status)}"><div><span class="pill ${esc(u.status)}">${esc(u.status)}</span><b>${esc(u.name)}</b> — Telegram ID: ${esc(u.telegramId)}</div><p>Score: <b>${u.score}</b> | پاداش Referral: <b>${u.referralReward?.amount||0}</b> | Withdrawal: ${u.withdrawals?.count||0}</p><p>Task تأییدشده: ${u.eligibility?.approvedTaskCount||0} | روز فعالیت: ${u.eligibility?.activeDayCount||0} | IP/Network مشابه: ${u.signals?.sharedIpCount||0}</p><p class="muted">${esc((u.flags||[]).join('، ')||'بدون پرچم')}</p></div>`;
+  $('result').innerHTML=html;
+}
+</script>
+</body>
+</html>

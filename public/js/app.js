@@ -40,6 +40,7 @@ const state = {
   shareLink: "",
   invitedCount: 0,
   activeInvitedCount: 0,
+  referralInitialRewardPoints: 10,
   gateActive: false,
   totalEarnedPoints: 0,
   level: null,
@@ -732,6 +733,7 @@ async function loadReferralData() {
     state.activeInvitedCount = Number(data?.activeInvitedCount) || 0;
     state.invited = Array.isArray(data?.invited) ? data.invited : [];
     state.referralMinTasks = Number(data?.referralMinTasks) || 2;
+    state.referralInitialRewardPoints = Number(data?.referralInitialRewardPoints ?? data?.referralBonusPoints) || 0;
     state.referralTasks = Array.isArray(data?.referralTasks) ? data.referralTasks : [];
   } catch (error) {
     console.warn("Referral data failed:", error);
@@ -792,6 +794,8 @@ const LEDGER_TYPE_UI = {
   checkin: { icon: "📅" },
   spin: { icon: "🎡" },
   referral_bonus: { icon: "👥" },
+  referral_initial: { icon: "🎁" },
+  referral_commission: { icon: "💸" },
   leaderboard_reward: { icon: "🏆" },
   exchange_out: { icon: "⇄" },
   exchange_in: { icon: "⇄" },
@@ -1944,7 +1948,7 @@ function renderProfileReferral() {
     <div class="card">
       <div class="cardHeader">
         <div class="cardTitle">${t("referral_code_title")}</div>
-        <div class="badge success">${t("referral_code_bonus_badge")}</div>
+        <div class="badge success">${t("referral_code_bonus_badge", { n: formatPoints(state.referralInitialRewardPoints) })}</div>
       </div>
       <div class="referralCodeBox">
         <span class="referralCodeText">${escapeHTML(state.referralCode || "—")}</span>
@@ -1963,9 +1967,11 @@ function renderProfileReferral() {
       ${state.invited.length === 0
         ? `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("referral_invited_empty")}</div></div>`
         : state.invited.map(person => {
-            const statusHtml = person.bonusAwarded
+            const statusHtml = person.initialRewardStatus === "paid" || person.bonusAwarded
               ? `<span class="badge success" style="margin-top:4px">${t("team_status_awarded")}</span>`
-              : `<span class="badge warning" style="margin-top:4px">${t("team_status_pending", { n: person.tasksRemaining })}</span>`;
+              : person.initialRewardStatus === "legacy_exempt"
+                ? `<span class="badge" style="margin-top:4px">${t("team_status_legacy")}</span>`
+                : `<span class="badge warning" style="margin-top:4px">${t("team_status_initial_pending")}</span>`;
             return `
             <div class="historyItem" style="align-items:flex-start">
               <div>
@@ -2114,13 +2120,21 @@ function renderProfileHistory() {
     const amountText = `${isPositive ? "+" : ""}${item.currency === "gram" ? formatNumber(item.amount, 6) : formatPoints(item.amount)} ${unit}`;
     const icon = (LEDGER_TYPE_UI[item.type] || {}).icon || "🔸";
     const desc = item.description || t(`history_type_${item.type}`);
+    const referralMeta = item.type === "referral_commission"
+      ? `${t("history_referral_level", { n: item.referralLevel || "—" })} · ${Number(item.commissionRatePercent || 0)}%`
+      : item.type === "referral_initial" ? t("history_referral_initial") : "";
+    const transactionMeta = item.transactionId ? `${t("history_txid_label")} ${truncateMiddle(item.transactionId, 5, 5)}` : "";
+    const earningMeta = item.earningTransactionId ? `${t("history_source_earning")} ${truncateMiddle(item.earningTransactionId, 5, 5)}` : "";
+    const referralUsersMeta = item.sourceUserId || item.recipientUserId
+      ? `${t("history_source_user")} ${truncateMiddle(String(item.sourceUserId || "—"), 5, 5)} · ${t("history_recipient_user")} ${truncateMiddle(String(item.recipientUserId || "—"), 5, 5)}`
+      : "";
 
     return `
       <div class="ledgerRow">
         <div class="ledgerIcon">${icon}</div>
         <div class="ledgerBody">
           <div class="ledgerDesc">${escapeHTML(desc)}</div>
-          <div class="historyMeta">${timeAgo(item.createdAt)}</div>
+          <div class="historyMeta">${timeAgo(item.createdAt)}${referralMeta ? ` · ${escapeHTML(referralMeta)}` : ""}${transactionMeta ? ` · ${escapeHTML(transactionMeta)}` : ""}${earningMeta ? ` · ${escapeHTML(earningMeta)}` : ""}${referralUsersMeta ? ` · ${escapeHTML(referralUsersMeta)}` : ""}</div>
         </div>
         <div class="ledgerAmount ${isPositive ? "positive" : "negative"}">${amountText}</div>
       </div>`;

@@ -1638,3 +1638,118 @@ html[data-theme="dark"] body {
   .tbAct { font-size: 9px; }
   .auroraTaskPreview { padding: 12px; }
 }
+
+/* =========================================================
+   AURORA LIGHT THEME — PDF specification
+   Light-only overrides. Dark Mode remains unchanged.
+========================================================= */
+html[data-theme="light"] {
+  --bg: #f4f6fb;
+  --bg-soft: #eef1f7;
+  --surface: #ffffff;
+  --surface-2: #f0f2f8;
+  --surface-3: #ffffff;
+  --text: #111827;
+  --text-soft: #4b5563;
+  --text-muted: #9ca3af;
+  --line: rgba(17, 24, 39, .08);
+  --line-strong: rgba(17, 24, 39, .14);
+  --primary: #5a4bdd;
+  --primary-2: #5a4bdd;
+  --primary-soft: rgba(90, 75, 221, .10);
+  --success: #059669;
+  --success-soft: rgba(5, 150, 105, .10);
+  --warning: #d97706;
+  --warning-soft: rgba(217, 119, 6, .10);
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, .10);
+  --gold: #e67e22;
+  --shadow: 0 4px 20px rgba(0, 0, 0, .05);
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, .05);
+}
+html[data-theme="light"] body {
+  background: var(--bg);
+  color: var(--text);
+}
+html[data-theme="light"] #appHeader {
+  background: rgba(255, 255, 255, .92) !important;
+  border-bottom-color: rgba(17, 24, 39, .08);
+  box-shadow: 0 2px 12px rgba(17, 24, 39, .035);
+}
+html[data-theme="light"] .brandName { color: var(--text); }
+html[data-theme="light"] .brandName span { color: var(--primary); }
+html[data-theme="light"] .headerIconBtn { color: var(--text-soft); border-color: rgba(17,24,39,.10); background: #fff; }
+html[data-theme="light"] .notificationDot { background: var(--gold); box-shadow: 0 0 8px rgba(230,126,34,.35); }
+html[data-theme="light"] .card,
+html[data-theme="light"] .tbCard,
+html[data-theme="light"] .taskItem,
+html[data-theme="light"] .auroraTaskPreview,
+html[data-theme="light"] .auroraQuickAction,
+html[data-theme="light"] .auroraDailyCard,
+html[data-theme="light"] .tbWalletCard,
+html[data-theme="light"] .tbAct,
+html[data-theme="light"] .publicTxCard {
+  background: #fff;
+  border-color: rgba(17, 24, 39, .08);
+  box-shadow: var(--shadow-soft);
+}
+html[data-theme="light"] .card::after { display: none; }
+html[data-theme="light"] .tbCard.tbBalance {
+  background: radial-gradient(circle at 100% 0%, rgba(90,75,221,.09), transparent 38%), #fff;
+  border-color: rgba(90, 75, 221, .18);
+  box-shadow: var(--shadow), 0 0 15px rgba(90, 75, 221, .08);
+}
+html[data-theme="light"] .tbBtnPrimary,
+html[data-theme="light"] .primaryBtn,
+html[data-theme="light"] .taskAction,
+html[data-theme="light"] .wheelSpinBtn {
+  color: #fff;
+  background: linear-gradient(135deg, #5a4bdd, #6c5ce7);
+  box-shadow: 0 7px 18px rgba(90, 75, 221, .18);
+}
+html[data-theme="light"] .tbBtnGhost,
+html[data-theme="light"] .secondaryBtn { color: var(--text); background: #fff; border-color: rgba(17,24,39,.12); }
+html[data-theme="light"] .tbBtnDark { color: #fff; background: #1f2937; }
+html[data-theme="light"] .tbPillPurple { color: #4b3fc1; background: rgba(90,75,221,.10); }
+html[data-theme="light"] .tbPillGreen { color: #047857; background: rgba(5,150,105,.10); }
+html[data-theme="light"] .tbPillOrange { color: #b45309; background: rgba(230,126,34,.11); }
+html[data-theme="light"] .auroraQuickAction { color: var(--text); }
+html[data-theme="light"] .auroraDailyCard { background: linear-gradient(100deg, rgba(230,126,34,.10), #fff 52%); border-color: rgba(230,126,34,.17); }
+html[data-theme="light"] .auroraDailyCopy span,
+html[data-theme="light"] .auroraSectionHead span,
+html[data-theme="light"] .auroraPreviewTaskCopy small { color: var(--text-secondary, #4b5563); }
+html[data-theme="light"] .auroraInlineBtn { color: #fff; background: linear-gradient(135deg, #e67e22, #d97706); }
+html[data-theme="light"] .auroraPreviewTask { color: var(--text); border-top-color: rgba(17,24,39,.07); }
+html[data-theme="light"] .auroraPreviewStatus { color: #4b3fc1; background: rgba(90,75,221,.10); }
+html[data-theme="light"] .auroraPreviewStatus.done { color: #047857; background: rgba(5,150,105,.10); }
+html[data-theme="light"] .taskDesc,
+html[data-theme="light"] .cardSubtitle,
+html[data-theme="light"] .historyMeta { color: #4b5563; }
+html[data-theme="light"] .taskReward { color: #c2410c; }
+html[data-theme="light"] .streakBox { background: linear-gradient(135deg, rgba(230,126,34,.10), #fff); border-color: rgba(230,126,34,.18); }
+html[data-theme="light"] .tbWalletCard:first-child { border-color: rgba(230,126,34,.2); }
+html[data-theme="light"] .tbWalletCard:last-child { border-color: rgba(90,75,221,.18); }
+html[data-theme="light"] .tbActPrimary { color: #fff; background: linear-gradient(135deg, #5a4bdd, #6c5ce7); }
+html[data-theme="light"] .profileHeaderCard { background: radial-gradient(circle at 100% 0%, rgba(90,75,221,.10), transparent 40%), #fff; border-color: rgba(90,75,221,.17); }
+html[data-theme="light"] .profileItem { border-bottom-color: rgba(17,24,39,.07); }
+html[data-theme="light"] .profileIcon { background: rgba(90,75,221,.09); }
+html[data-theme="light"] .profileChevron { color: #5a4bdd; }
+html[data-theme="light"] .referralCard,
+html[data-theme="light"] .referralLoadingCard,
+html[data-theme="light"] .referralErrorCard { color: var(--text); background: #fff; border-color: rgba(17,24,39,.08); box-shadow: var(--shadow-soft); }
+html[data-theme="light"] .referralCardHeading h2,
+html[data-theme="light"] .referralQuickStat strong,
+html[data-theme="light"] .referralFriendName { color: var(--text); }
+html[data-theme="light"] .referralCardHeading p,
+html[data-theme="light"] .referralQuickStat small,
+html[data-theme="light"] .referralFriendMeta { color: #4b5563; }
+html[data-theme="light"] .referralRateRow,
+html[data-theme="light"] .referralTable,
+html[data-theme="light"] .referralLinkField { background: #f8fafc; border-color: rgba(17,24,39,.08); }
+html[data-theme="light"] .referralTableRow { border-bottom-color: rgba(17,24,39,.07); color: #4b5563; }
+html[data-theme="light"] .referralLinkValue { color: #374151; }
+html[data-theme="light"] .referralShareBtn { color: #4b3fc1; border-color: rgba(90,75,221,.28); background: rgba(90,75,221,.06); }
+html[data-theme="light"] .bottomNav { background: rgba(255,255,255,.94) !important; border-top-color: rgba(17,24,39,.08); box-shadow: 0 -4px 18px rgba(17,24,39,.05); }
+html[data-theme="light"] .bottomNav button { color: #9ca3af; }
+html[data-theme="light"] .bottomNav button.active { color: #5a4bdd; }
+html[data-theme="light"] .bottomNav button::before { background: #5a4bdd; box-shadow: 0 0 10px rgba(90,75,221,.28); }

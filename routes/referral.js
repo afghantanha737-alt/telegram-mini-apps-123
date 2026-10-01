@@ -12,7 +12,7 @@ const { recordLedgerRequired } = require('../utils/ledger');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { referralTaskId, buildReferralTaskProgress, REFERRAL_REWARD_TASKS } = require('../utils/referralRewards');
 const { evaluateReferralEligibility, REFERRAL_MIN_TASKS, REFERRAL_MIN_ACTIVE_DAYS, REFERRAL_WAIT_DAYS } = require('../utils/referralEligibility');
-const { normalizeReferralRates, createSignedReferralIdentifier } = require('../utils/referralCore');
+const { normalizeReferralRates, createMiniAppReferralLink } = require('../utils/referralCore');
 const { buildReferralViewData, calculateReferralEarningsTotal } = require('../utils/referralView');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
@@ -23,12 +23,8 @@ const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
 router.get('/me', auth, async (req, res) => {
   const u = req.dbUser;
   const botUsername = String(process.env.BOT_USERNAME || '').replace(/^@/, '');
-  const shortName = String(process.env.MINI_APP_SHORT_NAME || '');
-  const signedStartParam = createSignedReferralIdentifier(u.telegramId);
-  const miniAppConfigured = /^[A-Za-z0-9_]{5,32}$/.test(botUsername) && /^[A-Za-z0-9_-]{1,64}$/.test(shortName) && Boolean(signedStartParam);
-  const shareLink = miniAppConfigured
-    ? `https://t.me/${botUsername}/${shortName}?startapp=${encodeURIComponent(signedStartParam)}`
-    : '';
+  const shareLink = createMiniAppReferralLink(botUsername, u.telegramId);
+  const miniAppConfigured = Boolean(shareLink);
 
   const invitedUsers = await User.find({ referredBy: u._id })
     .select('_id telegramId firstName username createdAt referralBonusAwarded referralInitialRewardEligible referralRiskScore referralRiskBlocked referralEligibilityStatus referralEligibilityReasons referralEligibleAt')

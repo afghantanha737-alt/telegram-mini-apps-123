@@ -37,6 +37,11 @@ const userSchema = new mongoose.Schema(
     referralEligibilityStatus: { type: String, enum: ['pending', 'eligible', 'blocked'], default: 'pending', index: true },
     referralEligibilityReasons: { type: [String], default: [] },
     referralEligibleAt: { type: Date, default: null },
+    // گزارش غیرمخرب Audit؛ فقط دسته‌بندی و سیگنال‌ها را ذخیره می‌کند و به‌تنهایی Ban یا کسر موجودی نیست.
+    referralAuditStatus: { type: String, enum: ['low', 'review', 'high'], default: 'low', index: true },
+    referralAuditScore: { type: Number, default: 0, min: 0 },
+    referralAuditFlags: { type: [String], default: [] },
+    referralAuditedAt: { type: Date, default: null },
     // claimهای مرحله‌ای دعوت دوستان؛ شرط یکتا در findOneAndUpdate سمت API
     // تضمین می‌کند هر مرحله فقط یک‌بار قابل دریافت باشد.
     referralRewardClaims: { type: [referralRewardClaimSchema], default: [] },

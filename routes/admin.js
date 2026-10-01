@@ -1,5 +1,7 @@
 'use strict';
 const express = require('express');
+const crypto = require('crypto');
+const mongoose = require('mongoose');
 const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
 const multer = require('multer');
@@ -15,6 +17,8 @@ const { recordAdminLog } = require('../utils/adminLog');
 const AdminLog = require('../models/AdminLog');
 const TaskCompletion = require('../models/TaskCompletion');
 const PointsLedger = require('../models/PointsLedger');
+const BalanceAudit = require('../models/BalanceAudit');
+const ReferralRelationship = require('../models/ReferralRelationship');
 const WeeklyLeaderboardAward = require('../models/WeeklyLeaderboardAward');
 const { isValidAdminKey } = require('../utils/adminKey');
 const RequiredChannel = require('../models/RequiredChannel');
@@ -31,6 +35,7 @@ const { snapshot: metricsSnapshot } = require('../utils/metrics');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { transitionWithdrawalWithRefund } = require('../utils/withdrawalFinance');
 const { evaluateReferralEligibility } = require('../utils/referralEligibility');
+const { normalizeReferralRates } = require('../utils/referralCore');
 const { buildReferralAudit, persistReferralAudit } = require('../utils/referralAudit');
 
 const MAX_REQUIRED_CHANNELS = 5;
@@ -57,6 +62,7 @@ function requireAdmin(req, res, next) {
     return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
   }
   req.adminActor = session?.actor || String(req.headers['x-admin-name'] || '').trim() || 'ادمین';
+  req.adminId = session?.adminId || 'legacy-admin-key';
   next();
 }
 
@@ -739,10 +745,179 @@ router.get('/users', async (req, res) => {
 
   const { page, limit, skip } = pageParams(req.query, 100, 300);
   const [users, total] = await Promise.all([
-    User.find(filter).select('-__v').sort(sortBy).skip(skip).limit(limit).lean(),
+    User.find(filter).select('-__v -signupIpHash -referralRiskFlags').sort(sortBy).skip(skip).limit(limit).lean(),
     User.countDocuments(filter)
   ]);
   res.json({ success: true, users, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+});
+
+function balanceField(currency) { return currency === 'gram' ? 'gramBalance' : 'points'; }
+function referralTransactionSummary(user) {
+  return {
+    referralLevel: user.referralLevel || null,
+    sourceUserId: user.sourceUserId || null,
+    recipientUserId: user.recipientUserId || null,
+    commissionRatePercent: user.commissionRatePercent ?? null,
+    earningTransactionId: user.earningTransactionId || ''
+  };
+}
+
+router.get('/users/:id/account', async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: 'شناسه کاربر نامعتبر است.' });
+  const user = await User.findById(req.params.id).select('-__v -signupIpHash -referralRiskFlags').lean();
+  if (!user) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
+  const [earned, gramTotal, withdrawals, referralCount, history, audits] = await Promise.all([
+    PointsLedger.aggregate([{ $match: { user: user._id, currency: 'points', amount: { $gt: 0 }, type: { $nin: ['exchange_in', 'admin_adjust'] } } }, { $group: { _id: null, total: { $sum: '$amount' } } }]),
+    PointsLedger.aggregate([{ $match: { user: user._id, currency: 'gram', amount: { $gt: 0 } } }, { $group: { _id: null, total: { $sum: '$amount' } } }]),
+    Withdrawal.aggregate([{ $match: { user: user._id, status: 'paid' } }, { $group: { _id: null, total: { $sum: '$cryptoAmount' } } }]),
+    User.countDocuments({ referredBy: user._id }),
+    PointsLedger.find({ user: user._id }).sort({ createdAt: -1 }).limit(100).lean(),
+    BalanceAudit.find({ userId: user._id }).sort({ createdAt: -1 }).limit(50).lean()
+  ]);
+  res.json({
+    success: true,
+    user,
+    balances: {
+      totalEarnedPoints: earned[0]?.total || 0,
+      currentPoints: Number(user.points) || 0,
+      totalGramCredited: gramTotal[0]?.total || 0,
+      currentGram: Number(user.gramBalance) || 0,
+      totalWithdrawnGram: withdrawals[0]?.total || 0,
+      referralCount,
+      activeReferralCount: Number(user.activeInvitedCount) || 0
+    },
+    transactions: history.map(entry => ({ ...entry, ...referralTransactionSummary(entry) })),
+    balanceAudits: audits
+  });
+});
+
+router.post('/users/:id/balance', async (req, res) => {
+  const { currency, action, reason } = req.body || {};
+  const actionId = String(req.body?.actionId || '').trim();
+  const cleanReason = String(reason || '').trim();
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: 'شناسه کاربر نامعتبر است.' });
+  if (!['points', 'gram'].includes(currency) || !['add', 'subtract', 'set', 'zero'].includes(action)) return res.status(400).json({ success: false, message: 'نوع موجودی یا عملیات نامعتبر است.' });
+  if (actionId.length < 8 || actionId.length > 150) return res.status(400).json({ success: false, message: 'Action ID معتبر و یکتا لازم است.' });
+  if (!cleanReason || cleanReason.length > 500) return res.status(400).json({ success: false, message: 'دلیل الزامی است و حداکثر ۵۰۰ نویسه می‌تواند باشد.' });
+  if (action === 'zero' && req.body?.confirmText !== 'ZERO') return res.status(400).json({ success: false, message: 'برای صفرکردن موجودی، تأیید صریح لازم است.' });
+  const amount = Number(req.body?.amount);
+  if (action !== 'zero' && (!Number.isFinite(amount) || (['add', 'subtract'].includes(action) ? amount <= 0 : amount < 0) || (action === 'set' && amount === 0) || (currency === 'points' && !Number.isInteger(amount)))) return res.status(400).json({ success: false, message: 'مقدار واردشده نامعتبر است؛ صفرکردن فقط با عملیات zero و تایید جداگانه ممکن است.' });
+  const roundedAmount = currency === 'gram' && action !== 'zero' ? Math.round(amount * 1e6) / 1e6 : amount;
+  const outcome = await withMongoTransaction(async session => {
+    const previousAction = await BalanceAudit.findOne({ actionId }).session(session);
+    if (previousAction) return { duplicate: true, audit: previousAction };
+    const user = await User.findById(req.params.id).session(session);
+    if (!user) return { missing: true };
+    const field = balanceField(currency);
+    const before = Number(user[field]) || 0;
+    const after = action === 'zero' ? 0 : action === 'set' ? roundedAmount : before + (action === 'subtract' ? -roundedAmount : roundedAmount);
+    if (after < 0) return { insufficient: true };
+    const change = after - before;
+    const updated = await User.findByIdAndUpdate(user._id, { $set: { [field]: after } }, { new: true, session });
+    const transactionId = `ADMIN-${crypto.createHash('sha256').update(actionId).digest('hex')}`;
+    await recordLedgerRequired({
+      user: updated._id,
+      type: 'admin_adjust',
+      currency,
+      amount: change,
+      description: `اصلاح موجودی توسط ادمین: ${cleanReason}`,
+      balanceAfter: after,
+      sourceId: `admin-balance:${actionId}`,
+      transactionId,
+      session
+    });
+    const audit = new BalanceAudit({
+      actionId,
+      adminId: String(req.adminId || 'legacy-admin-key'),
+      actor: String(req.adminActor || 'ادمین'),
+      userId: updated._id,
+      action,
+      currency,
+      before,
+      change,
+      after,
+      reason: cleanReason,
+      transactionId
+    });
+    await audit.save({ session });
+    return { updated, audit, duplicate: false };
+  });
+  if (outcome.missing) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
+  if (outcome.insufficient) return res.status(409).json({ success: false, message: 'کسر موجودی باعث منفی‌شدن موجودی می‌شود.' });
+  if (!outcome.duplicate) recordAdminLog({ actor: req.adminActor, action: `balance_${action}`, targetType: 'user', targetId: req.params.id, details: `${currency}; ${cleanReason}; actionId=${actionId}` });
+  res.json({ success: true, duplicate: outcome.duplicate, user: outcome.updated || null, audit: outcome.audit });
+});
+
+router.post('/users/bulk-balance', async (req, res) => {
+  const { currency, action, reason } = req.body || {};
+  const batchId = String(req.body?.actionId || '').trim();
+  const cleanReason = String(reason || '').trim();
+  const userIds = Array.isArray(req.body?.userIds) ? [...new Set(req.body.userIds.map(String))] : [];
+  if (!['points', 'gram'].includes(currency) || !['add', 'zero'].includes(action)) return res.status(400).json({ success: false, message: 'عملیات گروهی فقط برای افزودن یا صفرکردن Points/GRAM است.' });
+  if (batchId.length < 8 || batchId.length > 120) return res.status(400).json({ success: false, message: 'Batch Action ID معتبر و یکتا لازم است.' });
+  if (!cleanReason || cleanReason.length > 500) return res.status(400).json({ success: false, message: 'دلیل الزامی است و حداکثر ۵۰۰ نویسه می‌تواند باشد.' });
+  if (!userIds.length || userIds.length > 100 || userIds.some(id => !mongoose.Types.ObjectId.isValid(id))) return res.status(400).json({ success: false, message: '۱ تا ۱۰۰ شناسه کاربر معتبر انتخاب کنید.' });
+  if (action === 'zero' && req.body?.confirmText !== 'ZERO') return res.status(400).json({ success: false, message: 'برای صفرکردن گروهی، تأیید صریح لازم است.' });
+  const amount = Number(req.body?.amount);
+  if (action === 'add' && (!Number.isFinite(amount) || amount <= 0 || (currency === 'points' && !Number.isInteger(amount)))) return res.status(400).json({ success: false, message: 'مقدار مثبت و معتبر لازم است.' });
+  const value = currency === 'gram' && action === 'add' ? Math.round(amount * 1e6) / 1e6 : amount;
+  const outcome = await withMongoTransaction(async session => {
+    const results = [];
+    for (const id of userIds) {
+      const actionId = `${batchId}:${id}`;
+      const existing = await BalanceAudit.findOne({ actionId }).session(session);
+      if (existing) { results.push({ userId: id, duplicate: true }); continue; }
+      const user = await User.findById(id).session(session);
+      if (!user) throw new Error(`کاربر با شناسه ${id} پیدا نشد؛ کل عملیات لغو شد.`);
+      const field = balanceField(currency);
+      const before = Number(user[field]) || 0;
+      const after = action === 'zero' ? 0 : before + value;
+      const change = after - before;
+      const updated = await User.findByIdAndUpdate(user._id, { $set: { [field]: after } }, { new: true, session });
+      const transactionId = `ADMIN-${crypto.createHash('sha256').update(actionId).digest('hex')}`;
+      await recordLedgerRequired({
+        user: updated._id, type: 'admin_adjust', currency, amount: change,
+        description: `اصلاح گروهی موجودی توسط ادمین: ${cleanReason}`,
+        balanceAfter: after, sourceId: `admin-balance:${actionId}`, transactionId, session
+      });
+      const audit = new BalanceAudit({
+        actionId, batchId, adminId: String(req.adminId || 'legacy-admin-key'), actor: String(req.adminActor || 'ادمین'),
+        userId: updated._id, action, currency, before, change, after, reason: cleanReason, transactionId
+      });
+      await audit.save({ session });
+      results.push({ userId: id, duplicate: false, before, change, after });
+    }
+    return results;
+  });
+  recordAdminLog({ actor: req.adminActor, action: `bulk_balance_${action}`, targetType: 'user_batch', targetId: batchId, details: `${userIds.length} users; ${currency}; ${cleanReason}` });
+  res.json({ success: true, batchId, results: outcome });
+});
+
+router.post('/users/:id/review-status', async (req, res) => {
+  const status = String(req.body?.status || '').trim();
+  const actionId = String(req.body?.actionId || '').trim();
+  const reason = String(req.body?.reason || '').trim();
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: 'شناسه کاربر نامعتبر است.' });
+  if (!['normal', 'under_review', 'restricted', 'fraud_review'].includes(status)) return res.status(400).json({ success: false, message: 'وضعیت بررسی نامعتبر است.' });
+  if (actionId.length < 8 || actionId.length > 150 || !reason || reason.length > 500) return res.status(400).json({ success: false, message: 'Action ID یکتا و دلیل حداکثر ۵۰۰ نویسه الزامی است.' });
+  const outcome = await withMongoTransaction(async session => {
+    const existing = await BalanceAudit.findOne({ actionId }).session(session);
+    if (existing) return { duplicate: true, audit: existing };
+    const user = await User.findById(req.params.id).session(session);
+    if (!user) return { missing: true };
+    const before = user.accountReviewStatus || 'normal';
+    user.accountReviewStatus = status;
+    await user.save({ session });
+    const audit = new BalanceAudit({
+      actionId, adminId: String(req.adminId || 'legacy-admin-key'), actor: String(req.adminActor || 'ادمین'),
+      userId: user._id, action: 'account_status', currency: 'account', statusBefore: before, statusAfter: status, reason
+    });
+    await audit.save({ session });
+    return { duplicate: false, user, audit };
+  });
+  if (outcome.missing) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
+  if (!outcome.duplicate) recordAdminLog({ actor: req.adminActor, action: 'user_review_status', targetType: 'user', targetId: req.params.id, details: `${outcome.audit.statusBefore} -> ${status}; ${reason}` });
+  res.json({ success: true, duplicate: outcome.duplicate, user: outcome.user || null, audit: outcome.audit });
 });
 
 router.post('/users/:id/ban', async (req, res) => {
@@ -1042,6 +1217,20 @@ router.put('/settings', async (req, res) => {
     }
     changes.weeklyLeaderboardPrizes = prizes;
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'referralInitialRewardPoints')) {
+    const points = Number(body.referralInitialRewardPoints);
+    if (!Number.isInteger(points) || points < 0 || points > 1000000) {
+      return res.status(400).json({ success: false, message: 'پاداش اولیه Referral باید عدد صحیح بین صفر تا یک‌میلیون باشد.' });
+    }
+    changes.referralInitialRewardPoints = points;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'referralLevelRates')) {
+    try {
+      changes.referralLevelRates = normalizeReferralRates(body.referralLevelRates);
+    } catch (error) {
+      return res.status(400).json({ success: false, message: `نرخ‌های Referral نامعتبر است: ${error.message}` });
+    }
+  }
 
   const settings = await Settings.getGlobal();
 
@@ -1124,7 +1313,8 @@ router.get('/stats', async (req, res) => {
     totalUsers,
     bannedUsers,
     totalReferred,
-    convertedReferred,
+    legacyConvertedReferred,
+    initialRewardedReferred,
     pendingWithdrawals,
     paidTodayAgg,
     newUsersTrend,
@@ -1136,6 +1326,7 @@ router.get('/stats', async (req, res) => {
     User.countDocuments({ isBanned: true }),
     User.countDocuments({ referredBy: { $ne: null } }),
     User.countDocuments({ referredBy: { $ne: null }, referralBonusAwarded: true }),
+    ReferralRelationship.countDocuments({ level: 1, initialRewardStatus: 'paid' }),
     Withdrawal.countDocuments({ status: 'pending' }),
     Withdrawal.aggregate([
       { $match: { status: 'paid', paidAt: { $gte: startOfToday } } },
@@ -1152,6 +1343,7 @@ router.get('/stats', async (req, res) => {
   ]);
 
   // پر کردن روزهای بدون داده با صفر، تا نمودار ۷ ستون کامل داشته باشد
+  const convertedReferred = legacyConvertedReferred + initialRewardedReferred;
   function buildTrend(aggResult) {
     const map = new Map(aggResult.map(r => [r._id, r.count]));
     const days = [];

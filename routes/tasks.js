@@ -3,8 +3,7 @@ const express = require('express');
 const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth } = require('../utils/telegramAuth');
-const { checkChatMembership, notifyUser } = require('../utils/bot');
-const { botText } = require('../utils/botMessages');
+const { checkChatMembership } = require('../utils/bot');
 const { recordLedgerRequired } = require('../utils/ledger');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
@@ -18,16 +17,9 @@ const { evaluateReferralEligibility, REFERRAL_MIN_TASKS, REFERRAL_MIN_ACTIVE_DAY
 const { withMembership } = require('../utils/membership');
 const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
 
-// حداقل تعداد تسک معتبری که کاربر دعوت‌شده باید تکمیل کند تا دعوت‌کننده‌اش پاداش بگیرد
-const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
-
 /**
- * اگر کاربر دعوت‌شده به آستانه‌ی امن (۳ تسک در ۲ روز متفاوت و ۷ روز انتظار)
- * رسیده باشد، دقیقاً یک‌بار به
- * دعوت‌کننده‌اش پاداش می‌دهد. با findOneAndUpdate و شرط
- * referralBonusAwarded:false این عملیات atomic است — یعنی حتی اگر دو
- * درخواست هم‌زمان بیایند (مثلاً از دو تب یا رفرش سریع)، فقط یکی از آن‌ها
- * موفق به آپدیت می‌شود و پاداش هرگز دوبار پرداخت نمی‌شود.
+ * Eligibility قدیمی برای تبدیل/برداشت و شمارنده‌ی دعوت فعال را به‌روز می‌کند؛
+ * پاداش ثابت ۵۰ پوینتی در سیستم جدید غیرفعال شده و پرداخت اولیه هنگام اتصال Referral است.
  */
 async function maybeAwardReferralBonus(userId) {
   const result = await withMongoTransaction(async session => {
@@ -64,44 +56,8 @@ async function maybeAwardReferralBonus(userId) {
       );
     }
 
-    if (!eligibility.eligible || user.referralBonusAwarded) return null;
-
-    const locked = await User.findOneAndUpdate(
-      { _id: userId, referralBonusAwarded: false },
-      { $set: { referralBonusAwarded: true } },
-      { new: true, session }
-    );
-    if (!locked) return null;
-
-    const referrer = await User.findByIdAndUpdate(
-      user.referredBy,
-      { $inc: { points: REFERRAL_BONUS_POINTS } },
-      { new: true, session }
-    );
-    if (!referrer) throw new Error('دعوت‌کننده برای پرداخت پاداش پیدا نشد.');
-
-    const invitedName = user.firstName || user.username || (referrer.language === 'en' ? 'your friend' : 'دوستت');
-    await recordLedgerRequired({
-      user: referrer._id,
-      type: 'referral_bonus',
-      amount: REFERRAL_BONUS_POINTS,
-      description: `پاداش دعوت ${invitedName}`,
-      balanceAfter: referrer.points,
-      sourceId: `referral-bonus:${user._id}`,
-      session
-    });
-    return { referrer, invitedName };
+    return null;
   });
-
-  if (!result) return;
-  const { referrer, invitedName } = result;
-
-  // اطلاع‌رسانی فوری به دعوت‌کننده که پاداش ریفرالش آزاد شد — تا این لحظه
-  // کاربر فقط تعداد دعوت‌شده‌ها را می‌دید، نه اینکه دقیقاً کِی پاداش می‌گیرد.
-  notifyUser(
-    referrer.telegramId,
-    botText('referralBonus', referrer.language, invitedName, REFERRAL_BONUS_POINTS, referrer.points)
-  ).catch(() => {});
 }
 
 // GET /api/tasks
@@ -124,8 +80,8 @@ router.get('/', auth, async (req, res) => {
 /**
  * POST /api/tasks/:id/claim
  * عضویت کاربر در کانال/گروه تلگرامی را با API خود تلگرام بررسی می‌کند.
- * اگر عضو باشد، پاداش بلافاصله داده می‌شود؛ سپس بررسی می‌شود که آیا با
- * این تکمیل، شرط پاداش رفرال دعوت‌کننده‌اش (در صورت وجود) برآورده شده.
+ * اگر عضو باشد، پاداش اصلی بلافاصله داده می‌شود و کمیسیون‌های Referral در
+ * همان Mongo transaction ثبت می‌شوند؛ سپس Eligibility قدیمی برداشت به‌روز می‌شود.
  *
  * توجه: کل بدنه در try/catch پیچیده شده — در Express 4، اگر یک خطای
  * غیرمنتظره داخل async handler رخ دهد و catch نشود، درخواست کاربر

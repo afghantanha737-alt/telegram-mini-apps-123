@@ -5,12 +5,13 @@ require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth, generateReferralCode } = require('../utils/telegramAuth');
 const User = require('../models/User');
 const { hashNetworkIdentifier, assessReferralRisk } = require('../utils/referralRisk');
+const { linkReferral } = require('../utils/referralSystem');
 
 const auth = requireTelegramAuth(process.env.BOT_TOKEN);
 
 // GET /api/auth/me — بوت اولیه کاربر + اعمال کد رفرال از URL (fallback وقتی startapp نداریم)
 router.get('/me', auth, async (req, res) => {
-  const u = req.dbUser;
+  let u = req.dbUser;
   const refFromUrl = String(req.query.ref || '').replace(/^ref_/, '').trim();
 
   // رفرال از طریق URL فقط برای حساب‌های تازه‌ساخته‌شده (۲۴ ساعت اول) پذیرفته می‌شود
@@ -23,17 +24,8 @@ router.get('/me', auth, async (req, res) => {
     const isCycle = referrer && referrer.referredBy && String(referrer.referredBy) === String(u._id);
     if (referrer && !referrer.isBanned && String(referrer._id) !== String(u._id) && !isCycle) {
       const risk = assessReferralRisk({ referrer, signupIpHash: hashNetworkIdentifier(req.ip) });
-      // atomic: فقط اگر هنوز referredBy خالی است ثبت می‌شود؛ پس شمارنده فقط یک‌بار زیاد می‌شود.
-      // پاداش اینجا داده نمی‌شود — فقط بعد از تکمیل حداقل تعداد تسک (routes/tasks.js).
-      const claimed = await User.findOneAndUpdate(
-        { _id: u._id, referredBy: null },
-        { $set: { referredBy: referrer._id, referralRiskScore: risk.score, referralRiskFlags: risk.flags } },
-        { new: true }
-      );
-      if (claimed) {
-        u.referredBy = claimed.referredBy;
-        await User.findByIdAndUpdate(referrer._id, { $inc: { invitedCount: 1 } });
-      }
+      await linkReferral({ referredUserId: u._id, referrerId: referrer._id, riskScore: risk.score, riskFlags: risk.flags, source: 'signup' });
+      u = await User.findById(u._id);
     }
   }
 

@@ -4,6 +4,8 @@ const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth } = require('../utils/telegramAuth');
 const User = require('../models/User');
+const Settings = require('../models/Settings');
+const ReferralRelationship = require('../models/ReferralRelationship');
 const TaskCompletion = require('../models/TaskCompletion');
 const { recordLedgerRequired } = require('../utils/ledger');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
@@ -13,7 +15,6 @@ const { evaluateReferralEligibility, REFERRAL_MIN_TASKS, REFERRAL_MIN_ACTIVE_DAY
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
 const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
-const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
 
 // GET /api/referral/me — کد رفرال، لینک اشتراک‌گذاری، و لیست «تیم» با وضعیت پاداش هرکدام
 router.get('/me', auth, async (req, res) => {
@@ -31,7 +32,7 @@ router.get('/me', auth, async (req, res) => {
   }
 
   const invitedUsers = await User.find({ referredBy: u._id })
-    .select('telegramId firstName username createdAt referralBonusAwarded referralRiskScore referralRiskBlocked referralEligibilityStatus referralEligibilityReasons referralEligibleAt')
+    .select('_id telegramId firstName username createdAt referralBonusAwarded referralRiskScore referralRiskBlocked referralEligibilityStatus referralEligibilityReasons referralEligibleAt')
     .sort({ createdAt: -1 })
     .limit(100);
 
@@ -44,6 +45,11 @@ router.get('/me', auth, async (req, res) => {
   ]);
   const countMap = new Map(taskCounts.map(tc => [String(tc._id), tc.count]));
   const daysMap = new Map(taskCounts.map(tc => [String(tc._id), tc.days || []]));
+  const referralSettings = await Settings.getGlobal();
+  const directRelationships = invitedIds.length
+    ? await ReferralRelationship.find({ referrerId: u._id, referredUserId: { $in: invitedIds }, level: 1 }).select('referredUserId initialRewardStatus').lean()
+    : [];
+  const relationshipMap = new Map(directRelationships.map(item => [String(item.referredUserId), item.initialRewardStatus]));
 
   const invited = invitedUsers.map(iu => {
     const completedTasks = countMap.get(String(iu._id)) || 0;
@@ -53,6 +59,7 @@ router.get('/me', auth, async (req, res) => {
       createdAt: activeDays.length ? activeDays[index % activeDays.length] : iu.createdAt
     }));
     const eligibility = evaluateReferralEligibility(iu, eligibilityCompletions);
+    const initialRewardStatus = relationshipMap.get(String(iu._id)) || (iu.referralBonusAwarded ? 'legacy_exempt' : 'pending');
     return {
       telegramId: iu.telegramId,
       firstName: iu.firstName,
@@ -64,10 +71,11 @@ router.get('/me', auth, async (req, res) => {
       eligibilityStatus: eligibility.status,
       eligibilityReasons: eligibility.reasons,
       eligibleAt: iu.referralEligibleAt,
-      bonusAwarded: iu.referralBonusAwarded,
-      tasksRemaining: iu.referralBonusAwarded ? 0 : Math.max(0, REFERRAL_MIN_TASKS - completedTasks),
+      bonusAwarded: initialRewardStatus === 'paid' || iu.referralBonusAwarded,
+      tasksRemaining: initialRewardStatus === 'paid' || initialRewardStatus === 'legacy_exempt' || iu.referralBonusAwarded ? 0 : Math.max(0, REFERRAL_MIN_TASKS - completedTasks),
       daysRemaining: Math.max(0, REFERRAL_MIN_ACTIVE_DAYS - activeDays.length),
-      waitDaysRemaining: eligibility.waitDaysRemaining
+      waitDaysRemaining: eligibility.waitDaysRemaining,
+      initialRewardStatus
     };
   });
 
@@ -79,7 +87,9 @@ router.get('/me', auth, async (req, res) => {
     shareLink,
     botUsernameConfigured: Boolean(botUsername),
     referralMinTasks: REFERRAL_MIN_TASKS,
-    referralBonusPoints: REFERRAL_BONUS_POINTS,
+    referralBonusPoints: Number(referralSettings.referralInitialRewardPoints ?? 10),
+    referralInitialRewardPoints: Number(referralSettings.referralInitialRewardPoints ?? 10),
+    referralLevelRates: Array.isArray(referralSettings.referralLevelRates) ? referralSettings.referralLevelRates : [10, 5, 3, 2],
     referralEligibility: {
       minTasks: REFERRAL_MIN_TASKS,
       minActiveDays: REFERRAL_MIN_ACTIVE_DAYS,

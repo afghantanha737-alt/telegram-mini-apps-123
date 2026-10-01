@@ -9,6 +9,7 @@ const User = require('../models/User');
 const Withdrawal = require('../models/Withdrawal');
 const { generateReferralCode } = require('../utils/telegramAuth');
 const { isAdminTelegramId, createAdminSessionStore } = require('../utils/telegramAdmin');
+const { linkReferralByCode } = require('../utils/referralSystem');
 
 // وضعیت موقت گفت‌وگوی «/admin» (در حافظه؛ توضیح کامل در utils/telegramAdmin.js)
 const adminSessions = createAdminSessionStore();
@@ -181,28 +182,17 @@ router.post('/webhook', async (req, res) => {
       let user = await User.findOne({ telegramId });
 
       if (!user) {
-        let referredBy = null;
-        if (payload) {
-          const referrer = await User.findOne({ referralCode: payload });
-          if (referrer && String(referrer.telegramId) !== telegramId) {
-            referredBy = referrer._id;
-          }
-        }
-
         user = await User.create({
           telegramId,
           username: message.from.username || '',
           firstName: message.from.first_name || '',
           lastName: message.from.last_name || '',
-          referralCode: generateReferralCode(telegramId),
-          referredBy
+          referralCode: generateReferralCode(telegramId)
         });
-
-        if (referredBy) {
-          // پاداش اینجا داده نمی‌شود — فقط بعد از تکمیل حداقل تعداد تسک لازم
-          // توسط همین کاربر جدید (در routes/tasks.js) پرداخت می‌شود.
-          await User.findByIdAndUpdate(referredBy, { $inc: { invitedCount: 1 } });
-        }
+      }
+      if (payload && user && !user.referredBy) {
+        await linkReferralByCode({ referredUserId: user._id, referralCode: payload, source: 'signup' });
+        user = await User.findById(user._id);
       }
 
       // آدرس اپ را با ref=CODE می‌فرستیم تا اگر کاربر همان لحظه رفرال نشده،

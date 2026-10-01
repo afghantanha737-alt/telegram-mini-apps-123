@@ -1211,6 +1211,14 @@ html[data-theme="dark"] .landingTitle span { color: #a78bfa; }
   padding: 3px 0 10px;
   color: #f4f5f8;
 }
+.referralPage.referralPageEntering { animation: referralPageEnter 180ms cubic-bezier(.22, .61, .36, 1) both; }
+@keyframes referralPageEnter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .referralPage.referralPageEntering { animation: none; }
+}
 .referralPage::before {
   content: "";
   position: absolute;

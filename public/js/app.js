@@ -340,6 +340,7 @@ function setupNavigation() {
       navigate(tab);
     });
   });
+  setupReferralTelegramBackButton();
 }
 function updateNavigation() {
   $$("#tabbar [data-tab]").forEach(button => {
@@ -351,9 +352,11 @@ async function navigate(tab) {
   if (!validTabs.includes(tab)) tab = "home";
   clearInterval(countdownInterval);
   state.activeTab = tab;
+  syncReferralTelegramBackButton();
   updateNavigation();
   window.scrollTo({ top: 0, behavior: "smooth" });
   await renderCurrentTab();
+  syncReferralTelegramBackButton();
 }
 window.navigate = navigate;
 
@@ -1779,6 +1782,51 @@ window.shareReferralLink = shareReferralLink;
 
 let profileView = "menu"; // menu | referral | leaderboard | about | history
 let pendingProfileView = null;
+let referralPreviousProfileView = "menu";
+let referralBackButtonHandlerBound = false;
+
+function syncReferralTelegramBackButton() {
+  const backButton = tg?.BackButton;
+  if (!backButton) return;
+
+  const shouldShow = !state.gateActive && state.activeTab === "profile" && profileView === "referral";
+  try {
+    if (shouldShow && typeof backButton.show === "function") backButton.show();
+    else if (!shouldShow && typeof backButton.hide === "function") backButton.hide();
+  } catch (error) {
+    console.warn("Telegram Referral BackButton update failed:", error);
+  }
+}
+
+function returnFromReferral() {
+  if (state.activeTab !== "profile" || profileView !== "referral") {
+    syncReferralTelegramBackButton();
+    return;
+  }
+  setProfileView(referralPreviousProfileView || "menu");
+}
+
+function setupReferralTelegramBackButton() {
+  const backButton = tg?.BackButton;
+  if (!backButton) return;
+
+  if (!referralBackButtonHandlerBound) {
+    try {
+      if (typeof backButton.onClick === "function") {
+        backButton.onClick(returnFromReferral);
+      } else if (typeof tg.onEvent === "function") {
+        tg.onEvent("backButtonClicked", returnFromReferral);
+      } else {
+        return;
+      }
+      referralBackButtonHandlerBound = true;
+    } catch (error) {
+      console.warn("Telegram Referral BackButton listener failed:", error);
+      return;
+    }
+  }
+  syncReferralTelegramBackButton();
+}
 
 function openHistory() {
   pendingProfileView = "history";
@@ -1787,6 +1835,9 @@ function openHistory() {
 window.openHistory = openHistory;
 
 function setProfileView(view) {
+  if (view === "referral" && profileView !== "referral") {
+    referralPreviousProfileView = profileView || "menu";
+  }
   profileView = view;
   if (view === "history") { historyList = []; historyHasMore = false; }
   if (view === "referral") {
@@ -1794,6 +1845,7 @@ function setProfileView(view) {
     void loadReferralData();
   }
   renderProfile();
+  syncReferralTelegramBackButton();
 }
 window.setProfileView = setProfileView;
 

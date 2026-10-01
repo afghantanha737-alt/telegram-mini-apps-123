@@ -12,17 +12,18 @@ const User = require('../models/User');
 const Settings = require('../models/Settings');
 const { rewardCostUsd } = require('../utils/sponsor');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
+const { evaluateReferralEligibility, REFERRAL_MIN_TASKS, REFERRAL_MIN_ACTIVE_DAYS, REFERRAL_WAIT_DAYS } = require('../utils/referralEligibility');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
 const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
 
 // حداقل تعداد تسک معتبری که کاربر دعوت‌شده باید تکمیل کند تا دعوت‌کننده‌اش پاداش بگیرد
-const REFERRAL_MIN_TASKS = Number(process.env.REFERRAL_MIN_TASKS || 2);
 const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
 
 /**
- * اگر کاربر دعوت‌شده به آستانه‌ی لازم رسیده باشد، دقیقاً یک‌بار به
+ * اگر کاربر دعوت‌شده به آستانه‌ی امن (۳ تسک در ۲ روز متفاوت و ۷ روز انتظار)
+ * رسیده باشد، دقیقاً یک‌بار به
  * دعوت‌کننده‌اش پاداش می‌دهد. با findOneAndUpdate و شرط
  * referralBonusAwarded:false این عملیات atomic است — یعنی حتی اگر دو
  * درخواست هم‌زمان بیایند (مثلاً از دو تب یا رفرش سریع)، فقط یکی از آن‌ها
@@ -31,21 +32,39 @@ const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
 async function maybeAwardReferralBonus(userId) {
   const result = await withMongoTransaction(async session => {
     const user = await User.findById(userId)
-      .select('referredBy referralBonusAwarded firstName username referralRiskScore referralRiskBlocked')
+      .select('referredBy referralBonusAwarded firstName username referralRiskScore referralRiskBlocked createdAt referralEligibilityStatus')
       .session(session);
     if (!user || !user.referredBy) return null;
 
-    const approvedCount = await TaskCompletion.countDocuments({ user: userId, status: 'approved' }).session(session);
-    const referralRiskScore = Number(user.referralRiskScore || 0);
-    if (approvedCount >= 1 && referralRiskScore < 50 && !user.referralRiskBlocked) {
+    const completions = await TaskCompletion.find({ user: userId, status: 'approved' }).select('createdAt status').session(session).lean();
+    const eligibility = evaluateReferralEligibility(user, completions);
+    await User.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          referralEligibilityStatus: eligibility.status,
+          referralEligibilityReasons: eligibility.reasons,
+          referralEligibleAt: eligibility.eligible ? eligibility.eligibleAt : null
+        }
+      },
+      { session }
+    );
+
+    if (eligibility.eligible) {
       await User.findOneAndUpdate(
         { _id: user.referredBy, activeReferralIds: { $ne: user._id } },
         { $addToSet: { activeReferralIds: user._id }, $inc: { activeInvitedCount: 1 } },
         { session }
       );
+    } else {
+      await User.findOneAndUpdate(
+        { _id: user.referredBy, activeReferralIds: user._id, activeInvitedCount: { $gt: 0 } },
+        { $pull: { activeReferralIds: user._id }, $inc: { activeInvitedCount: -1 } },
+        { session }
+      );
     }
 
-    if (referralRiskScore >= 50 || user.referralRiskBlocked || user.referralBonusAwarded || approvedCount < REFERRAL_MIN_TASKS) return null;
+    if (!eligibility.eligible || user.referralBonusAwarded) return null;
 
     const locked = await User.findOneAndUpdate(
       { _id: userId, referralBonusAwarded: false },

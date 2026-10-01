@@ -8,11 +8,11 @@ const TaskCompletion = require('../models/TaskCompletion');
 const { recordLedgerRequired } = require('../utils/ledger');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { referralTaskId, buildReferralTaskProgress, REFERRAL_REWARD_TASKS } = require('../utils/referralRewards');
+const { evaluateReferralEligibility, REFERRAL_MIN_TASKS, REFERRAL_MIN_ACTIVE_DAYS, REFERRAL_WAIT_DAYS } = require('../utils/referralEligibility');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
 const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
-const REFERRAL_MIN_TASKS = Number(process.env.REFERRAL_MIN_TASKS || 2);
 const REFERRAL_BONUS_POINTS = Number(process.env.REFERRAL_BONUS_POINTS || 50);
 
 // GET /api/referral/me — کد رفرال، لینک اشتراک‌گذاری، و لیست «تیم» با وضعیت پاداش هرکدام
@@ -31,7 +31,7 @@ router.get('/me', auth, async (req, res) => {
   }
 
   const invitedUsers = await User.find({ referredBy: u._id })
-    .select('telegramId firstName username createdAt referralBonusAwarded')
+    .select('telegramId firstName username createdAt referralBonusAwarded referralRiskScore referralRiskBlocked referralEligibilityStatus referralEligibilityReasons referralEligibleAt')
     .sort({ createdAt: -1 })
     .limit(100);
 
@@ -40,21 +40,34 @@ router.get('/me', auth, async (req, res) => {
   const invitedIds = invitedUsers.map(iu => iu._id);
   const taskCounts = await TaskCompletion.aggregate([
     { $match: { user: { $in: invitedIds }, status: 'approved' } },
-    { $group: { _id: '$user', count: { $sum: 1 } } }
+    { $group: { _id: '$user', count: { $sum: 1 }, days: { $addToSet: { $dateToString: { date: '$createdAt', format: '%Y-%m-%d', timezone: 'UTC' } } } } }
   ]);
   const countMap = new Map(taskCounts.map(tc => [String(tc._id), tc.count]));
+  const daysMap = new Map(taskCounts.map(tc => [String(tc._id), tc.days || []]));
 
   const invited = invitedUsers.map(iu => {
     const completedTasks = countMap.get(String(iu._id)) || 0;
+    const activeDays = daysMap.get(String(iu._id)) || [];
+    const eligibilityCompletions = Array.from({ length: completedTasks }, (_, index) => ({
+      status: 'approved',
+      createdAt: activeDays.length ? activeDays[index % activeDays.length] : iu.createdAt
+    }));
+    const eligibility = evaluateReferralEligibility(iu, eligibilityCompletions);
     return {
       telegramId: iu.telegramId,
       firstName: iu.firstName,
       username: iu.username,
       createdAt: iu.createdAt,
       completedTasks,
-      active: completedTasks >= 1,
+      activeDays: activeDays.length,
+      active: eligibility.eligible,
+      eligibilityStatus: eligibility.status,
+      eligibilityReasons: eligibility.reasons,
+      eligibleAt: iu.referralEligibleAt,
       bonusAwarded: iu.referralBonusAwarded,
-      tasksRemaining: iu.referralBonusAwarded ? 0 : Math.max(0, REFERRAL_MIN_TASKS - completedTasks)
+      tasksRemaining: iu.referralBonusAwarded ? 0 : Math.max(0, REFERRAL_MIN_TASKS - completedTasks),
+      daysRemaining: Math.max(0, REFERRAL_MIN_ACTIVE_DAYS - activeDays.length),
+      waitDaysRemaining: eligibility.waitDaysRemaining
     };
   });
 
@@ -67,6 +80,11 @@ router.get('/me', auth, async (req, res) => {
     botUsernameConfigured: Boolean(botUsername),
     referralMinTasks: REFERRAL_MIN_TASKS,
     referralBonusPoints: REFERRAL_BONUS_POINTS,
+    referralEligibility: {
+      minTasks: REFERRAL_MIN_TASKS,
+      minActiveDays: REFERRAL_MIN_ACTIVE_DAYS,
+      waitDays: REFERRAL_WAIT_DAYS
+    },
     referralTasks: buildReferralTaskProgress(u.activeInvitedCount, u.referralRewardClaims),
     invited
   });

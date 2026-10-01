@@ -45,6 +45,7 @@ const { botText } = require('../utils/botMessages');
 const { synthesizeHistory } = require('../utils/withdrawalStatus');
 const { getLevel } = require('../utils/levels');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
+const { referralWithdrawalRestriction } = require('../utils/referralEligibility');
 
 // GET /api/points/me
 router.get('/me', auth, async (req, res) => {
@@ -234,6 +235,10 @@ router.post('/exchange', auth, async (req, res) => {
   }
 
   if (direction === 'points_to_gram') {
+    const referralRestriction = referralWithdrawalRestriction(u);
+    if (referralRestriction) {
+      return res.status(403).json({ success: false, message: referralRestriction, code: 'REFERRAL_ELIGIBILITY_PENDING' });
+    }
     const points = Math.floor(Number(body.amount != null ? body.amount : body.points) || 0);
 
     if (!Number.isFinite(points) || points <= 0) {
@@ -325,6 +330,10 @@ router.post('/exchange', auth, async (req, res) => {
 // POST /api/points/withdraw — برداشت از موجودی GRAM (نه مستقیم از پوینت)
 router.post('/withdraw', auth, async (req, res) => {
   const u = req.dbUser;
+  const referralRestriction = referralWithdrawalRestriction(u);
+  if (referralRestriction) {
+    return res.status(403).json({ success: false, message: referralRestriction, code: 'REFERRAL_ELIGIBILITY_PENDING' });
+  }
   const settings = await Settings.getGlobal();
   const { gram, address } = req.body || {};
   const amount = round6(gram);

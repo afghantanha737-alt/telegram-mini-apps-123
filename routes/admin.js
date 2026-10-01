@@ -30,6 +30,7 @@ const { buildDiscrepancy, isDiscrepant } = require('../utils/financialAudit');
 const { snapshot: metricsSnapshot } = require('../utils/metrics');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { transitionWithdrawalWithRefund } = require('../utils/withdrawalFinance');
+const { evaluateReferralEligibility } = require('../utils/referralEligibility');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -773,8 +774,10 @@ router.post('/users/:id/unban', async (req, res) => {
 router.post('/users/:id/referral-review', async (req, res) => {
   const action = String(req.body?.action || '').trim();
   if (!['approve', 'block'].includes(action)) return res.status(400).json({ success: false, message: 'action باید approve یا block باشد.' });
-  const user = await User.findById(req.params.id).select('referredBy referralRiskScore referralRiskFlags referralRiskBlocked firstName username');
+  const user = await User.findById(req.params.id).select('referredBy createdAt referralRiskScore referralRiskFlags referralRiskBlocked firstName username referralEligibilityStatus');
   if (!user) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
+  const approvedCompletions = await TaskCompletion.find({ user: user._id, status: 'approved' }).select('status createdAt').lean();
+  const eligibility = evaluateReferralEligibility({ ...user.toObject(), referralRiskBlocked: action === 'block' ? true : false, referralRiskScore: action === 'block' ? 50 : 0 }, approvedCompletions);
   const updated = await User.findOneAndUpdate(
     { _id: user._id },
     { $set: {
@@ -782,13 +785,15 @@ router.post('/users/:id/referral-review', async (req, res) => {
       referralRiskScore: action === 'approve' ? 0 : Math.max(50, Number(user.referralRiskScore || 50)),
       referralRiskFlags: action === 'approve' ? [] : user.referralRiskFlags,
       referralRiskReviewedAt: new Date(),
-      referralRiskReviewedBy: req.adminActor
+      referralRiskReviewedBy: req.adminActor,
+      referralEligibilityStatus: action === 'block' ? 'blocked' : eligibility.status,
+      referralEligibilityReasons: action === 'block' ? ['RISK_BLOCKED'] : eligibility.reasons,
+      referralEligibleAt: action === 'block' || !eligibility.eligible ? null : eligibility.eligibleAt
     } },
     { new: true }
   );
   if (action === 'approve' && user.referredBy) {
-    const approvedCount = await TaskCompletion.countDocuments({ user: user._id, status: 'approved' });
-    if (approvedCount > 0) {
+    if (eligibility.eligible) {
       await User.findOneAndUpdate(
         { _id: user.referredBy, activeReferralIds: { $ne: user._id } },
         { $addToSet: { activeReferralIds: user._id }, $inc: { activeInvitedCount: 1 } }

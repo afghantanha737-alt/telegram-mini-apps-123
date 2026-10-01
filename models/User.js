@@ -33,6 +33,10 @@ const userSchema = new mongoose.Schema(
     activeReferralIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
     // پاداش رفرال فقط یک‌بار و فقط بعد از تکمیل حداقل تعداد تسک لازم داده می‌شود
     referralBonusAwarded: { type: Boolean, default: false },
+    // وضعیت اعتبار Referral دعوت‌شده: تا تکمیل ۳ تسک، ۲ روز فعالیت و ۷ روز انتظار، pending است.
+    referralEligibilityStatus: { type: String, enum: ['pending', 'eligible', 'blocked'], default: 'pending', index: true },
+    referralEligibilityReasons: { type: [String], default: [] },
+    referralEligibleAt: { type: Date, default: null },
     // claimهای مرحله‌ای دعوت دوستان؛ شرط یکتا در findOneAndUpdate سمت API
     // تضمین می‌کند هر مرحله فقط یک‌بار قابل دریافت باشد.
     referralRewardClaims: { type: [referralRewardClaimSchema], default: [] },
@@ -52,6 +56,7 @@ userSchema.index({ isBanned: 1, points: -1 });
 userSchema.index({ isBanned: 1, createdAt: -1 });
 userSchema.index({ referralRiskScore: -1, createdAt: -1 });
 userSchema.index({ referredBy: 1, createdAt: -1 });
+userSchema.index({ referredBy: 1, referralEligibilityStatus: 1, createdAt: -1 });
 userSchema.index({ isBanned: 1, telegramBlockedAt: 1 });
 
 module.exports = mongoose.model('User', userSchema);

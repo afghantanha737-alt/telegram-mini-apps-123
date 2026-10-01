@@ -44,6 +44,7 @@ const state = {
   referralStats: null,
   referralTeam: [],
   referralLoading: false,
+  referralDataLoaded: false,
   referralError: "",
   referralFilter: "all",
   invitedCount: 0,
@@ -736,7 +737,7 @@ async function loadUserData() {
 }
 
 async function loadReferralData() {
-  state.referralLoading = true;
+  state.referralLoading = !state.referralDataLoaded;
   state.referralError = "";
   try {
     const data = await api("/api/referral/me");
@@ -753,9 +754,10 @@ async function loadReferralData() {
     state.referralMinTasks = Number(data?.referralMinTasks) || 2;
     state.referralInitialRewardPoints = Number(data?.referralInitialRewardPoints ?? data?.referralBonusPoints) || 0;
     state.referralTasks = Array.isArray(data?.referralTasks) ? data.referralTasks : [];
+    state.referralDataLoaded = true;
   } catch (error) {
     console.warn("Referral data failed:", error);
-    state.referralError = error?.message || t("referral_load_error");
+    if (!state.referralDataLoaded) state.referralError = error?.message || t("referral_load_error");
   } finally {
     state.referralLoading = false;
     if (state.activeTab === "profile" && profileView === "referral") renderProfile();
@@ -1784,6 +1786,7 @@ let profileView = "menu"; // menu | referral | leaderboard | about | history
 let pendingProfileView = null;
 let referralPreviousProfileView = "menu";
 let referralBackButtonHandlerBound = false;
+let referralEntryTransitionPending = false;
 
 function syncReferralTelegramBackButton() {
   const backButton = tg?.BackButton;
@@ -1837,6 +1840,9 @@ window.openHistory = openHistory;
 function setProfileView(view) {
   if (view === "referral" && profileView !== "referral") {
     referralPreviousProfileView = profileView || "menu";
+    referralEntryTransitionPending = true;
+  } else if (view !== "referral") {
+    referralEntryTransitionPending = false;
   }
   profileView = view;
   if (view === "history") { historyList = []; historyHasMore = false; }
@@ -2397,6 +2403,10 @@ async function renderProfile() {
   }
   if (profileView === "referral") {
     content.innerHTML = renderProfileReferral();
+    if (referralEntryTransitionPending && !state.referralLoading) {
+      content.querySelector(".referralPage")?.classList.add("referralPageEntering");
+      referralEntryTransitionPending = false;
+    }
   } else if (profileView === "leaderboard") {
     content.innerHTML = renderProfileLeaderboard();
     if (leaderboardMode === "weekly") startWeeklyCompetitionCountdown();

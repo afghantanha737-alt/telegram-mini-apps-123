@@ -42,6 +42,10 @@ const state = {
   referralMiniAppConfigured: false,
   referralLevelRates: [],
   referralStats: null,
+  referralTeam: [],
+  referralLoading: false,
+  referralError: "",
+  referralFilter: "all",
   invitedCount: 0,
   activeInvitedCount: 0,
   referralInitialRewardPoints: 10,
@@ -729,6 +733,8 @@ async function loadUserData() {
 }
 
 async function loadReferralData() {
+  state.referralLoading = true;
+  state.referralError = "";
   try {
     const data = await api("/api/referral/me");
     state.referralCode = data?.referralCode || "";
@@ -737,6 +743,7 @@ async function loadReferralData() {
     state.referralMiniAppConfigured = Boolean(data?.miniAppConfigured);
     state.referralLevelRates = Array.isArray(data?.referralLevelRates) ? data.referralLevelRates.map(Number).filter(Number.isFinite) : [];
     state.referralStats = data?.referralStats && typeof data.referralStats === "object" ? data.referralStats : null;
+    state.referralTeam = Array.isArray(data?.team) ? data.team : [];
     state.invitedCount = Number(data?.invitedCount) || 0;
     state.activeInvitedCount = Number(data?.activeInvitedCount) || 0;
     state.invited = Array.isArray(data?.invited) ? data.invited : [];
@@ -745,6 +752,10 @@ async function loadReferralData() {
     state.referralTasks = Array.isArray(data?.referralTasks) ? data.referralTasks : [];
   } catch (error) {
     console.warn("Referral data failed:", error);
+    state.referralError = error?.message || t("referral_load_error");
+  } finally {
+    state.referralLoading = false;
+    if (state.activeTab === "profile" && profileView === "referral") renderProfile();
   }
 }
 
@@ -1730,7 +1741,7 @@ function copyReferralLink() {
 
   const finish = () => {
     haptic("success");
-    toast(t("toast_link_copied"), "success");
+    toast(t("referral_copied"), "success");
   };
 
   if (navigator.clipboard?.writeText) {
@@ -1778,6 +1789,10 @@ window.openHistory = openHistory;
 function setProfileView(view) {
   profileView = view;
   if (view === "history") { historyList = []; historyHasMore = false; }
+  if (view === "referral") {
+    state.referralFilter = "all";
+    void loadReferralData();
+  }
   renderProfile();
 }
 window.setProfileView = setProfileView;
@@ -1986,62 +2001,159 @@ function renderReferralStatsCard() {
     </div>`;
 }
 
-function renderProfileReferral() {
+function setReferralLevelFilter(value) {
+  const filter = String(value);
+  if (filter !== "all") {
+    const level = Number(filter);
+    if (!Number.isInteger(level) || level < 1 || level > state.referralLevelRates.length) return;
+  }
+  state.referralFilter = filter;
+  renderProfile();
+}
+window.setReferralLevelFilter = setReferralLevelFilter;
+
+function retryReferralData() {
+  state.referralError = "";
+  void loadReferralData();
+  renderProfile();
+}
+window.retryReferralData = retryReferralData;
+
+function formatReferralJoinDate(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "—";
+  const locale = state.language === "en" ? "en-US" : state.language === "ps" ? "ps-AF" : "fa-IR";
+  return date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function renderReferralPageHeader() {
   return `
-    <div class="sectionHeader">
-      <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
-      <h2 class="sectionTitle">${t("referral_title")}</h2>
-      <span></span>
-    </div>
-
-    <div class="card">
-      <div class="cardHeader">
-        <div class="cardTitle">🎁 ${t("referral_invite_reward_title")}</div>
-        <div class="badge success">${t("referral_code_bonus_badge", { n: formatPoints(state.referralInitialRewardPoints) })}</div>
+    <header class="referralHeading">
+      <div class="referralHeadingIcon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15.5 19.5v-1.3a3.2 3.2 0 0 0-3.2-3.2H6.7a3.2 3.2 0 0 0-3.2 3.2v1.3M9.5 11.5a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2ZM19 8v6M16 11h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <p class="cardSubtitle" style="line-height:1.8">${t("referral_invite_reward_desc", { n: formatPoints(state.referralInitialRewardPoints) })}</p>
-    </div>
-
-    ${renderTeamCommissionCard()}
-
-    <div class="card">
-      <div class="cardHeader"><div class="cardTitle">${t("referral_link_title")}</div></div>
-      <p class="cardSubtitle">${t("referral_telegram_id_label")}</p>
-      <div class="referralCodeBox">
-        <span class="referralCodeText">${escapeHTML(state.referralTelegramId || "—")}</span>
-        <button class="copyBtn" type="button" onclick="copyReferralLink()" ${state.shareLink ? "" : "disabled"}>${t("referral_copy_button")}</button>
+      <div class="referralHeadingText">
+        <h1 class="referralPageTitle">REFERRAL</h1>
+        <p class="referralPageSubtitle">${t("referral_screen_subtitle")}</p>
       </div>
-      ${state.referralMiniAppConfigured ? "" : `<p class="cardSubtitle" style="color:var(--warning);margin-top:10px">${t("referral_link_config_missing")}</p>`}
-      <button class="primaryBtn" type="button" onclick="shareReferralLink()" ${state.shareLink ? "" : "disabled"}>${t("referral_share_button")}</button>
-    </div>
+    </header>`;
+}
 
-    ${renderReferralStatsCard()}
+function renderProfileReferral() {
+  const header = renderReferralPageHeader();
+  if (state.referralLoading) {
+    return `<div class="referralPage">${header}<div class="referralLoadingCard" role="status"><span class="referralSpinner"></span><span>${t("referral_loading")}</span></div></div>`;
+  }
+  if (state.referralError) {
+    return `<div class="referralPage">${header}<div class="referralErrorCard" role="alert"><span class="referralErrorIcon">!</span><p>${t("referral_load_error")}</p><button type="button" class="referralRetryBtn" onclick="retryReferralData()">${t("referral_retry")}</button></div></div>`;
+  }
 
-    <div class="card">
-      <div class="cardHeader">
-        <div class="cardTitle">${t("referral_invited_title")}</div>
-        <div class="badge gold">${formatPoints(state.invitedCount)}</div>
-      </div>
-      ${state.invited.length === 0
-        ? `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("referral_invited_empty")}</div></div>`
-        : state.invited.map(person => {
-            const statusHtml = person.initialRewardStatus === "paid" || person.bonusAwarded
-              ? `<span class="badge success" style="margin-top:4px">${t("team_status_awarded")}</span>`
-              : person.initialRewardStatus === "legacy_exempt"
-                ? `<span class="badge" style="margin-top:4px">${t("team_status_legacy")}</span>`
-                : `<span class="badge warning" style="margin-top:4px">${t("team_status_initial_pending")}</span>`;
-            return `
-            <div class="historyItem" style="align-items:flex-start">
-              <div>
-                <div class="historyAmount">${escapeHTML(person.firstName || person.username || "—")}</div>
-                <div class="historyMeta">${timeAgo(person.createdAt)} • ID ${escapeHTML(person.telegramId)}</div>
-              </div>
-              ${statusHtml}
-            </div>`;
-          }).join("")
-      }
-    </div>
-  `;
+  const stats = state.referralStats || {};
+  const configuredRates = Array.isArray(state.referralLevelRates) ? state.referralLevelRates : [];
+  const levelRows = Array.isArray(stats.earningsByLevel)
+    ? stats.earningsByLevel
+    : configuredRates.map((rate, index) => ({ level: index + 1, friends: Number(stats.levelCounts?.[String(index + 1)]) || 0, commissionRatePercent: rate, earnedPoints: 0 }));
+  const numericRates = configuredRates.map(Number).filter(rate => Number.isFinite(rate) && rate > 0);
+  const maxRate = Math.max(1, ...numericRates);
+  const levelCommissionTotal = levelRows.reduce((sum, row) => sum + Math.max(0, Number(row.earnedPoints) || 0), 0);
+  const apiEarningsTotal = Number(stats.totalReferralEarningsPoints);
+  const totalEarnings = Number.isFinite(apiEarningsTotal) ? Math.max(0, apiEarningsTotal) : levelCommissionTotal;
+  const totalFriends = Math.max(0, Number(stats.totalReferrals) || 0);
+  const inviteReward = Math.max(0, Number(state.referralInitialRewardPoints) || 0);
+  const rewardDescription = t("referral_reward_description", { n: formatPoints(inviteReward) });
+  const rewardAmountMarkup = escapeHTML(`+${formatPoints(inviteReward)} Points`);
+  const rewardDescriptionMarkup = escapeHTML(rewardDescription).replace(rewardAmountMarkup, `<strong>${rewardAmountMarkup}</strong>`);
+  const configuredLevelRows = levelRows.filter(row => row.level !== null && row.level !== undefined);
+  const levelCards = configuredLevelRows.map(row => {
+    const level = Number(row.level);
+    const rate = row.commissionRatePercent == null ? null : Number(row.commissionRatePercent);
+    const safeRate = Number.isFinite(rate) ? Math.max(0, rate) : null;
+    const barWidth = safeRate == null ? 0 : Math.min(100, (safeRate / maxRate) * 100);
+    return `
+      <div class="referralRateRow referralAccentL${Math.min(4, Math.max(1, level))}">
+        <div class="referralRateHeading"><span>${t("referral_level_label", { n: formatPoints(level) })}</span><strong>${safeRate == null ? t("referral_rate_unavailable") : `${formatNumber(safeRate)}%`}</strong></div>
+        <div class="referralRateTrack" role="img" aria-label="${escapeHTML(t("referral_level_label", { n: formatPoints(level) }))}: ${safeRate == null ? "0" : formatNumber(safeRate)}%"><span style="width:${barWidth}%"></span></div>
+      </div>`;
+  }).join("");
+  const tableRows = levelRows.map(row => {
+    const level = row.level == null ? t("referral_level_unassigned") : t("referral_level_short", { n: formatPoints(Number(row.level)) });
+    const rate = row.commissionRatePercent == null ? t("referral_rate_unavailable") : `${formatNumber(Number(row.commissionRatePercent) || 0)}%`;
+    return `<div class="referralTableRow"><span class="referralTableLevel">${level}</span><span>${formatNumber(Number(row.friends) || 0)}</span><span>${rate}</span><strong>${formatPoints(Number(row.earnedPoints) || 0)}</strong></div>`;
+  }).join("");
+  const levelFriendTotal = levelRows.reduce((sum, row) => sum + Math.max(0, Number(row.friends) || 0), 0);
+  const levelPointsTotal = levelRows.reduce((sum, row) => sum + Math.max(0, Number(row.earnedPoints) || 0), 0);
+  const filters = [
+    `<button type="button" role="tab" aria-selected="${state.referralFilter === "all"}" class="referralFilterBtn ${state.referralFilter === "all" ? "active" : ""}" onclick="setReferralLevelFilter('all')">${t("referral_filter_all")}</button>`,
+    ...configuredRates.slice(0, 4).map((_, index) => {
+      const level = index + 1;
+      return `<button type="button" role="tab" aria-selected="${state.referralFilter === String(level)}" class="referralFilterBtn ${state.referralFilter === String(level) ? "active" : ""}" onclick="setReferralLevelFilter('${level}')">L${level}</button>`;
+    })
+  ].join("");
+  const team = Array.isArray(state.referralTeam) ? state.referralTeam : [];
+  const filterLevel = state.referralFilter === "all" ? null : Number(state.referralFilter);
+  const visibleTeam = team.filter(person => filterLevel == null || Number(person.level) === filterLevel);
+  const teamRows = visibleTeam.map(person => {
+    const name = person.firstName || (person.username ? `@${person.username}` : "—");
+    const username = person.firstName && person.username ? `@${person.username}` : "";
+    const level = Number(person.level) || 1;
+    return `
+      <div class="referralFriendRow">
+        <div class="referralFriendAvatar" aria-hidden="true">${escapeHTML((name.replace(/^@/, "").trim()[0] || "?").toUpperCase())}</div>
+        <div class="referralFriendInfo">
+          <div class="referralFriendName">${escapeHTML(name)}</div>
+          <div class="referralFriendMeta">${username ? `${escapeHTML(username)} · ` : ""}${t("referral_joined_on", { date: formatReferralJoinDate(person.createdAt) })}</div>
+        </div>
+        <span class="referralFriendLevel">L${formatPoints(level)}</span>
+        <strong class="referralFriendEarned">${formatPoints(Number(person.earnedPoints) || 0)}<small>Points</small></strong>
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="referralPage">
+      ${header}
+
+      <section class="referralCard referralEarningsCard" aria-labelledby="referralTotalTitle">
+        <div class="referralEyebrow" id="referralTotalTitle">${t("referral_total_earnings_title")}</div>
+        <div class="referralEarningsValue"><span class="referralPointsIcon" aria-hidden="true">◇</span><strong>${formatPoints(totalEarnings)}</strong><span>Points</span></div>
+        <p class="referralTotalEarningsNote">${t("referral_total_earnings_note")}</p>
+        <div class="referralQuickStats">
+          <div class="referralQuickStat referralFriendsStat"><span class="referralQuickIcon" aria-hidden="true">⌂</span><div><strong>${formatNumber(totalFriends)}</strong><small>${t("referral_friends_invited")}</small></div></div>
+          <div class="referralQuickStat referralRewardStat"><span class="referralQuickIcon" aria-hidden="true">✦</span><div><strong>${t("referral_initial_reward_title")}</strong><small>+${formatPoints(inviteReward)} Points · ${t("referral_inviter_only")}</small></div></div>
+        </div>
+        <div class="referralDashedDivider"></div>
+        <p class="referralRewardDescription">${rewardDescriptionMarkup}</p>
+      </section>
+
+      <section class="referralCard" aria-labelledby="referralLevelsTitle">
+        <div class="referralCardHeading"><span class="referralCardIcon" aria-hidden="true">◈</span><div><h2 id="referralLevelsTitle">${t("referral_levels_title")}</h2><p>${t("referral_levels_subtitle")}</p></div></div>
+        <div class="referralRateList">${levelCards || `<div class="referralInlineEmpty">${t("referral_no_levels")}</div>`}</div>
+      </section>
+
+      <section class="referralCard" aria-labelledby="referralEarningsByLevelTitle">
+        <div class="referralCardHeading"><span class="referralCardIcon" aria-hidden="true">▤</span><div><h2 id="referralEarningsByLevelTitle">${t("referral_earnings_by_level_title")}</h2><p>${t("referral_level_table_note")}</p></div></div>
+        <div class="referralTable" role="table" aria-label="${escapeHTML(t("referral_earnings_by_level_title"))}">
+          <div class="referralTableRow referralTableHead" role="row"><span>${t("referral_table_level")}</span><span>${t("referral_table_friends")}</span><span>${t("referral_table_rate")}</span><span>${t("referral_table_earned")}</span></div>
+          ${tableRows || `<div class="referralInlineEmpty">${t("referral_no_levels")}</div>`}
+          <div class="referralTableRow referralTableTotal"><strong>${t("referral_table_total")}</strong><strong>${formatNumber(levelFriendTotal)}</strong><span></span><strong>${formatPoints(levelPointsTotal)}</strong></div>
+        </div>
+      </section>
+
+      <section class="referralCard referralLinkCard" aria-labelledby="referralLinkTitle">
+        <div class="referralCardHeading"><span class="referralCardIcon" aria-hidden="true">⌁</span><div><h2 id="referralLinkTitle">${t("referral_link_title_new")}</h2></div></div>
+        <div class="referralLinkField" dir="ltr" title="${escapeHTML(state.shareLink || "")}"><span class="referralLinkGlyph" aria-hidden="true">↗</span><span class="referralLinkValue">${escapeHTML(state.shareLink || "—")}</span></div>
+        <div class="referralLinkActions">
+          <button type="button" class="referralCopyBtn" onclick="copyReferralLink()" ${state.shareLink ? "" : "disabled"}><span aria-hidden="true">▢</span>${t("referral_copy_button")}</button>
+          <button type="button" class="referralShareBtn" onclick="shareReferralLink()" ${state.shareLink ? "" : "disabled"}><span aria-hidden="true">↗</span>${t("referral_share_button")}</button>
+        </div>
+        ${state.referralMiniAppConfigured ? `<p class="referralLinkNote">${t("referral_link_note")}</p>` : `<p class="referralLinkNote referralConfigNote">${t("referral_link_config_missing")}</p>`}
+      </section>
+
+      <section class="referralCard referralInvitedCard" aria-labelledby="referralInvitedTitle">
+        <div class="referralCardHeading"><span class="referralCardIcon" aria-hidden="true">♙</span><div><h2 id="referralInvitedTitle">${t("referral_invited_friends_title")}</h2></div><span class="referralInvitedCount">${formatNumber(totalFriends)}</span></div>
+        <div class="referralFilters" role="tablist" aria-label="${escapeHTML(t("referral_invited_friends_title"))}">${filters}</div>
+        <div class="referralFriendList">${visibleTeam.length ? teamRows : `<div class="referralEmptyState"><span aria-hidden="true">♙+</span><p>${t("referral_empty_network")}</p></div>`}</div>
+      </section>
+    </div>`;
 }
 
 let leaderboardMode = "all";

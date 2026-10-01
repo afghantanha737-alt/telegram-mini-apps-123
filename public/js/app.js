@@ -2040,13 +2040,15 @@ function renderReferralRewardTasks() {
       </div>`;
   }).join("");
 
-  // هر آیتم مستقیماً و بدون wrapper مشترک برگردانده می‌شود تا هر تسک
-  // دقیقاً یک کارت مستقل، مشابه تسک‌های کانال، داشته باشد.
+  // عنوان بخش خارج از کارت‌هاست؛ هر milestone خودش یک کارت مستقل است
+  // تا دقیقاً با کارت‌های تسک کانال Telegram هم‌ساختار باشد.
   return `
-    <div class="card">
-      <div class="cardHeader"><div class="cardTitle">${t("referral_milestones_title")}</div></div>
-      ${items}
-    </div>`;
+    <section class="referralMilestonesSection" aria-labelledby="referralMilestonesTitle">
+      <div class="cardHeader referralMilestonesHeader">
+        <div class="cardTitle" id="referralMilestonesTitle">${t("referral_milestones_title")}</div>
+      </div>
+      <div class="referralMilestonesList">${items}</div>
+    </section>`;
 }
 
 function renderTeamCommissionCard() {

@@ -2015,8 +2015,6 @@ function renderProfileReferral() {
       <button class="primaryBtn" type="button" onclick="shareReferralLink()" ${state.shareLink ? "" : "disabled"}>${t("referral_share_button")}</button>
     </div>
 
-    ${renderReferralRewardTasks()}
-
     ${renderReferralStatsCard()}
 
     <div class="card">

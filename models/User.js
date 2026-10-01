@@ -19,6 +19,8 @@ const userSchema = new mongoose.Schema(
 
     referralCode: { type: String, required: true, unique: true, index: true },
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    referralInitialRewardEligible: { type: Boolean, default: false },
+    accountReviewStatus: { type: String, enum: ['normal', 'under_review', 'restricted', 'fraud_review'], default: 'normal', index: true },
     // فقط HMAC هش شبکه ذخیره می‌شود؛ IP خام هرگز در دیتابیس ثبت نمی‌شود.
     signupIpHash: { type: String, default: '' },
     referralRiskScore: { type: Number, default: 0, min: 0 },
@@ -31,7 +33,7 @@ const userSchema = new mongoose.Schema(
     activeInvitedCount: { type: Number, default: 0, min: 0 },
     // برای جلوگیری از افزایش دوباره activeInvitedCount در درخواست‌های هم‌زمان
     activeReferralIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
-    // پاداش رفرال فقط یک‌بار و فقط بعد از تکمیل حداقل تعداد تسک لازم داده می‌شود
+    // فقط برای سازگاری با رکوردهای قدیمی؛ پاداش ثابت ۵۰ در Referral v2 غیرفعال است.
     referralBonusAwarded: { type: Boolean, default: false },
     // وضعیت اعتبار Referral دعوت‌شده: تا تکمیل ۳ تسک، ۲ روز فعالیت و ۷ روز انتظار، pending است.
     referralEligibilityStatus: { type: String, enum: ['pending', 'eligible', 'blocked'], default: 'pending', index: true },

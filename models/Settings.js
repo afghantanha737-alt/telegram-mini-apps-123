@@ -27,7 +27,9 @@ const settingsSchema = new mongoose.Schema(
     dailyReminderLastError: { type: String, default: '' },
     weeklyLeaderboardEnabled: { type: Boolean, default: true },
     // جایزه‌ی پوینتی رتبه‌های ۱، ۲ و ۳؛ منبع مالی آن می‌تواند تبلیغ‌دهنده باشد.
-    weeklyLeaderboardPrizes: { type: [Number], default: () => [500, 250, 100] }
+    weeklyLeaderboardPrizes: { type: [Number], default: () => [500, 250, 100] },
+    referralInitialRewardPoints: { type: Number, default: 10, min: 0, max: 1000000 },
+    referralLevelRates: { type: [Number], default: () => [10, 5, 3, 2] }
   },
   { timestamps: true }
 );

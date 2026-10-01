@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const User = require('../models/User');
 const { hashNetworkIdentifier, assessReferralRisk } = require('./referralRisk');
+const { linkReferral } = require('./referralSystem');
 
 /**
  * initData ارسالی از Telegram WebApp را طبق مستندات رسمی تلگرام
@@ -60,25 +61,18 @@ function generateReferralCode(telegramId) {
 async function getOrCreateUser(tgUser, startParam, requestIp = '') {
   if (!tgUser || !tgUser.id) return null;
   const telegramId = String(tgUser.id);
-
   let dbUser = await User.findOne({ telegramId });
+  const referralCode = String(startParam || '').replace(/^ref_/, '').trim();
+  let referrer = referralCode
+    ? await User.findOne({ referralCode }).select('_id telegramId isBanned signupIpHash')
+    : null;
+  if (referrer && (referrer.isBanned || String(referrer.telegramId) === telegramId)) referrer = null;
+  const referralRisk = referrer
+    ? assessReferralRisk({ referrer, signupIpHash: hashNetworkIdentifier(requestIp) })
+    : { score: 0, flags: [] };
 
   if (!dbUser) {
-    let referredBy = null;
     const signupIpHash = hashNetworkIdentifier(requestIp);
-    let referralRisk = { score: 0, flags: [] };
-
-    if (startParam) {
-      const code = String(startParam).replace(/^ref_/, '').trim();
-      if (code) {
-        const referrer = await User.findOne({ referralCode: code }).select('_id telegramId isBanned signupIpHash');
-        if (referrer && String(referrer.telegramId) !== telegramId && !referrer.isBanned) {
-          referredBy = referrer._id;
-          referralRisk = assessReferralRisk({ referrer, signupIpHash });
-        }
-      }
-    }
-
     dbUser = await User.create({
       telegramId,
       username: tgUser.username || '',
@@ -86,19 +80,10 @@ async function getOrCreateUser(tgUser, startParam, requestIp = '') {
       lastName: tgUser.last_name || '',
       photoUrl: tgUser.photo_url || '',
       referralCode: generateReferralCode(telegramId),
-      referredBy,
       signupIpHash,
-      referralRiskScore: referralRisk.score,
-      referralRiskFlags: referralRisk.flags
+      referralRiskScore: 0,
+      referralRiskFlags: []
     });
-
-    // نکته مهم: اینجا هیچ پوینتی به دعوت‌کننده داده نمی‌شود.
-    // فقط شمارنده‌ی «تعداد دعوت‌شده‌ها» را برای نمایش در تیم به‌روزرسانی می‌کنیم.
-    // پرداخت ۵۰ پوینت واقعی فقط بعد از اینکه همین کاربر جدید حداقل تعداد
-    // تسک لازم را با موفقیت تکمیل کند اتفاق می‌افتد (routes/tasks.js).
-    if (referredBy) {
-      await User.findByIdAndUpdate(referredBy, { $inc: { invitedCount: 1 } });
-    }
   } else {
     let changed = false;
     if (tgUser.username && tgUser.username !== dbUser.username) {
@@ -122,6 +107,20 @@ async function getOrCreateUser(tgUser, startParam, requestIp = '') {
       changed = true;
     }
     if (changed) await dbUser.save();
+  }
+
+  // لینک start_param در تلگرام ممکن است در اولین درخواست به‌علت موقت‌بودن
+  // دیتابیس کامل نشود؛ در ورود بعدی همان لینک تا ۲۴ ساعت دوباره بررسی می‌شود.
+  const isFreshAccount = dbUser.createdAt && Date.now() - new Date(dbUser.createdAt).getTime() < 24 * 60 * 60 * 1000;
+  if (!dbUser.referredBy && referrer && isFreshAccount) {
+    await linkReferral({
+      referredUserId: dbUser._id,
+      referrerId: referrer._id,
+      riskScore: referralRisk.score,
+      riskFlags: referralRisk.flags,
+      source: 'signup'
+    });
+    dbUser = await User.findById(dbUser._id);
   }
 
   return dbUser;

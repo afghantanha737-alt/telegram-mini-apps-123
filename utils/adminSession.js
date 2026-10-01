@@ -6,7 +6,8 @@ const SESSION_TTL_MS = 30 * 60 * 1000;
 
 function createAdminSession(actor = 'ادمین') {
   const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, { actor: String(actor || 'ادمین').trim() || 'ادمین', expiresAt: Date.now() + SESSION_TTL_MS });
+  const adminId = `admin-session-${crypto.randomUUID()}`;
+  sessions.set(token, { adminId, actor: String(actor || 'ادمین').trim() || 'ادمین', expiresAt: Date.now() + SESSION_TTL_MS });
   return { token, expiresAt: new Date(Date.now() + SESSION_TTL_MS) };
 }
 

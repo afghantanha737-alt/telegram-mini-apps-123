@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const { hashNetworkIdentifier, assessReferralRisk } = require('./referralRisk');
 const { linkReferral } = require('./referralSystem');
+const { referralIdentifierQuery } = require('./referralCore');
 
 /**
  * initData ارسالی از Telegram WebApp را طبق مستندات رسمی تلگرام
@@ -62,9 +63,9 @@ async function getOrCreateUser(tgUser, startParam, requestIp = '') {
   if (!tgUser || !tgUser.id) return null;
   const telegramId = String(tgUser.id);
   let dbUser = await User.findOne({ telegramId });
-  const referralCode = String(startParam || '').replace(/^ref_/, '').trim();
-  let referrer = referralCode
-    ? await User.findOne({ referralCode }).select('_id telegramId isBanned signupIpHash')
+  const referralQuery = referralIdentifierQuery(startParam);
+  let referrer = referralQuery
+    ? await User.findOne(referralQuery).select('_id telegramId isBanned signupIpHash')
     : null;
   if (referrer && (referrer.isBanned || String(referrer.telegramId) === telegramId)) referrer = null;
   const referralRisk = referrer

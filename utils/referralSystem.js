@@ -9,6 +9,7 @@ const {
   DEFAULT_REFERRAL_LEVEL_RATES,
   DEFAULT_REFERRAL_INITIAL_REWARD_POINTS,
   normalizeReferralRates,
+  referralIdentifierQuery,
   calculateReferralCommission,
   reviewStatusOf
 } = require('./referralCore');
@@ -172,12 +173,22 @@ async function linkReferral({ referredUserId, referrerId, riskScore = 0, riskFla
   });
 }
 
-async function linkReferralByCode({ referredUserId, referralCode, riskScore = 0, riskFlags = [], source = 'signup' }) {
-  const code = String(referralCode || '').trim();
-  if (!code) return { linked: false, reason: 'missing_code' };
-  const referrer = await User.findOne({ referralCode: code }).select('_id isBanned');
+async function findReferrerByIdentifier(identifier, projection = '_id telegramId isBanned signupIpHash') {
+  const query = referralIdentifierQuery(identifier);
+  if (!query) return null;
+  return User.findOne(query).select(projection);
+}
+
+async function linkReferralByIdentifier({ referredUserId, identifier, riskScore = 0, riskFlags = [], source = 'signup' }) {
+  const query = referralIdentifierQuery(identifier);
+  if (!query) return { linked: false, reason: 'invalid_referral_identifier' };
+  const referrer = await User.findOne(query).select('_id isBanned');
   if (!referrer || referrer.isBanned || String(referrer._id) === String(referredUserId)) return { linked: false, reason: 'invalid_referrer' };
   return linkReferral({ referredUserId, referrerId: referrer._id, riskScore, riskFlags, source });
+}
+
+async function linkReferralByCode(options = {}) {
+  return linkReferralByIdentifier({ ...options, identifier: options.identifier || options.referralCode });
 }
 
 /** Distributes commission only from the original earning ledger row, never from referral credits. */
@@ -249,4 +260,4 @@ async function distributeReferralCommissions(earningEntry, session) {
   return paid;
 }
 
-module.exports = { linkReferral, linkReferralByCode, distributeReferralCommissions, deterministicTransactionId };
+module.exports = { linkReferral, findReferrerByIdentifier, linkReferralByIdentifier, linkReferralByCode, distributeReferralCommissions, deterministicTransactionId };

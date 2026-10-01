@@ -90,15 +90,14 @@ function getTelegramUser() {
 const THEME_KEY = "miniAppTheme";
 
 function getTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
-  return saved === "light" || saved === "dark" ? saved : "dark";
+  return "dark";
 }
 function applyTheme(theme) {
-  const finalTheme = theme === "light" ? "light" : "dark";
+  const finalTheme = "dark";
   document.documentElement.dataset.theme = finalTheme;
-  localStorage.setItem(THEME_KEY, finalTheme);
+  localStorage.removeItem(THEME_KEY);
   try {
-    const chrome = finalTheme === "light" ? "#faf5ff" : "#050609";
+    const chrome = "#050609";
     if (tg && tg.setHeaderColor) tg.setHeaderColor(chrome);
     if (tg && tg.setBackgroundColor) tg.setBackgroundColor(chrome);
     const meta = document.querySelector('meta[name="theme-color"]');
@@ -107,9 +106,7 @@ function applyTheme(theme) {
   updateThemeUI();
 }
 function toggleTheme() {
-  applyTheme(getTheme() === "dark" ? "light" : "dark");
-  haptic("selection");
-  if (state.activeTab === "profile") renderProfile();
+  applyTheme("dark");
 }
 function updateThemeUI() {
   const icon = $("#themeIcon");
@@ -1908,7 +1905,6 @@ function renderProfileMenu() {
   const telegramUser = getTelegramUser();
   const user = state.user || telegramUser || {};
   const firstName = user.first_name || user.firstName || "";
-  const theme = getTheme();
   const langNames = { fa: t("language_fa"), ps: t("language_ps"), en: t("language_en") };
 
   return `
@@ -1971,17 +1967,6 @@ function renderProfileMenu() {
       </div>
     </div>
 
-    <div class="card">
-      <div class="themeRow">
-        <div style="display:flex;align-items:center;gap:10px">
-          <span id="themeIcon">${theme === "dark" ? "🌙" : "☀️"}</span>
-          <span id="themeLabel" style="font-size:13px;font-weight:700">${theme === "dark" ? t("theme_dark") : t("theme_light")}</span>
-        </div>
-        <div id="themeToggle" class="switchTrack" role="switch" aria-checked="${theme === "light"}" onclick="toggleTheme()">
-          <div class="switchThumb"></div>
-        </div>
-      </div>
-    </div>
   `;
 }
 

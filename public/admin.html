@@ -53,6 +53,8 @@
   .flexBetween{display:flex;justify-content:space-between;align-items:center;gap:8px}
   .small{font-size:11px;color:var(--muted)}
   .hidden{display:none}
+  .modalOverlay{position:fixed;inset:0;background:rgba(0,0,0,.76);z-index:1000;display:none;align-items:flex-start;justify-content:center;padding:3vh 12px;overflow:auto}
+  .modalCard{width:min(900px,100%);max-height:94vh;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px}
 </style>
 </head>
 <body>
@@ -261,7 +263,27 @@
             <option value="flagged">Referral پرریسک</option>
           </select>
         </div>
+        <div class="card" style="margin-top:12px;background:var(--surface2)">
+          <b>عملیات گروهی موجودی</b>
+          <p class="small">فقط کاربران انتخاب‌شده از نتایج فعلی اعمال می‌شود؛ هر کاربر جداگانه در Audit و Ledger ثبت خواهد شد. حداکثر ۱۰۰ کاربر.</p>
+          <div class="row">
+            <select id="bulkCurrency" style="flex:1;margin:0"><option value="points">Points</option><option value="gram">GRAM</option></select>
+            <select id="bulkAction" style="flex:1;margin:0" onchange="toggleBulkAmount()"><option value="add">افزودن</option><option value="zero">صفرکردن</option></select>
+            <input id="bulkAmount" type="number" min="0" step="1" placeholder="مقدار" style="flex:1;margin:0">
+            <input id="bulkReason" placeholder="دلیل اجباری" style="flex:2;margin:0">
+            <button class="secondary" type="button" onclick="selectVisibleUsers(true)">انتخاب نتایج</button>
+            <button class="secondary" type="button" onclick="selectVisibleUsers(false)">لغو انتخاب</button>
+            <button type="button" onclick="applyBulkBalance()">اجرای گروهی</button>
+          </div>
+          <div id="bulkBalanceMsg" class="small" style="margin-top:8px"></div>
+        </div>
         <div id="usersList" style="margin-top:10px"></div>
+        <div id="accountModal" class="modalOverlay" onclick="if(event.target===this)closeAccountModal()">
+          <div class="modalCard">
+            <div class="flexBetween"><b id="accountModalTitle">جزئیات حساب</b><button class="secondary" type="button" onclick="closeAccountModal()">بستن</button></div>
+            <div id="accountModalBody" class="small">در حال بارگذاری...</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -406,6 +428,15 @@
         <input id="setDaily" type="number">
         <label>پاداش اضافه به ازای هر روز استریک</label>
         <input id="setStreakBonus" type="number">
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
+          <b>Referral v2 — تنظیم پاداش و کمیسیون</b>
+          <p class="small">پاداش ثبت‌نام بدون انتظار ۷روزه پرداخت می‌شود. کمیسیون Levelها فقط از task، check-in، برد مثبت spin و جایزه‌ی leaderboard محاسبه می‌شود. مجموع نرخ‌ها حداکثر ۱۰۰٪ است.</p>
+          <label>پاداش اولیه به ازای Referral جدید (Points)</label>
+          <input id="setReferralInitialReward" type="number" min="0" max="1000000" step="1">
+          <label>درصد کمیسیون هر Level (تا ۱۰ Level)</label>
+          <div id="referralLevelRates"></div>
+          <button class="secondary" type="button" onclick="addReferralRateLevel()">افزودن Level</button>
+        </div>
         <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
           <b>🏆 Weekly Leaderboard</b>
           <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
@@ -1097,14 +1128,16 @@ async function loadUsers() {
     }
     container.innerHTML = `
       <table>
-        <thead><tr><th>نام</th><th>پوینت</th><th>دعوت‌شده</th><th>وضعیت</th><th>ریسک Referral</th><th>Eligibility</th><th>عملیات</th></tr></thead>
+        <thead><tr><th><input type="checkbox" aria-label="انتخاب همه نتایج" style="width:auto;margin:0" onchange="selectVisibleUsers(this.checked)"></th><th>نام / شناسه</th><th>Points</th><th>GRAM</th><th>دعوت‌شده</th><th>وضعیت</th><th>ریسک Referral</th><th>Eligibility</th><th>عملیات</th></tr></thead>
         <tbody>
           ${users.map(u => `
             <tr>
-              <td>${escapeHtml(u.firstName || u.username || "—")}</td>
-              <td>${u.points}</td>
-              <td>${u.invitedCount}</td>
-              <td>${u.isBanned ? '<span class="badge rejected">مسدود</span>' : '<span class="badge approved">فعال</span>'}</td>
+              <td><input class="user-select" type="checkbox" value="${u._id}" style="width:auto;margin:0"></td>
+              <td>${escapeHtml(u.firstName || u.username || "—")}<div class="small">TG ${escapeHtml(u.telegramId || "—")} · DB ${escapeHtml(u._id)}</div></td>
+              <td>${Number(u.points || 0)}</td>
+              <td>${Number(u.gramBalance || 0)}</td>
+              <td>${u.invitedCount || 0}</td>
+              <td>${u.isBanned ? '<span class="badge rejected">مسدود</span>' : '<span class="badge approved">فعال</span>'}<div class="small">Review: ${escapeHtml(u.accountReviewStatus || "normal")}</div></td>
               <td>${Number(u.referralRiskScore || 0) >= 50 ? `<span class="badge pending">پرریسک (${u.referralRiskScore})</span>` : '<span class="badge approved">عادی</span>'}</td>
               <td>${u.referralEligibilityStatus === "eligible"
                 ? '<span class="badge approved">معتبر</span>'
@@ -1116,6 +1149,7 @@ async function loadUsers() {
                   ? `<button class="success" onclick="userAction('${u._id}','unban')">رفع مسدودی</button>`
                   : `<button class="danger" onclick="userAction('${u._id}','ban')">مسدود کردن</button>`
                 }
+                <button class="secondary" onclick="openUserAccount('${u._id}')">موجودی و جزئیات</button>
                 ${Number(u.referralRiskScore || 0) >= 50 && !u.referralRiskBlocked ? `<button class="success" onclick="reviewReferral('${u._id}','approve')">تایید Referral</button><button class="danger" onclick="reviewReferral('${u._id}','block')">رد Referral</button>` : ''}
               </td>
             </tr>
@@ -1126,6 +1160,134 @@ async function loadUsers() {
   } catch (error) {
     container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }
+}
+
+let activeAccountUserId = "";
+function newAdminActionId() {
+  return window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+function closeAccountModal() {
+  document.getElementById("accountModal").style.display = "none";
+  activeAccountUserId = "";
+}
+async function openUserAccount(id) {
+  activeAccountUserId = id;
+  document.getElementById("accountModal").style.display = "flex";
+  document.getElementById("accountModalBody").innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  try {
+    const data = await api(`/api/admin/users/${id}/account`);
+    renderUserAccount(data);
+  } catch (error) {
+    document.getElementById("accountModalBody").innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+function renderUserAccount(data) {
+  const u = data.user || {};
+  const b = data.balances || {};
+  const tx = data.transactions || [];
+  const audits = data.balanceAudits || [];
+  document.getElementById("accountModalTitle").textContent = `${u.firstName || u.username || u.telegramId || "کاربر"} · ${u.telegramId || u._id}`;
+  document.getElementById("accountModalBody").innerHTML = `
+    <div class="statsGrid" style="margin-top:12px">
+      <div class="card"><div class="small">Points موجود</div><b>${Number(b.currentPoints || 0)}</b></div>
+      <div class="card"><div class="small">GRAM موجود</div><b>${Number(b.currentGram || 0)}</b></div>
+      <div class="card"><div class="small">کل Points کسب‌شده</div><b>${Number(b.totalEarnedPoints || 0)}</b></div>
+      <div class="card"><div class="small">GRAM واریزشده</div><b>${Number(b.totalGramCredited || 0)}</b></div>
+      <div class="card"><div class="small">GRAM برداشت‌شده</div><b>${Number(b.totalWithdrawnGram || 0)}</b></div>
+      <div class="card"><div class="small">دعوت / فعال</div><b>${Number(b.referralCount || 0)} / ${Number(b.activeReferralCount || 0)}</b></div>
+    </div>
+    <div class="card">
+      <b>تغییر دستی موجودی</b>
+      <div class="row" style="margin-top:10px">
+        <select id="accountBalanceCurrency" style="flex:1;margin:0"><option value="points">Points</option><option value="gram">GRAM</option></select>
+        <select id="accountBalanceAction" style="flex:1;margin:0"><option value="add">افزودن</option><option value="subtract">کسر</option><option value="set">تنظیم مقدار دقیق</option><option value="zero">صفرکردن</option></select>
+        <input id="accountBalanceAmount" type="number" min="0" step="1" placeholder="مقدار" style="flex:1;margin:0">
+      </div>
+      <input id="accountBalanceReason" placeholder="دلیل اجباری و قابل حسابرسی">
+      <button type="button" onclick="submitAccountBalanceAction()">ثبت تغییر موجودی</button>
+      <div class="small" style="margin-top:8px">هر تغییر در Ledger و Audit با موجودی قبل/بعد، نام ادمین، دلیل و Action ID ثبت می‌شود. موجودی منفی پذیرفته نمی‌شود.</div>
+    </div>
+    <div class="card">
+      <b>Fraud / Manual Review</b>
+      <div class="row" style="margin-top:10px">
+        <select id="accountReviewStatus" style="flex:1;margin:0">
+          <option value="normal">Normal</option><option value="under_review">Under Review</option><option value="restricted">Restricted</option><option value="fraud_review">Fraud Review</option>
+        </select>
+        <input id="accountReviewReason" placeholder="دلیل تغییر وضعیت اجباری" style="flex:2;margin:0">
+        <button class="secondary" type="button" onclick="saveAccountReviewStatus()">ذخیره وضعیت بررسی</button>
+      </div>
+    </div>
+    <div class="card"><b>تاریخچه‌ی تراکنش‌ها (تا ۱۰۰ مورد)</b>
+      ${tx.length ? `<div style="overflow:auto;margin-top:8px"><table><thead><tr><th>زمان</th><th>نوع</th><th>مقدار</th><th>Level / نرخ</th><th>Source User → Recipient</th><th>Transaction ID</th><th>منبع درآمد</th></tr></thead><tbody>${tx.map(x => `<tr><td>${new Date(x.createdAt).toLocaleString("fa-IR")}</td><td>${escapeHtml(x.type || "—")}<div class="small">${escapeHtml(x.description || "")}</div></td><td>${Number(x.amount || 0)} ${escapeHtml(x.currency || "points")}</td><td>${x.referralLevel ? `L${x.referralLevel} · ${x.commissionRatePercent ?? 0}%` : "—"}</td><td>${escapeHtml(x.sourceUserId || "—")} → ${escapeHtml(x.recipientUserId || "—")}</td><td>${escapeHtml(x.transactionId || x.sourceId || "—")}</td><td>${escapeHtml(x.earningTransactionId || "—")}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty">تراکنشی ثبت نشده است.</div>'}
+    </div>
+    <div class="card"><b>تاریخچه‌ی تغییرات مدیریتی</b>
+      ${audits.length ? `<div style="overflow:auto;margin-top:8px"><table><thead><tr><th>زمان</th><th>ادمین / Session ID</th><th>عملیات</th><th>قبل</th><th>تغییر</th><th>بعد</th><th>دلیل / Action ID</th></tr></thead><tbody>${audits.map(a => `<tr><td>${new Date(a.createdAt).toLocaleString("fa-IR")}</td><td>${escapeHtml(a.actor || "ادمین")}<div class="small">${escapeHtml(a.adminId || "—")}</div></td><td>${escapeHtml(a.action)} · ${escapeHtml(a.currency)}</td><td>${a.before ?? a.statusBefore ?? "—"}</td><td>${a.change ?? "—"}</td><td>${a.after ?? a.statusAfter ?? "—"}</td><td>${escapeHtml(a.reason || "")}<div class="small">${escapeHtml(a.actionId || "")}</div></td></tr>`).join("")}</tbody></table></div>` : '<div class="empty">Audit ثبت نشده است.</div>'}
+    </div>`;
+  document.getElementById("accountReviewStatus").value = u.accountReviewStatus || "normal";
+}
+async function submitAccountBalanceAction() {
+  const id = activeAccountUserId;
+  const currency = document.getElementById("accountBalanceCurrency").value;
+  const action = document.getElementById("accountBalanceAction").value;
+  const amount = Number(document.getElementById("accountBalanceAmount").value);
+  const reason = document.getElementById("accountBalanceReason").value.trim();
+  if (!reason) return showMsg("ثبت دلیل برای تغییر موجودی الزامی است.", "error");
+  if (action !== "zero" && (!Number.isFinite(amount) || amount < 0 || (currency === "points" && !Number.isInteger(amount)))) return showMsg("مقدار واردشده نامعتبر است.", "error");
+  const body = { currency, action, amount, reason, actionId: newAdminActionId() };
+  if (action === "zero") {
+    if (!confirm(`موجودی ${currency} این کاربر صفر شود؟ این تغییر در Audit ثبت می‌شود.`)) return;
+    body.confirmText = prompt("برای تأیید دقیقاً ZERO را وارد کنید:");
+  } else if (action === "add" && !confirm(`${amount} ${currency} به موجودی این کاربر اضافه شود؟`)) return;
+  else if (action === "set" && !confirm(`موجودی ${currency} دقیقاً روی ${amount} تنظیم شود؟`)) return;
+  else if (action === "subtract" && !confirm(`${amount} ${currency} از موجودی کسر شود؟`)) return;
+  try {
+    const result = await api(`/api/admin/users/${id}/balance`, { method: "POST", body: JSON.stringify(body) });
+    showMsg(result.duplicate ? "این Action ID قبلاً اجرا شده بود." : "موجودی و Audit با موفقیت ثبت شدند.", "success");
+    await openUserAccount(id);
+    loadUsers();
+  } catch (error) { showMsg(error.message, "error"); }
+}
+async function saveAccountReviewStatus() {
+  const id = activeAccountUserId;
+  const status = document.getElementById("accountReviewStatus").value;
+  const reason = document.getElementById("accountReviewReason").value.trim();
+  if (!reason) return showMsg("برای ثبت وضعیت بررسی، دلیل الزامی است.", "error");
+  if (!confirm(`وضعیت بررسی حساب به ${status} تغییر کند؟`)) return;
+  try {
+    await api(`/api/admin/users/${id}/review-status`, { method: "POST", body: JSON.stringify({ status, reason, actionId: newAdminActionId() }) });
+    showMsg("وضعیت بررسی حساب و Audit ثبت شد.", "success");
+    await openUserAccount(id);
+    loadUsers();
+  } catch (error) { showMsg(error.message, "error"); }
+}
+function selectVisibleUsers(checked) {
+  document.querySelectorAll("#usersList .user-select").forEach(el => { el.checked = checked; });
+}
+function toggleBulkAmount() {
+  const zero = document.getElementById("bulkAction").value === "zero";
+  document.getElementById("bulkAmount").disabled = zero;
+  if (zero) document.getElementById("bulkAmount").value = "";
+}
+async function applyBulkBalance() {
+  const userIds = Array.from(document.querySelectorAll("#usersList .user-select:checked")).map(el => el.value);
+  const action = document.getElementById("bulkAction").value;
+  const currency = document.getElementById("bulkCurrency").value;
+  const amount = Number(document.getElementById("bulkAmount").value);
+  const reason = document.getElementById("bulkReason").value.trim();
+  const msg = document.getElementById("bulkBalanceMsg");
+  if (!userIds.length || userIds.length > 100) { msg.textContent = "۱ تا ۱۰۰ کاربر را از نتایج انتخاب کنید."; return; }
+  if (!reason) { msg.textContent = "دلیل برای Audit الزامی است."; return; }
+  if (action === "add" && (!Number.isFinite(amount) || amount <= 0 || (currency === "points" && !Number.isInteger(amount)))) { msg.textContent = "مقدار مثبت و معتبر وارد کنید."; return; }
+  if (!confirm(`عملیات ${action} روی ${userIds.length} کاربر برای ${currency} اجرا شود؟ هر کاربر جداگانه Audit می‌شود.`)) return;
+  const body = { userIds, currency, action, amount, reason, actionId: newAdminActionId() };
+  if (action === "zero") body.confirmText = prompt("برای تأیید دقیقاً ZERO را وارد کنید:");
+  msg.textContent = "در حال ثبت اتمیک عملیات...";
+  try {
+    const result = await api("/api/admin/users/bulk-balance", { method: "POST", body: JSON.stringify(body) });
+    const changed = (result.results || []).filter(row => !row.duplicate).length;
+    msg.textContent = `انجام شد؛ ${changed} کاربر تغییر کرد و ${userIds.length - changed} مورد تکراری بود.`;
+    loadUsers();
+  } catch (error) { msg.textContent = error.message; }
 }
 
 async function userAction(id, action) {
@@ -1321,6 +1483,31 @@ function renderReminderStatus(s) {
     (s.dailyReminderLastError ? `<br><span style="color:var(--danger)">خطا: ${escapeHtml(s.dailyReminderLastError)}</span>` : "");
 }
 
+function renderReferralRates(rates) {
+  const container = document.getElementById("referralLevelRates");
+  const values = Array.isArray(rates) && rates.length ? rates.slice(0, 10).map(Number) : [10, 5, 3, 2];
+  container.innerHTML = values.map((value, index) => `
+    <div class="row referral-rate-row" style="align-items:center;gap:8px">
+      <label style="flex:1;margin:0">Level ${index + 1} (%)</label>
+      <input class="referral-rate-input" type="number" min="0" max="100" step="0.01" value="${Number.isFinite(value) ? value : 0}" style="flex:2;margin:0">
+      <button class="danger" type="button" onclick="removeReferralRateLevel(this)" ${values.length <= 1 ? "disabled" : ""}>حذف</button>
+    </div>`).join("");
+}
+function addReferralRateLevel() {
+  const inputs = Array.from(document.querySelectorAll(".referral-rate-input"));
+  if (inputs.length >= 10) return showMsg("حداکثر ۱۰ سطح Referral پشتیبانی می‌شود.", "error");
+  renderReferralRates([...inputs.map(input => Number(input.value) || 0), 0]);
+}
+function removeReferralRateLevel(button) {
+  const row = button.closest(".referral-rate-row");
+  if (!row) return;
+  const current = Array.from(document.querySelectorAll(".referral-rate-input")).map(input => Number(input.value) || 0);
+  const index = Array.from(row.parentElement.children).indexOf(row);
+  if (current.length <= 1) return;
+  current.splice(index, 1);
+  renderReferralRates(current);
+}
+
 async function loadSettings() {
   try {
     const data = await api("/api/admin/settings");
@@ -1348,6 +1535,8 @@ async function loadSettings() {
     document.getElementById("setMinWithdraw").value = s.minWithdrawPoints ?? "";
     document.getElementById("setDaily").value = s.dailyCheckInPoints ?? "";
     document.getElementById("setStreakBonus").value = s.streakBonusPoints ?? "";
+    document.getElementById("setReferralInitialReward").value = s.referralInitialRewardPoints ?? 10;
+    renderReferralRates(s.referralLevelRates || [10, 5, 3, 2]);
     document.getElementById("setWeeklyLeaderboardEnabled").checked = s.weeklyLeaderboardEnabled !== false;
     [0, 1, 2].forEach(i => { document.getElementById(`setWeeklyPrize${i + 1}`).value = s.weeklyLeaderboardPrizes?.[i] ?? [500, 250, 100][i]; });
   } catch (error) {
@@ -1370,11 +1559,14 @@ async function saveSettings() {
     dailyCheckInPoints: Number(document.getElementById("setDaily").value),
     streakBonusPoints: Number(document.getElementById("setStreakBonus").value),
     weeklyLeaderboardEnabled: document.getElementById("setWeeklyLeaderboardEnabled").checked,
-    weeklyLeaderboardPrizes: [1, 2, 3].map(i => Number(document.getElementById(`setWeeklyPrize${i}`).value) || 0)
+    weeklyLeaderboardPrizes: [1, 2, 3].map(i => Number(document.getElementById(`setWeeklyPrize${i}`).value) || 0),
+    referralInitialRewardPoints: Number(document.getElementById("setReferralInitialReward").value),
+    referralLevelRates: Array.from(document.querySelectorAll(".referral-rate-input")).map(input => Number(input.value))
   };
   try {
     const data = await api("/api/admin/settings", { method: "PUT", body: JSON.stringify(body) });
     renderReminderStatus(data.settings || {});
+    renderReferralRates(data.settings?.referralLevelRates || body.referralLevelRates);
     showMsg("تنظیمات ذخیره شد.", "success");
   } catch (error) {
     showMsg(error.message, "error");

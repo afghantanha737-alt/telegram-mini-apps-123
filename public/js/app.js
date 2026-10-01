@@ -91,7 +91,7 @@ const THEME_KEY = "miniAppTheme";
 
 function getTheme() {
   const saved = localStorage.getItem(THEME_KEY);
-  return saved === "light" || saved === "dark" ? saved : "light";
+  return saved === "light" || saved === "dark" ? saved : "dark";
 }
 function applyTheme(theme) {
   const finalTheme = theme === "light" ? "light" : "dark";
@@ -924,6 +924,26 @@ function renderHome() {
       </div>
     </section>
 
+    <section class="auroraQuickActions" aria-label="${t("section_quick_earn")}">
+      <button class="auroraQuickAction auroraQuickDeposit" type="button" onclick="showDeposit()">
+        <span class="auroraQuickIcon">＋</span><span>${t("wallet_deposit_button")}</span>
+      </button>
+      <button class="auroraQuickAction auroraQuickExchange" type="button" onclick="showExchange()">
+        <span class="auroraQuickIcon">⇄</span><span>${t("wallet_exchange_button")}</span>
+      </button>
+      <button class="auroraQuickAction auroraQuickTasks" type="button" onclick="navigate('tasks')">
+        <span class="auroraQuickIcon">✓</span><span>${t("tb_tasks")}</span>
+      </button>
+    </section>
+    <section class="auroraDailyCard">
+      <div class="auroraDailyIcon">🔥</div>
+      <div class="auroraDailyCopy">
+        <strong>${t("earn_daily_title")}</strong>
+        <span>${state.canCheckIn ? t("earn_daily_sub_available") : t("earn_daily_sub_done")}</span>
+      </div>
+      <button class="auroraInlineBtn" type="button" onclick="${state.canCheckIn ? "doCheckIn()" : "navigate('daily')"}">${state.canCheckIn ? t("checkin_button") : t("spin_title")}</button>
+    </section>
+
     <div class="card" style="padding:14px 16px">
       <div class="cardHeader" style="margin-bottom:8px">
         <div class="cardTitle">${t("withdrawal_progress_title")}</div>
@@ -957,6 +977,27 @@ function renderHome() {
         <div class="tbStatValue">${formatPoints(approvedTasks)}</div>
       </div>
     </div>
+
+    <section class="auroraTaskPreview">
+      <div class="auroraSectionHead">
+        <div>
+          <h2>${t("tasks_title")}</h2>
+          <span>${formatPoints(approvedTasks)} / ${formatPoints(state.tasks.length)} ${t("task_btn_done")}</span>
+        </div>
+        <button type="button" onclick="navigate('tasks')">${t("tb_view_all")} <span>←</span></button>
+      </div>
+      <div class="auroraTaskPreviewList">
+        ${state.tasks.slice(0, 2).map(task => {
+          const status = completionStatus(task._id);
+          const icon = TASK_ICONS[task.type] || "🎁";
+          return `<button type="button" class="auroraPreviewTask" onclick="navigate('tasks')">
+            <span class="auroraPreviewTaskIcon">${icon}</span>
+            <span class="auroraPreviewTaskCopy"><strong>${escapeHTML(task.title)}</strong><small>+${formatPoints(task.reward)} ${t("points_unit")}</small></span>
+            <span class="auroraPreviewStatus ${status === "approved" ? "done" : ""}">${status === "approved" ? "✓" : "→"}</span>
+          </button>`;
+        }).join("") || `<div class="auroraPreviewEmpty">${t("tasks_empty_desc")}</div>`}
+      </div>
+    </section>
 
     <section class="tbExplore">
       <div class="tbExploreText">

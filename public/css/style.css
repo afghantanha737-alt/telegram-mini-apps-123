@@ -1753,3 +1753,10 @@ html[data-theme="light"] .bottomNav { background: rgba(255,255,255,.94) !importa
 html[data-theme="light"] .bottomNav button { color: #9ca3af; }
 html[data-theme="light"] .bottomNav button.active { color: #5a4bdd; }
 html[data-theme="light"] .bottomNav button::before { background: #5a4bdd; box-shadow: 0 0 10px rgba(90,75,221,.28); }
+
+/* Referral Milestones: each milestone is an independent task card. */
+.referralMilestonesSection { margin: 14px 0 0; }
+.referralMilestonesHeader { margin: 0 4px 10px; }
+.referralMilestonesList { display: grid; gap: 12px; }
+.referralMilestonesList .referralTaskItem { margin: 0 !important; width: 100%; }
+html[data-theme="light"] .referralMilestonesList .referralTaskItem { background: #fff; border: 1px solid rgba(17,24,39,.08); box-shadow: 0 4px 20px rgba(0,0,0,.05); }

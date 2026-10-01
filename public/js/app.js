@@ -60,6 +60,7 @@ const state = {
   referralMinTasks: 2,
   referralTasks: [],
   tasks: [],
+  taskCategoryFilter: "all",
   completions: [],
   leaderboard: [],
   myRank: null,
@@ -1073,11 +1074,15 @@ window.verifyTelegramTask = verifyTelegramTask;
 
 function renderTasks() {
   const content = $("#content");
-  const referralHtml = renderReferralRewardTasks();
+  const activeCategory = state.taskCategoryFilter || "all";
+  const visibleTasks = state.tasks.filter(task => activeCategory === "all" || getTaskCategory(task) === activeCategory);
+  const referralHtml = activeCategory === "all" ? renderReferralRewardTasks() : "";
+  const categoryTabs = renderTaskCategoryTabs(activeCategory);
 
-  if (state.tasks.length === 0) {
+  if (state.tasks.length === 0 || visibleTasks.length === 0) {
     content.innerHTML = `
       <div class="sectionHeader"><h2 class="sectionTitle">${t("tasks_title")}</h2></div>
+      ${categoryTabs}
       ${referralHtml}
       <div class="card emptyState">
         <div class="emptyIcon">🗂️</div>
@@ -1088,16 +1093,17 @@ function renderTasks() {
     return;
   }
 
-  const doneCount = state.tasks.filter(task => completionStatus(task._id) === "approved").length;
+  const doneCount = visibleTasks.filter(task => completionStatus(task._id) === "approved").length;
 
   content.innerHTML = `
     <div class="sectionHeader">
       <h2 class="sectionTitle">${t("tasks_title")}</h2>
       <span class="tbPill tbPillPurple">${formatPoints(doneCount)} / ${formatPoints(state.tasks.length)}</span>
     </div>
+    ${categoryTabs}
     ${referralHtml}
     <div class="taskList">
-      ${state.tasks.map(task => {
+      ${visibleTasks.map(task => {
         const status = completionStatus(task._id);
         const icon = TASK_ICONS[task.type] || "🎁";
         const safeUrl = (task.url || "").replaceAll("'", "\\'");
@@ -1133,6 +1139,29 @@ function renderTasks() {
     </div>
   `;
 }
+
+const TASK_CATEGORY_OPTIONS = ["all", "on-chain", "company", "social", "partners"];
+function getTaskCategory(task) {
+  const explicit = String(task?.category || "").trim().toLowerCase();
+  if (TASK_CATEGORY_OPTIONS.includes(explicit)) return explicit;
+  const text = `${task?.title || ""} ${task?.description || ""} ${task?.type || ""} ${task?.isSponsored ? "sponsor" : ""}`.toLowerCase();
+  if (/on[-\s]?chain|blockchain|ton|gram|wallet/.test(text)) return "on-chain";
+  if (/company|sponsor|sponsored|brand|campaign/.test(text)) return "company";
+  if (/partner|affiliate|partnership/.test(text)) return "partners";
+  return "social";
+}
+function renderTaskCategoryTabs(activeCategory) {
+  return `<nav class="taskCategoryTabs" aria-label="${t("task_category_label")}">
+    ${TASK_CATEGORY_OPTIONS.map(category => `<button type="button" class="taskCategoryTab ${category === activeCategory ? "active" : ""}" aria-pressed="${category === activeCategory}" onclick="setTaskCategoryFilter('${category}')">${t(`task_category_${category === "on-chain" ? "on_chain" : category}`)}</button>`).join("")}
+  </nav>`;
+}
+function setTaskCategoryFilter(category) {
+  const next = TASK_CATEGORY_OPTIONS.includes(category) ? category : "all";
+  state.taskCategoryFilter = next;
+  haptic("selection");
+  renderTasks();
+}
+window.setTaskCategoryFilter = setTaskCategoryFilter;
 
 /* ================= DAILY + SPIN WHEEL ================= */
 const WHEEL_SIZE = 260;

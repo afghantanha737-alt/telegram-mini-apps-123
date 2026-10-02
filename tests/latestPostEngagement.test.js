@@ -110,6 +110,7 @@ assert.ok(!reactionIndexes.some(([, options]) => options.expireAfterSeconds !== 
 const webhookSource = fs.readFileSync(require.resolve('../routes/telegramWebhook'), 'utf8');
 const taskRouteSource = fs.readFileSync(require.resolve('../routes/tasks'), 'utf8');
 const serverSource = fs.readFileSync(require.resolve('../server'), 'utf8');
+const appSource = fs.readFileSync(require.resolve('../public/js/app.js'), 'utf8');
 assert.ok(webhookSource.includes("'channel_post', 'message_reaction'"));
 assert.ok(webhookSource.includes('handleMessageReaction'));
 assert.ok(serverSource.includes("await require('./models/TaskReactionState').init()"));
@@ -117,5 +118,9 @@ assert.ok(taskRouteSource.includes("router.post('/:id/engagement/check'"));
 assert.ok(taskRouteSource.includes('withMongoTransaction'));
 assert.ok(taskRouteSource.includes('recordLedgerRequired'));
 assert.ok(taskRouteSource.includes('TASK_COOLDOWN_ACTIVE'));
+assert.ok(appSource.includes('function openLatestPostTask(url, taskId)'));
+assert.ok(appSource.includes('data-task-state="${waitingForCheck ? "WAITING_FOR_CHECK" : "AVAILABLE"}"'));
+assert.ok(appSource.includes('document.addEventListener("visibilitychange", refreshLatestPostTasksOnReturn)'));
+assert.ok(!appSource.includes('else if (!Number.isSafeInteger(Number(task.latestPostMessageId))'));
 
-console.log('ALL PASS — Latest Post Engagement validation, indexes, webhook and transaction contracts');
+console.log('ALL PASS — Latest Post Engagement validation, indexes, webhook, transaction and UI state contracts');

@@ -211,7 +211,7 @@
       </div>
 
       <div class="card">
-        <div class="flexBetween"><b>📸 Screenshot Submissions</b><button type="button" class="secondary" onclick="loadScreenshotSubmissions()">تازه‌سازی</button></div>
+        <div class="flexBetween"><b>📸 Screenshot Submissions <span id="pendingScreenshotCount" class="badge pending" aria-live="polite">(…)</span></b><button type="button" class="secondary" onclick="loadScreenshotSubmissions()">تازه‌سازی</button></div>
         <div class="row" style="margin-top:10px">
           <select id="screenshotSubmissionFilter" onchange="loadScreenshotSubmissions()" style="max-width:220px">
             <option value="pending">در انتظار بررسی</option>
@@ -782,6 +782,12 @@ async function loadScreenshotSubmissions() {
   const status = document.getElementById("screenshotSubmissionFilter")?.value || "pending";
   try {
     const data = await api(`/api/admin/task-submissions?status=${encodeURIComponent(status)}`);
+    const pendingCountElement = document.getElementById("pendingScreenshotCount");
+    if (pendingCountElement) {
+      const pendingCount = Math.max(0, Number(data.pendingCount) || 0);
+      pendingCountElement.textContent = `(${pendingCount.toLocaleString("fa-IR")})`;
+      pendingCountElement.className = `badge ${pendingCount ? "pending" : "approved"}`;
+    }
     const submissions = Array.isArray(data.submissions) ? data.submissions : [];
     if (!submissions.length) {
       container.innerHTML = '<div class="empty">submission تصویری برای این وضعیت وجود ندارد.</div>';
@@ -810,6 +816,8 @@ async function loadScreenshotSubmissions() {
       }).join("")}</tbody>
     </table></div>`;
   } catch (error) {
+    const pendingCountElement = document.getElementById("pendingScreenshotCount");
+    if (pendingCountElement) pendingCountElement.textContent = "(—)";
     container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }
 }

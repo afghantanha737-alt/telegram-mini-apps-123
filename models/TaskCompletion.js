@@ -20,6 +20,12 @@ const taskCompletionSchema = new mongoose.Schema(
     reviewedAt: { type: Date, default: null },
     reviewedBy: { type: String, default: '' },
     adminNote: { type: String, default: '' },
+    // Latest Post Engagement keeps one per-user/task state and advances this sequence atomically.
+    recurringClaimCount: { type: Number, default: 0, min: 0 },
+    lastCompletedAt: { type: Date, default: null },
+    nextAvailableAt: { type: Date, default: null },
+    lastPostMessageId: { type: Number, default: null },
+    lastReactionEventAt: { type: Date, default: null },
     // عکسِ لحظه‌ی تکمیل برای گزارش سود/زیان (تغییر نرخ/قیمت بعداً گزارش قبلی را خراب نمی‌کند)
     revenueUsd: { type: Number, default: 0 }, // دریافتی از تبلیغ‌دهنده برای همین تکمیل (فقط تسک اسپانسری)
     costUsd: { type: Number, default: 0 } // هزینه‌ی دلاریِ پاداشی که به کاربر داده شد

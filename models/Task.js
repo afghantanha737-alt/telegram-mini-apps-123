@@ -14,13 +14,19 @@ const taskSchema = new mongoose.Schema(
     // 'manual'   => کاربر باید اسکرین‌شات بفرستد و ادمین تأیید کند
     verifyType: {
       type: String,
-      enum: ['telegram', 'manual'],
+      enum: ['telegram', 'manual', 'latest_post'],
       default: 'telegram'
     },
-    // آیدی عددی یا یوزرنیم کانال/گروه مقصد (فقط برای verifyType=telegram)
+    // آیدی عددی یا یوزرنیم کانال/گروه مقصد؛ Latest Post از ID عددی کانال استفاده می‌کند.
     // مثال: "@mychannel" یا "-1001234567890"
     chatId: { type: String, default: '' },
     url: { type: String, default: '' },
+    // Latest Post Engagement: post IDs are observed from Telegram channel_post updates.
+    requiredReaction: { type: String, default: '' },
+    cooldownHours: { type: Number, default: 3, min: 1, max: 720 },
+    latestPostMessageId: { type: Number, default: null },
+    latestPostDate: { type: Date, default: null },
+    latestPostUpdateId: { type: Number, default: null },
     reward: { type: Number, required: true, min: 0 },
     // null یعنی بدون محدودیت ظرفیت. اگر عدد باشد، فقط همین تعداد اول
     // که تسک را با موفقیت کامل می‌کنند پاداش می‌گیرند.
@@ -44,5 +50,6 @@ const taskSchema = new mongoose.Schema(
 
 taskSchema.index({ isActive: 1, expiresAt: 1, isSpecialOfDay: -1, isSponsored: -1, createdAt: -1 });
 taskSchema.index({ isActive: 1, type: 1, createdAt: -1 });
+taskSchema.index({ verifyType: 1, chatId: 1 });
 
 module.exports = mongoose.model('Task', taskSchema);

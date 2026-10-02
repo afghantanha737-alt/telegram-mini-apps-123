@@ -1,0 +1,109 @@
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs');
+const Task = require('../models/Task');
+const TaskCompletion = require('../models/TaskCompletion');
+const TaskReactionState = require('../models/TaskReactionState');
+const {
+  isValidTelegramChannelId,
+  isValidTelegramChannelUrl,
+  isSingleEmoji,
+  validateLatestPostConfig,
+  extractReactionEmojis,
+  extractAddedReactionEmojis,
+  isReactionSatisfied,
+  isFreshRequiredReaction,
+  buildRecurringTaskSourceId
+} = require('../utils/latestPostEngagement');
+
+assert.strictEqual(isValidTelegramChannelId('-1001234567890'), true);
+assert.strictEqual(isValidTelegramChannelId('@mychannel'), false);
+assert.strictEqual(isValidTelegramChannelUrl('https://t.me/mychannel'), true);
+assert.strictEqual(isValidTelegramChannelUrl('http://t.me/mychannel'), false);
+assert.strictEqual(isValidTelegramChannelUrl('https://example.com/channel'), false);
+assert.strictEqual(isSingleEmoji('👍'), true);
+assert.strictEqual(isSingleEmoji('❤️'), true);
+assert.strictEqual(isSingleEmoji('not-an-emoji'), false);
+assert.strictEqual(isSingleEmoji('👍🔥'), false);
+assert.strictEqual(validateLatestPostConfig({
+  chatId: '-1001234567890',
+  url: 'https://t.me/mychannel',
+  requiredReaction: '👍',
+  cooldownHours: 3
+}), null);
+assert.ok(validateLatestPostConfig({
+  chatId: '@mychannel',
+  url: 'https://t.me/mychannel',
+  requiredReaction: '👍',
+  cooldownHours: 3
+}));
+assert.ok(validateLatestPostConfig({
+  chatId: '-1001234567890',
+  url: 'https://t.me/mychannel',
+  requiredReaction: '',
+  cooldownHours: 3
+}));
+
+const update = {
+  message_reaction: {
+    new_reaction: [
+      { type: 'emoji', emoji: '❤️' },
+      { type: 'custom_emoji', custom_emoji_id: '123' },
+      { type: 'emoji', emoji: '🔥' }
+    ]
+  }
+};
+assert.deepStrictEqual(extractReactionEmojis(update), ['❤', '🔥']);
+assert.deepStrictEqual(extractAddedReactionEmojis({ message_reaction: {
+  old_reaction: [{ type: 'emoji', emoji: '👍' }],
+  new_reaction: [{ type: 'emoji', emoji: '👍' }, { type: 'emoji', emoji: '🔥' }]
+} }), ['🔥']);
+assert.deepStrictEqual(extractAddedReactionEmojis({ message_reaction: {
+  old_reaction: [{ type: 'emoji', emoji: '👍' }],
+  new_reaction: []
+} }), []);
+assert.strictEqual(isReactionSatisfied(['❤', '🔥'], '❤️'), true);
+assert.strictEqual(isReactionSatisfied([], '👍'), false);
+const postDate = new Date('2026-10-02T10:00:00.000Z');
+const availableAt = new Date('2026-10-02T13:00:00.000Z');
+const reactionState = {
+  reactionEmojis: ['👍'],
+  lastAddedReactionEmojis: ['👍'],
+  lastEventAt: new Date('2026-10-02T13:01:00.000Z')
+};
+assert.strictEqual(isFreshRequiredReaction({ reactionState, requiredReaction: '👍', latestPostDate: postDate }), true);
+assert.strictEqual(isFreshRequiredReaction({ reactionState, requiredReaction: '👍', latestPostDate: postDate, nextAvailableAt: availableAt }), true);
+assert.strictEqual(isFreshRequiredReaction({ reactionState: { ...reactionState, lastEventAt: new Date('2026-10-02T12:59:59.000Z') }, requiredReaction: '👍', latestPostDate: postDate, nextAvailableAt: availableAt }), false);
+assert.strictEqual(isFreshRequiredReaction({ reactionState, requiredReaction: '👍', latestPostDate: postDate, lastReactionEventAt: reactionState.lastEventAt }), false);
+assert.strictEqual(isFreshRequiredReaction({ reactionState: { ...reactionState, lastAddedReactionEmojis: ['🔥'] }, requiredReaction: '👍', latestPostDate: postDate }), false);
+assert.strictEqual(buildRecurringTaskSourceId('task1', 'user1', 1), 'task:task1:user:user1:cycle:1');
+assert.notStrictEqual(buildRecurringTaskSourceId('task1', 'user1', 1), buildRecurringTaskSourceId('task1', 'user1', 2));
+assert.throws(() => buildRecurringTaskSourceId('task1', 'user1', 0), TypeError);
+
+assert.ok(Task.schema.path('verifyType').enumValues.includes('latest_post'));
+assert.strictEqual(Task.schema.path('cooldownHours').defaultValue, 3);
+assert.ok(Task.schema.path('latestPostMessageId'));
+assert.ok(Task.schema.path('requiredReaction'));
+assert.ok(TaskCompletion.schema.path('nextAvailableAt'));
+assert.ok(TaskCompletion.schema.path('recurringClaimCount'));
+assert.ok(TaskCompletion.schema.path('lastReactionEventAt'));
+const completionIndexes = TaskCompletion.schema.indexes();
+assert.ok(completionIndexes.some(([keys, options]) => keys.user === 1 && keys.task === 1 && options.unique === true));
+const reactionIndexes = TaskReactionState.schema.indexes();
+assert.ok(reactionIndexes.some(([keys, options]) => keys.chatId === 1 && keys.messageId === 1 && keys.telegramUserId === 1 && options.unique === true));
+assert.ok(TaskReactionState.schema.path('lastAddedReactionEmojis'));
+assert.ok(!reactionIndexes.some(([, options]) => options.expireAfterSeconds !== undefined));
+
+const webhookSource = fs.readFileSync(require.resolve('../routes/telegramWebhook'), 'utf8');
+const taskRouteSource = fs.readFileSync(require.resolve('../routes/tasks'), 'utf8');
+const serverSource = fs.readFileSync(require.resolve('../server'), 'utf8');
+assert.ok(webhookSource.includes("'channel_post', 'message_reaction'"));
+assert.ok(webhookSource.includes('handleMessageReaction'));
+assert.ok(serverSource.includes("await require('./models/TaskReactionState').init()"));
+assert.ok(taskRouteSource.includes("router.post('/:id/engagement/check'"));
+assert.ok(taskRouteSource.includes('withMongoTransaction'));
+assert.ok(taskRouteSource.includes('recordLedgerRequired'));
+assert.ok(taskRouteSource.includes('TASK_COOLDOWN_ACTIVE'));
+
+console.log('ALL PASS — Latest Post Engagement validation, indexes, webhook and transaction contracts');

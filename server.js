@@ -195,6 +195,10 @@ async function startServer() {
     });
     console.log('✅ MongoDB connected');
 
+    // Latest Post Engagement requires its per-channel/post/user uniqueness constraint
+    // before Telegram webhooks are accepted.
+    await require('./models/TaskReactionState').init();
+
     // پاک‌سازی ایندکس‌های قدیمی/ناسازگار که ممکن است از نسخه‌های قبلی
     // پروژه در دیتابیس باقی مانده باشند (مثلاً ایندکس روی فیلدهای
     // userId/taskId که در مدل فعلی وجود ندارند و باعث خطای duplicate

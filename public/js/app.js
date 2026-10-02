@@ -38,16 +38,39 @@ const state = {
   nextResetAt: 0,
   referralCode: "",
   shareLink: "",
+  referralTelegramId: "",
+  referralMiniAppConfigured: false,
+  referralLevelRates: [],
+  referralStats: null,
+  referralTeam: [],
+  referralLoading: false,
+  referralDataLoaded: false,
+  referralError: "",
+  referralFilter: "all",
   invitedCount: 0,
+  activeInvitedCount: 0,
+  referralInitialRewardPoints: 10,
   gateActive: false,
   totalEarnedPoints: 0,
+  level: null,
+  withdrawalProgress: 0,
+  withdrawalRemainingGram: 0,
   gramUsdPrice: 0,
   invited: [],
   referralMinTasks: 2,
+  referralTasks: [],
   tasks: [],
+  taskCategoryFilter: "all",
   completions: [],
+  userDataLoadedAt: 0,
+  tasksLoadedAt: 0,
   leaderboard: [],
   myRank: null,
+  weeklyLeaderboard: [],
+  weeklyMyRank: null,
+  weeklyMyPoints: 0,
+  weeklyLeaderboardMeta: null,
+  weeklyServerOffsetMs: 0,
   captchaA: 0,
   captchaB: 0,
   initialized: false
@@ -70,15 +93,14 @@ function getTelegramUser() {
 const THEME_KEY = "miniAppTheme";
 
 function getTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
-  return saved === "light" || saved === "dark" ? saved : "light";
+  return "dark";
 }
 function applyTheme(theme) {
-  const finalTheme = theme === "light" ? "light" : "dark";
+  const finalTheme = "dark";
   document.documentElement.dataset.theme = finalTheme;
-  localStorage.setItem(THEME_KEY, finalTheme);
+  localStorage.removeItem(THEME_KEY);
   try {
-    const chrome = finalTheme === "light" ? "#faf5ff" : "#050609";
+    const chrome = "#050609";
     if (tg && tg.setHeaderColor) tg.setHeaderColor(chrome);
     if (tg && tg.setBackgroundColor) tg.setBackgroundColor(chrome);
     const meta = document.querySelector('meta[name="theme-color"]');
@@ -87,9 +109,7 @@ function applyTheme(theme) {
   updateThemeUI();
 }
 function toggleTheme() {
-  applyTheme(getTheme() === "dark" ? "light" : "dark");
-  haptic("selection");
-  if (state.activeTab === "profile") renderProfile();
+  applyTheme("dark");
 }
 function updateThemeUI() {
   const icon = $("#themeIcon");
@@ -174,6 +194,35 @@ function timeAgo(dateString) {
 function pad2(n) { return String(n).padStart(2, "0"); }
 
 /* ================= API ================= */
+const pendingIdempotencyKeys = new Map();
+function getPendingIdempotencyKey(scope) {
+  const storageKey = `gramup:idempotency:${scope}`;
+  try {
+    let key = sessionStorage.getItem(storageKey);
+    if (!key) {
+      key = crypto.randomUUID();
+      sessionStorage.setItem(storageKey, key);
+    }
+    return key;
+  } catch {
+    let key = pendingIdempotencyKeys.get(scope);
+    if (!key) {
+      key = crypto.randomUUID();
+      pendingIdempotencyKeys.set(scope, key);
+    }
+    return key;
+  }
+}
+function clearPendingIdempotencyKey(scope) {
+  pendingIdempotencyKeys.delete(scope);
+  try { sessionStorage.removeItem(`gramup:idempotency:${scope}`); } catch { /* storage may be unavailable */ }
+}
+function clearDefinitiveIdempotencyFailure(scope, error) {
+  if (error?.status >= 400 && error.status < 500 && error.code !== "IDEMPOTENCY_DUPLICATE") {
+    clearPendingIdempotencyKey(scope);
+  }
+}
+
 async function api(url, options = {}) {
   const config = { ...options, headers: { ...(options.headers || {}) } };
 
@@ -224,6 +273,7 @@ async function api(url, options = {}) {
     }
     const err = new Error(data?.message || t("error_generic"));
     err.code = data?.code || null;
+    err.status = response.status;
     throw err;
   }
   return data;
@@ -321,6 +371,7 @@ function setupNavigation() {
       navigate(tab);
     });
   });
+  setupReferralTelegramBackButton();
 }
 function updateNavigation() {
   $$("#tabbar [data-tab]").forEach(button => {
@@ -332,9 +383,11 @@ async function navigate(tab) {
   if (!validTabs.includes(tab)) tab = "home";
   clearInterval(countdownInterval);
   state.activeTab = tab;
+  syncReferralTelegramBackButton();
   updateNavigation();
   window.scrollTo({ top: 0, behavior: "smooth" });
   await renderCurrentTab();
+  syncReferralTelegramBackButton();
 }
 window.navigate = navigate;
 
@@ -692,7 +745,9 @@ async function bootstrapAuth() {
   }
 }
 
-async function loadUserData() {
+const CLIENT_DATA_TTL_MS = 15000;
+async function loadUserData({ force = false } = {}) {
+  if (!force && state.userDataLoadedAt && Date.now() - state.userDataLoadedAt < CLIENT_DATA_TTL_MS) return;
   const data = await api("/api/points/me");
   state.points = Number(data?.points) || 0;
   state.gramBalance = Number(data?.gramBalance) || 0;
@@ -705,29 +760,87 @@ async function loadUserData() {
   state.minWithdrawGram = Number(data?.minWithdrawGram) || 0;
   state.nextResetAt = Number(data?.nextResetAt) || 0;
   state.totalEarnedPoints = Number(data?.totalEarnedPoints) || 0;
+  state.level = data?.level || null;
+  state.withdrawalProgress = Number(data?.withdrawalProgress) || 0;
+  state.withdrawalRemainingGram = Number(data?.withdrawalRemainingGram) || 0;
   state.gramUsdPrice = Number(data?.gramUsdPrice) || 0;
+  state.userDataLoadedAt = Date.now();
   if (data?.firstName) state.user = { ...(state.user || {}), first_name: data.firstName };
   updateHeader();
 }
 
-async function loadReferralData() {
+async function loadReferralData({ force = false } = {}) {
+  if (!force && state.referralDataLoaded) return;
+  state.referralLoading = !state.referralDataLoaded;
+  state.referralError = "";
   try {
     const data = await api("/api/referral/me");
     state.referralCode = data?.referralCode || "";
     state.shareLink = data?.shareLink || "";
+    state.referralTelegramId = "";
+    state.referralMiniAppConfigured = Boolean(data?.miniAppConfigured);
+    state.referralLevelRates = Array.isArray(data?.referralLevelRates) ? data.referralLevelRates.map(Number).filter(Number.isFinite) : [];
+    state.referralStats = data?.referralStats && typeof data.referralStats === "object" ? data.referralStats : null;
+    state.referralHistory = Array.isArray(data?.referralHistory) ? data.referralHistory : [];
+    state.referralNetworkLevels = Array.isArray(data?.networkLevels) ? data.networkLevels : [];
+    state.referralTeam = Array.isArray(data?.team) ? data.team : [];
     state.invitedCount = Number(data?.invitedCount) || 0;
+    state.activeInvitedCount = Number(data?.activeInvitedCount) || 0;
     state.invited = Array.isArray(data?.invited) ? data.invited : [];
     state.referralMinTasks = Number(data?.referralMinTasks) || 2;
+    state.referralInitialRewardPoints = Number(data?.referralInitialRewardPoints ?? data?.referralBonusPoints) || 0;
+    state.referralTasks = Array.isArray(data?.referralTasks) ? data.referralTasks : [];
+    state.referralDataLoaded = true;
   } catch (error) {
     console.warn("Referral data failed:", error);
+    if (!state.referralDataLoaded) state.referralError = error?.message || t("referral_load_error");
+  } finally {
+    state.referralLoading = false;
+    if (state.activeTab === "profile" && profileView === "referral") renderProfile();
+    else if (state.activeTab === "home") renderHome();
+    else if (state.activeTab === "tasks") renderTasks();
   }
 }
 
-async function loadTasks() {
+async function claimReferralTask(taskId) {
+  const task = state.referralTasks.find(item => item.id === taskId);
+  if (!task || task.status !== "claimable") return;
+
+  const button = document.querySelector(`[data-referral-claim="${taskId}"]`);
+  if (button) {
+    button.disabled = true;
+    button.textContent = t("referral_claiming");
+  }
+
+  try {
+    const data = await api("/api/referral/claim", { method: "POST", body: { taskId } });
+    state.points = Number(data?.points) || state.points;
+    state.invitedCount = Number(data?.invitedCount) || state.invitedCount;
+    state.activeInvitedCount = Number(data?.activeInvitedCount) || state.activeInvitedCount;
+    state.referralTasks = Array.isArray(data?.referralTasks) ? data.referralTasks : state.referralTasks;
+    await loadReferralData({ force: true });
+    haptic("success");
+    toast(t("referral_claim_success", { n: formatPoints(task.rewardPoints) }), "success");
+    if (state.activeTab === "tasks") renderTasks();
+    else renderProfile();
+  } catch (error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = t("referral_claim_button");
+    }
+    haptic("error");
+    toast(error.message || t("error_generic"), "error");
+  }
+}
+window.claimReferralTask = claimReferralTask;
+
+async function loadTasks({ force = false } = {}) {
+  if (!force && state.tasksLoadedAt && Date.now() - state.tasksLoadedAt < CLIENT_DATA_TTL_MS) return state.tasks;
   try {
     const data = await api("/api/tasks");
     state.tasks = Array.isArray(data?.tasks) ? data.tasks : [];
     state.completions = Array.isArray(data?.completions) ? data.completions : [];
+    state.tasksLoadedAt = Date.now();
     return state.tasks;
   } catch (error) {
     console.warn("Tasks failed:", error);
@@ -746,6 +859,9 @@ const LEDGER_TYPE_UI = {
   checkin: { icon: "📅" },
   spin: { icon: "🎡" },
   referral_bonus: { icon: "👥" },
+  referral_initial: { icon: "🎁" },
+  referral_commission: { icon: "💸" },
+  leaderboard_reward: { icon: "🏆" },
   exchange_out: { icon: "⇄" },
   exchange_in: { icon: "⇄" },
   withdraw: { icon: "➤" },
@@ -793,6 +909,25 @@ async function loadLeaderboard() {
   }
 }
 
+async function loadWeeklyLeaderboard() {
+  try {
+    const data = await api("/api/leaderboard/weekly");
+    state.weeklyLeaderboard = Array.isArray(data?.top) ? data.top : [];
+    state.weeklyMyRank = data?.myRank ?? null;
+    state.weeklyMyPoints = Number(data?.myPoints) || 0;
+    state.weeklyLeaderboardMeta = data || null;
+    const serverNow = Number(data?.serverNow);
+    state.weeklyServerOffsetMs = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
+    return state.weeklyLeaderboard;
+  } catch (error) {
+    console.warn("Weekly leaderboard failed:", error);
+    state.weeklyLeaderboard = [];
+    state.weeklyLeaderboardMeta = null;
+    state.weeklyServerOffsetMs = 0;
+    return [];
+  }
+}
+
 /* ================= HOME ================= */
 function completionStatus(taskId) {
   const found = state.completions.find(c => String(c.task) === String(taskId));
@@ -805,6 +940,8 @@ function renderHome() {
   const usdPill = state.gramUsdPrice > 0
     ? `<span class="tbPill tbPillGreen">≈ $${formatFixed(usd, 3)} USD</span>`
     : "";
+  const level = state.level || { badge: "🥉", name: "Bronze" };
+  const withdrawalProgress = Math.min(100, Math.max(0, state.withdrawalProgress));
 
   const content = $("#content");
   content.innerHTML = `
@@ -816,6 +953,7 @@ function renderHome() {
           <div class="tbPills">
             ${usdPill}
             <span class="tbPill tbPillPurple">${t("tb_points_chip", { n: formatPoints(state.points) })}</span>
+            <span class="tbPill tbPillOrange">${level.badge} ${escapeHTML(level.name)}</span>
           </div>
         </div>
         <div class="tbGemRing"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#2f9bf0"/><path d="M20 24h24l6 8-18 20L14 32z" fill="#fff"/><path d="M32 30v10M27 35h10" stroke="#2f9bf0" stroke-width="3" stroke-linecap="round"/></svg></div>
@@ -825,6 +963,37 @@ function renderHome() {
         <button class="tbBtnGhost" type="button" onclick="openHistory()"><span class="tbBtnIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7.5V12l3 2"/></svg></span>${t("tb_history")}</button>
       </div>
     </section>
+
+    <section class="auroraQuickActions" aria-label="${t("section_quick_earn")}">
+      <button class="auroraQuickAction auroraQuickDeposit" type="button" onclick="showDeposit()">
+        <span class="auroraQuickIcon">＋</span><span>${t("wallet_deposit_button")}</span>
+      </button>
+      <button class="auroraQuickAction auroraQuickExchange" type="button" onclick="showExchange()">
+        <span class="auroraQuickIcon">⇄</span><span>${t("wallet_exchange_button")}</span>
+      </button>
+      <button class="auroraQuickAction auroraQuickTasks" type="button" onclick="navigate('tasks')">
+        <span class="auroraQuickIcon">✓</span><span>${t("tb_tasks")}</span>
+      </button>
+    </section>
+    <section class="auroraDailyCard">
+      <div class="auroraDailyIcon">🔥</div>
+      <div class="auroraDailyCopy">
+        <strong>${t("earn_daily_title")}</strong>
+        <span>${state.canCheckIn ? t("earn_daily_sub_available") : t("earn_daily_sub_done")}</span>
+      </div>
+      <button class="auroraInlineBtn" type="button" onclick="${state.canCheckIn ? "doCheckIn()" : "navigate('daily')"}">${state.canCheckIn ? t("checkin_button") : t("spin_title")}</button>
+    </section>
+
+    <div class="card" style="padding:14px 16px">
+      <div class="cardHeader" style="margin-bottom:8px">
+        <div class="cardTitle">${t("withdrawal_progress_title")}</div>
+        <div class="badge info">${withdrawalProgress}%</div>
+      </div>
+      <div style="height:9px;background:var(--surface-3);border-radius:999px;overflow:hidden">
+        <div style="height:100%;width:${withdrawalProgress}%;background:linear-gradient(90deg,var(--tb-blue),var(--primary));border-radius:999px"></div>
+      </div>
+      <div class="cardSubtitle" style="margin-top:8px">${t("withdrawal_progress_remaining", { n: formatNumber(state.withdrawalRemainingGram, 6) })}</div>
+    </div>
 
     <div class="tbSectionHead">
       <h2 class="tbSectionTitle">${t("tb_your_progress")} <span class="tbSpark">✨</span></h2>
@@ -848,6 +1017,27 @@ function renderHome() {
         <div class="tbStatValue">${formatPoints(approvedTasks)}</div>
       </div>
     </div>
+
+    <section class="auroraTaskPreview">
+      <div class="auroraSectionHead">
+        <div>
+          <h2>${t("tasks_title")}</h2>
+          <span>${formatPoints(approvedTasks)} / ${formatPoints(state.tasks.length)} ${t("task_btn_done")}</span>
+        </div>
+        <button type="button" onclick="navigate('tasks')">${t("tb_view_all")} <span>←</span></button>
+      </div>
+      <div class="auroraTaskPreviewList">
+        ${state.tasks.slice(0, 2).map(task => {
+          const status = completionStatus(task._id);
+          const icon = TASK_ICONS[task.type] || "🎁";
+          return `<button type="button" class="auroraPreviewTask" onclick="navigate('tasks')">
+            <span class="auroraPreviewTaskIcon">${icon}</span>
+            <span class="auroraPreviewTaskCopy"><strong>${escapeHTML(task.title)}</strong><small>+${formatPoints(task.reward)} ${t("points_unit")}</small></span>
+            <span class="auroraPreviewStatus ${status === "approved" ? "done" : ""}">${status === "approved" ? "✓" : "→"}</span>
+          </button>`;
+        }).join("") || `<div class="auroraPreviewEmpty">${t("tasks_empty_desc")}</div>`}
+      </div>
+    </section>
 
     <section class="tbExplore">
       <div class="tbExploreText">
@@ -896,7 +1086,7 @@ async function verifyTelegramTask(taskId) {
     toast(result.message, "success");
     delete taskHints[taskId];
     state.points = Number(result.points) || state.points;
-    await loadTasks();
+    await loadTasks({ force: true });
     updateHeader();
     renderTasks();
   } catch (error) {
@@ -926,10 +1116,16 @@ window.verifyTelegramTask = verifyTelegramTask;
 
 function renderTasks() {
   const content = $("#content");
+  const activeCategory = state.taskCategoryFilter || "all";
+  const visibleTasks = state.tasks.filter(task => activeCategory === "all" || getTaskCategory(task) === activeCategory);
+  const referralHtml = activeCategory === "all" ? renderReferralRewardTasks() : "";
+  const categoryTabs = renderTaskCategoryTabs(activeCategory);
 
-  if (state.tasks.length === 0) {
+  if (state.tasks.length === 0 || visibleTasks.length === 0) {
     content.innerHTML = `
       <div class="sectionHeader"><h2 class="sectionTitle">${t("tasks_title")}</h2></div>
+      ${categoryTabs}
+      ${referralHtml}
       <div class="card emptyState">
         <div class="emptyIcon">🗂️</div>
         <div class="emptyTitle">${t("tasks_empty_title")}</div>
@@ -939,15 +1135,17 @@ function renderTasks() {
     return;
   }
 
-  const doneCount = state.tasks.filter(task => completionStatus(task._id) === "approved").length;
+  const doneCount = visibleTasks.filter(task => completionStatus(task._id) === "approved").length;
 
   content.innerHTML = `
     <div class="sectionHeader">
       <h2 class="sectionTitle">${t("tasks_title")}</h2>
       <span class="tbPill tbPillPurple">${formatPoints(doneCount)} / ${formatPoints(state.tasks.length)}</span>
     </div>
+    ${categoryTabs}
+    ${referralHtml}
     <div class="taskList">
-      ${state.tasks.map(task => {
+      ${visibleTasks.map(task => {
         const status = completionStatus(task._id);
         const icon = TASK_ICONS[task.type] || "🎁";
         const safeUrl = (task.url || "").replaceAll("'", "\\'");
@@ -971,8 +1169,9 @@ function renderTasks() {
         <div class="taskItem" style="flex-wrap:wrap">
           <div class="taskIcon">${icon}</div>
           <div class="taskBody">
-            <div class="taskTitle">${task.isSponsored ? `<span class="sponsoredTag">${t("task_sponsored_tag")}</span> ` : ""}${escapeHTML(task.title)}</div>
+            <div class="taskTitle">${task.isSpecialOfDay ? `<span class="sponsoredTag">⭐ ${t("special_task_badge")}</span> ` : ""}${task.isSponsored ? `<span class="sponsoredTag">${t("task_sponsored_tag")}</span> ` : ""}${escapeHTML(task.title)}</div>
             ${task.description ? `<div class="taskDesc">${escapeHTML(task.description)}</div>` : ""}
+            ${task.isSpecialOfDay && task.expiresAt ? `<div class="taskDesc" style="color:var(--warning)">⏳ ${t("special_task_deadline", { date: new Date(task.expiresAt).toLocaleString(state.language === "en" ? "en-US" : "fa-IR") })}</div>` : ""}
             <div class="taskReward">+${formatPoints(task.reward)} ${t("points_unit")}</div>
           </div>
           ${actionHtml}
@@ -982,6 +1181,29 @@ function renderTasks() {
     </div>
   `;
 }
+
+const TASK_CATEGORY_OPTIONS = ["all", "on-chain", "company", "social", "partners"];
+function getTaskCategory(task) {
+  const explicit = String(task?.category || "").trim().toLowerCase();
+  if (TASK_CATEGORY_OPTIONS.includes(explicit)) return explicit;
+  const text = `${task?.title || ""} ${task?.description || ""} ${task?.type || ""} ${task?.isSponsored ? "sponsor" : ""}`.toLowerCase();
+  if (/on[-\s]?chain|blockchain|ton|gram|wallet/.test(text)) return "on-chain";
+  if (/company|sponsor|sponsored|brand|campaign/.test(text)) return "company";
+  if (/partner|affiliate|partnership/.test(text)) return "partners";
+  return "social";
+}
+function renderTaskCategoryTabs(activeCategory) {
+  return `<nav class="taskCategoryTabs" aria-label="${t("task_category_label")}">
+    ${TASK_CATEGORY_OPTIONS.map(category => `<button type="button" class="taskCategoryTab ${category === activeCategory ? "active" : ""}" aria-pressed="${category === activeCategory}" onclick="setTaskCategoryFilter('${category}')">${t(`task_category_${category === "on-chain" ? "on_chain" : category}`)}</button>`).join("")}
+  </nav>`;
+}
+function setTaskCategoryFilter(category) {
+  const next = TASK_CATEGORY_OPTIONS.includes(category) ? category : "all";
+  state.taskCategoryFilter = next;
+  haptic("selection");
+  renderTasks();
+}
+window.setTaskCategoryFilter = setTaskCategoryFilter;
 
 /* ================= DAILY + SPIN WHEEL ================= */
 const WHEEL_SIZE = 260;
@@ -1071,9 +1293,15 @@ async function doSpin(paid = false) {
   }
   refreshSpinButtons(true);
 
+  const idempotencyScope = "spin";
   try {
     // هزینه/شانس در سرور کم می‌شود؛ نتیجه‌ی چرخش هم فقط از سرور می‌آید
-    const result = await api("/api/points/spin", { method: "POST", body: { paid } });
+    const result = await api("/api/points/spin", {
+      method: "POST",
+      headers: { "Idempotency-Key": getPendingIdempotencyKey(idempotencyScope) },
+      body: { paid }
+    });
+    clearPendingIdempotencyKey(idempotencyScope);
     const disc = $("#wheelDisc");
     const rotation = spinWheelTargetRotation(result.segmentIndex);
     if (disc) disc.style.transform = `rotate(${rotation}deg)`;
@@ -1100,6 +1328,7 @@ async function doSpin(paid = false) {
       }
     }, 3600);
   } catch (error) {
+    clearDefinitiveIdempotencyFailure(idempotencyScope, error);
     haptic("error");
     toast(translateServerMessage(error.code, error.message), "error");
     refreshSpinButtons(false);
@@ -1377,11 +1606,16 @@ async function submitExchange() {
   }
 
   if (button) button.disabled = true;
+  const idempotencyScope = exchangeDirection === "gram_to_points"
+    ? "exchange_gram_to_points"
+    : "exchange_points_to_gram";
   try {
     const result = await api("/api/points/exchange", {
       method: "POST",
+      headers: { "Idempotency-Key": getPendingIdempotencyKey(idempotencyScope) },
       body: { direction: exchangeDirection, amount }
     });
+    clearPendingIdempotencyKey(idempotencyScope);
     state.points = Number(result.points) ?? state.points;
     state.gramBalance = Number(result.gramBalance) ?? state.gramBalance;
     haptic("success");
@@ -1390,6 +1624,7 @@ async function submitExchange() {
     updateHeader();
     renderWallet();
   } catch (err) {
+    clearDefinitiveIdempotencyFailure(idempotencyScope, err);
     if (error) error.textContent = translateServerMessage(err.code, err.message);
     haptic("error");
   } finally {
@@ -1628,12 +1863,12 @@ window.openWithdrawalDetail = openWithdrawalDetail;
 
 /* ================= PROFILE ================= */
 function copyReferralLink() {
-  const link = state.shareLink || state.referralCode;
-  if (!link) return;
+  const link = state.shareLink;
+  if (!link) return toast(t("referral_link_unavailable"), "error");
 
   const finish = () => {
     haptic("success");
-    toast(t("toast_link_copied"), "success");
+    toast(t("referral_copied"), "success");
   };
 
   if (navigator.clipboard?.writeText) {
@@ -1656,9 +1891,9 @@ function fallbackCopy(text, onDone) {
 }
 
 function shareReferralLink() {
-  const link = state.shareLink || state.referralCode;
-  if (!link) return;
-  const text = "🎁";
+  const link = state.shareLink;
+  if (!link) return toast(t("referral_link_unavailable"), "error");
+  const text = t("referral_share_message", { n: formatPoints(state.referralInitialRewardPoints) });
   if (tg?.openTelegramLink) {
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
   } else if (navigator.share) {
@@ -1671,6 +1906,52 @@ window.shareReferralLink = shareReferralLink;
 
 let profileView = "menu"; // menu | referral | leaderboard | about | history
 let pendingProfileView = null;
+let referralPreviousProfileView = "menu";
+let referralBackButtonHandlerBound = false;
+let referralEntryTransitionPending = false;
+
+function syncReferralTelegramBackButton() {
+  const backButton = tg?.BackButton;
+  if (!backButton) return;
+
+  const shouldShow = !state.gateActive && state.activeTab === "profile" && profileView === "referral";
+  try {
+    if (shouldShow && typeof backButton.show === "function") backButton.show();
+    else if (!shouldShow && typeof backButton.hide === "function") backButton.hide();
+  } catch (error) {
+    console.warn("Telegram Referral BackButton update failed:", error);
+  }
+}
+
+function returnFromReferral() {
+  if (state.activeTab !== "profile" || profileView !== "referral") {
+    syncReferralTelegramBackButton();
+    return;
+  }
+  setProfileView(referralPreviousProfileView || "menu");
+}
+
+function setupReferralTelegramBackButton() {
+  const backButton = tg?.BackButton;
+  if (!backButton) return;
+
+  if (!referralBackButtonHandlerBound) {
+    try {
+      if (typeof backButton.onClick === "function") {
+        backButton.onClick(returnFromReferral);
+      } else if (typeof tg.onEvent === "function") {
+        tg.onEvent("backButtonClicked", returnFromReferral);
+      } else {
+        return;
+      }
+      referralBackButtonHandlerBound = true;
+    } catch (error) {
+      console.warn("Telegram Referral BackButton listener failed:", error);
+      return;
+    }
+  }
+  syncReferralTelegramBackButton();
+}
 
 function openHistory() {
   pendingProfileView = "history";
@@ -1679,17 +1960,35 @@ function openHistory() {
 window.openHistory = openHistory;
 
 function setProfileView(view) {
+  if (view === "referral" && profileView !== "referral") {
+    referralPreviousProfileView = profileView || "menu";
+    referralEntryTransitionPending = true;
+  } else if (view !== "referral") {
+    referralEntryTransitionPending = false;
+  }
   profileView = view;
   if (view === "history") { historyList = []; historyHasMore = false; }
+  if (view === "referral") {
+    state.referralFilter = "all";
+    void loadReferralData();
+  }
   renderProfile();
+  syncReferralTelegramBackButton();
 }
 window.setProfileView = setProfileView;
+
+// ورود مستقیم به همان نمای Weekly Leaderboard موجود؛ سیستم داده یا رتبه‌بندی جداگانه‌ای ساخته نمی‌شود.
+function openWeeklyCompetition() {
+  leaderboardMode = "weekly";
+  profileView = "leaderboard";
+  renderProfile();
+}
+window.openWeeklyCompetition = openWeeklyCompetition;
 
 function renderProfileMenu() {
   const telegramUser = getTelegramUser();
   const user = state.user || telegramUser || {};
   const firstName = user.first_name || user.firstName || "";
-  const theme = getTheme();
   const langNames = { fa: t("language_fa"), ps: t("language_ps"), en: t("language_en") };
 
   return `
@@ -1702,6 +2001,7 @@ function renderProfileMenu() {
         <div class="tbPills">
           <span class="tbPill tbPillPurple tbPillSm">${t("tb_points_chip", { n: formatPoints(state.points) })}</span>
           <span class="tbPill tbPillOrange tbPillSm">${formatPoints(state.invitedCount)} ${t("tb_referrals")}</span>
+          ${state.level ? `<span class="tbPill tbPillGreen tbPillSm">${state.level.badge} ${escapeHTML(state.level.name)}</span>` : ""}
         </div>
       </div>
     </div>
@@ -1716,6 +2016,11 @@ function renderProfileMenu() {
         <div class="profileItem" onclick="setProfileView('leaderboard')">
           <div class="profileIcon">🏆</div>
           <div class="profileText">${t("menu_leaderboard")}</div>
+          <div class="profileChevron">‹</div>
+        </div>
+        <div class="profileItem" onclick="openWeeklyCompetition()">
+          <div class="profileIcon">🏆</div>
+          <div class="profileText">${t("menu_weekly_competition")}</div>
           <div class="profileChevron">‹</div>
         </div>
         <div class="profileItem" onclick="setProfileView('history')">
@@ -1746,17 +2051,6 @@ function renderProfileMenu() {
       </div>
     </div>
 
-    <div class="card">
-      <div class="themeRow">
-        <div style="display:flex;align-items:center;gap:10px">
-          <span id="themeIcon">${theme === "dark" ? "🌙" : "☀️"}</span>
-          <span id="themeLabel" style="font-size:13px;font-weight:700">${theme === "dark" ? t("theme_dark") : t("theme_light")}</span>
-        </div>
-        <div id="themeToggle" class="switchTrack" role="switch" aria-checked="${theme === "light"}" onclick="toggleTheme()">
-          <div class="switchThumb"></div>
-        </div>
-      </div>
-    </div>
   `;
 }
 
@@ -1799,53 +2093,338 @@ function renderProfileAbout() {
   `;
 }
 
-function renderProfileReferral() {
+function renderReferralRewardTasks() {
+  if (!state.referralTasks.length) return "";
+
+  const items = state.referralTasks.map(task => {
+    const progress = Math.min(100, Math.round((task.invitedCount / task.requiredInvites) * 100));
+    let action = "";
+    if (task.status === "claimed") {
+      action = `<button class="taskAction done" type="button" disabled>${t("referral_task_claimed")}</button>`;
+    } else if (task.status === "claimable") {
+      action = `<button class="taskAction" type="button" data-referral-claim="${escapeHTML(task.id)}" onclick="claimReferralTask('${escapeHTML(task.id)}')">${t("referral_claim_button")}</button>`;
+    }
+
+    return `
+      <div class="taskItem referralTaskItem" style="margin-bottom:12px">
+        <div class="taskIcon">👥</div>
+        <div class="taskBody">
+          <div class="taskTitle">${t("referral_task_invite", { n: formatPoints(task.requiredInvites) })}</div>
+          <div class="taskDesc" style="display:flex;align-items:center;gap:9px">
+            <span>${formatPoints(task.requiredInvites)}</span>
+            <span style="display:inline-block;width:18px;height:1px;background:var(--text-muted);opacity:.7"></span>
+            <span>${formatPoints(task.invitedCount)} ${t("referral_active_label")}</span>
+          </div>
+          <div class="taskReward">+${formatPoints(task.rewardPoints)} ${t("points_unit")}</div>
+          <div style="height:6px;background:var(--surface-3);border-radius:999px;overflow:hidden;margin-top:8px">
+            <div style="height:100%;width:${progress}%;background:linear-gradient(90deg,var(--primary),var(--primary-2));border-radius:999px;transition:width .3s ease"></div>
+          </div>
+        </div>
+        ${action}
+      </div>`;
+  }).join("");
+
+  // عنوان بخش خارج از کارت‌هاست؛ هر milestone خودش یک کارت مستقل است
+  // تا دقیقاً با کارت‌های تسک کانال Telegram هم‌ساختار باشد.
   return `
-    <div class="sectionHeader">
-      <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
-      <h2 class="sectionTitle">${t("referral_title")}</h2>
-      <span></span>
-    </div>
+    <section class="referralMilestonesSection" aria-labelledby="referralMilestonesTitle">
+      <div class="cardHeader referralMilestonesHeader">
+        <div class="cardTitle" id="referralMilestonesTitle">${t("referral_milestones_title")}</div>
+      </div>
+      <div class="referralMilestonesList">${items}</div>
+    </section>`;
+}
 
+function renderTeamCommissionCard() {
+  if (!state.referralLevelRates.length) return "";
+  const rows = state.referralLevelRates.map((rate, index) => `
+    <div class="flexBetween" style="padding:10px 12px;border:1px solid var(--line);border-radius:13px;background:var(--surface-2);margin-top:8px">
+      <span style="font-weight:700">${t("referral_level_label", { n: index + 1 })}</span>
+      <span class="badge gold">${formatNumber(rate)}%</span>
+    </div>`).join("");
+  return `
     <div class="card">
-      <div class="cardHeader">
-        <div class="cardTitle">${t("referral_code_title")}</div>
-        <div class="badge success">${t("referral_code_bonus_badge")}</div>
-      </div>
-      <div class="referralCodeBox">
-        <span class="referralCodeText">${escapeHTML(state.referralCode || "—")}</span>
-        <button class="copyBtn" type="button" onclick="copyReferralLink()">${t("referral_copy_button")}</button>
-      </div>
-      <button class="primaryBtn" type="button" onclick="shareReferralLink()">${t("referral_share_button")}</button>
-    </div>
+      <div class="cardHeader"><div class="cardTitle">💰 ${t("referral_team_commission_title")}</div></div>
+      <p class="cardSubtitle" style="line-height:1.8">${t("referral_team_commission_desc")}</p>
+      ${rows}
+    </div>`;
+}
 
+function renderReferralStatsCard() {
+  const stats = state.referralStats;
+  if (!stats) return "";
+  const levelRows = state.referralLevelRates.map((_, index) => `
+    <div class="card" style="margin:0;padding:12px;background:var(--surface-2)">
+      <div class="cardSubtitle">${t("referral_level_label", { n: index + 1 })}</div>
+      <div style="font-size:18px;font-weight:850;margin-top:5px">${formatNumber(Number(stats.levelCounts?.[String(index + 1)]) || 0)}</div>
+    </div>`).join("");
+  return `
     <div class="card">
-      <div class="cardHeader">
-        <div class="cardTitle">${t("referral_invited_title")}</div>
-        <div class="badge gold">${formatPoints(state.invitedCount)}</div>
+      <div class="cardHeader"><div class="cardTitle">${t("referral_stats_title")}</div></div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:10px">
+        <div class="card" style="margin:0;padding:12px;background:var(--surface-2)"><div class="cardSubtitle">${t("referral_total_count")}</div><div style="font-size:18px;font-weight:850;margin-top:5px">${formatNumber(Number(stats.totalReferrals) || 0)}</div></div>
+        <div class="card" style="margin:0;padding:12px;background:var(--surface-2)"><div class="cardSubtitle">${t("referral_active_count")}</div><div style="font-size:18px;font-weight:850;margin-top:5px">${formatNumber(Number(stats.activeReferrals) || 0)}</div></div>
+        ${levelRows}
+        <div class="card" style="margin:0;padding:12px;background:var(--surface-2)"><div class="cardSubtitle">${t("referral_total_invite_rewards")}</div><div style="font-size:17px;font-weight:850;margin-top:5px">${formatPoints(Number(stats.totalInviteRewardsPoints) || 0)} ${t("points_unit")}</div></div>
+        <div class="card" style="margin:0;padding:12px;background:var(--surface-2)"><div class="cardSubtitle">${t("referral_total_team_commission")}</div><div style="font-size:17px;font-weight:850;margin-top:5px">${formatPoints(Number(stats.totalTeamCommissionPoints) || 0)} ${t("points_unit")}</div></div>
       </div>
-      ${state.invited.length === 0
-        ? `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("referral_invited_empty")}</div></div>`
-        : state.invited.map(person => {
-            const statusHtml = person.bonusAwarded
-              ? `<span class="badge success" style="margin-top:4px">${t("team_status_awarded")}</span>`
-              : `<span class="badge warning" style="margin-top:4px">${t("team_status_pending", { n: person.tasksRemaining })}</span>`;
-            return `
-            <div class="historyItem" style="align-items:flex-start">
-              <div>
-                <div class="historyAmount">${escapeHTML(person.firstName || person.username || "—")}</div>
-                <div class="historyMeta">${timeAgo(person.createdAt)} • ID ${escapeHTML(person.telegramId)}</div>
-              </div>
-              ${statusHtml}
-            </div>`;
-          }).join("")
-      }
+    </div>`;
+}
+
+function setReferralLevelFilter(value) {
+  const filter = String(value);
+  if (filter !== "all") {
+    const level = Number(filter);
+    if (!Number.isInteger(level) || level < 1 || level > state.referralLevelRates.length) return;
+  }
+  state.referralFilter = filter;
+  renderProfile();
+}
+window.setReferralLevelFilter = setReferralLevelFilter;
+
+function retryReferralData() {
+  state.referralError = "";
+  void loadReferralData({ force: true });
+  renderProfile();
+}
+window.retryReferralData = retryReferralData;
+
+function formatReferralJoinDate(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "—";
+  const locale = state.language === "en" ? "en-US" : state.language === "ps" ? "ps-AF" : "fa-IR";
+  return date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function renderReferralPageHeader() {
+  return `
+    <header class="referralHeading">
+      <div class="referralHeadingIcon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15.5 19.5v-1.3a3.2 3.2 0 0 0-3.2-3.2H6.7a3.2 3.2 0 0 0-3.2 3.2v1.3M9.5 11.5a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2ZM19 8v6M16 11h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="referralHeadingText">
+        <span class="rf-overline">GRAMUP / COMMUNITY</span>
+        <h1 class="referralPageTitle">${t("referral_hub_title")}</h1>
+        <p class="referralPageSubtitle">${t("referral_hub_subtitle")}</p>
+      </div>
+    </header>`;
+}
+
+function renderProfileReferral() {
+  const header = renderReferralPageHeader();
+  if (state.referralLoading) {
+    return `<div class="referralPage">${header}<div class="referralLoadingCard" role="status"><span class="referralSpinner"></span><span>${t("referral_loading")}</span></div></div>`;
+  }
+  if (state.referralError) {
+    return `<div class="referralPage">${header}<div class="referralErrorCard" role="alert"><span class="referralErrorIcon">!</span><p>${t("referral_load_error")}</p><button type="button" class="referralRetryBtn" onclick="retryReferralData()">${t("referral_retry")}</button></div></div>`;
+  }
+
+  const stats = state.referralStats || {};
+  const totalEarnings = Math.max(0, Number(stats.totalReferralEarningsPoints) || 0);
+  const monthlyEarnings = Math.max(0, Number(stats.thisMonthReferralEarningsPoints) || 0);
+  const directCount = Math.max(0, Number(stats.totalReferrals) || 0);
+  const activeCount = Math.max(0, Number(stats.activeReferrals) || 0);
+  const networkSize = Math.max(0, Number(stats.totalNetwork) || 0);
+  const currentLevel = Math.max(0, Number(stats.currentReferralLevel) || 0);
+  const rawNetwork = Array.isArray(state.referralNetworkLevels) ? state.referralNetworkLevels : [];
+  const configuredRates = Array.isArray(state.referralLevelRates) ? state.referralLevelRates : [];
+  const buckets = [
+      { key: "1", label: t("referral_level_label", { n: 1 }), min: 1, max: 1, rate: 10 },
+    { key: "2", label: t("referral_level_label", { n: 2 }), min: 2, max: 2, rate: 5 },
+    { key: "3", label: t("referral_level_label", { n: 3 }), min: 3, max: 3, rate: 3 },
+    { key: "4plus", label: t("referral_level_4_plus"), min: 4, max: 10, rate: 1 }
+  ].map(bucket => {
+    const rows = rawNetwork.filter(row => Number(row.level) >= bucket.min && Number(row.level) <= bucket.max);
+    return {
+      ...bucket,
+      members: rows.reduce((sum, row) => sum + (Number(row.members) || 0), 0),
+      active: rows.reduce((sum, row) => sum + (Number(row.activeMembers) || 0), 0),
+      earned: rows.reduce((sum, row) => sum + (Number(row.commissionPoints) || 0), 0),
+      rate: bucket.key === "4plus" ? 1 : Number(configuredRates[bucket.min - 1]) || bucket.rate
+    };
+  });
+  const maxMembers = Math.max(1, ...buckets.map(row => row.members));
+  const levelCards = buckets.map((row, index) => `
+    <article class="rf-level-card rf-level-${Math.min(index + 1, 4)}">
+      <div class="rf-level-top"><span>${escapeHTML(row.label)}</span><strong>${formatNumber(row.rate)}%</strong></div>
+      <small class="rf-level-desc">${t(`referral_level_relationship_${row.key}`)}</small>
+      <div class="rf-level-bar"><i style="width:${Math.min(100, row.members / maxMembers * 100)}%"></i></div>
+      <div class="rf-level-foot"><span>${formatNumber(row.active)} / ${formatNumber(row.members)} ${t("referral_active_short")}</span><b>+${formatPoints(row.earned)}</b></div>
+    </article>`).join("");
+
+  const history = (Array.isArray(state.referralHistory) ? state.referralHistory : []).slice(0, 20);
+  const historyRows = history.map(item => {
+    const kindKey = item.kind === "commission" ? "referral_history_commission"
+      : item.kind === "milestone" ? "referral_history_milestone"
+        : "referral_history_direct_invite";
+    const title = t(kindKey);
+    const sourceLabel = item.kind === "commission" ? t(`referral_source_${item.source || "other"}`) : "";
+    const meta = [];
+    if (item.kind === "commission") {
+      meta.push(t("referral_history_level_rate", { level: formatPoints(item.level || 0), rate: formatNumber(Number(item.rate) || 0) }));
+      meta.push(t("referral_history_source_earned", { source: sourceLabel, points: formatPoints(Number(item.sourceEarnedPoints) || 0) }));
+    }
+    meta.push(formatReferralJoinDate(item.date));
+    return `
+      <li class="rf-history-row" key="${escapeHTML(item.id || "")}">
+        <span class="rf-history-icon" aria-hidden="true">${item.kind === "commission" ? "↗" : item.kind === "milestone" ? "✦" : "＋"}</span>
+        <span class="rf-history-main"><strong>${escapeHTML(title)}</strong><small>${escapeHTML(meta.join(" · "))}</small></span>
+        <b class="rf-history-points">+${formatPoints(Number(item.points) || 0)}<small>${t("points_unit")}</small></b>
+      </li>`;
+  }).join("");
+  const currentLevelLabel = currentLevel > 0 ? t("referral_level_label", { n: formatPoints(currentLevel) }) : "—";
+  const rewardPoints = 10;
+
+  return `
+    <div class="referralPage referralDashboard">
+      ${header}
+
+      <section class="rf-hero" aria-labelledby="rfHeroTitle">
+        <div class="rf-hero-orbit" aria-hidden="true"></div>
+        <div class="rf-hero-top"><span class="rf-overline">${t("referral_hero_eyebrow")}</span><span class="rf-hero-badge">${t("referral_reward_direct_badge", { n: formatPoints(rewardPoints) })}</span></div>
+        <h2 class="rf-hero-title" id="rfHeroTitle">${t("referral_total_earnings_title")}</h2>
+        <div class="rf-hero-total"><span class="rf-hero-coin" aria-hidden="true">◇</span><strong>${formatPoints(totalEarnings)}</strong><span>${t("points_unit")}</span></div>
+        <div class="rf-hero-bottom"><span>${t("referral_this_month")}</span><strong>+${formatPoints(monthlyEarnings)} ${t("points_unit")}</strong></div>
+      </section>
+
+      <section class="rf-kpi-grid" aria-label="${escapeHTML(t("referral_stats_title"))}">
+        <article class="rf-kpi"><span class="rf-kpi-icon">♙</span><strong>${formatNumber(directCount)}</strong><small>${t("referral_kpi_direct")}</small></article>
+        <article class="rf-kpi rf-kpi-active"><span class="rf-kpi-icon">●</span><strong>${formatNumber(activeCount)}</strong><small>${t("referral_kpi_active")}</small></article>
+        <article class="rf-kpi"><span class="rf-kpi-icon">⌘</span><strong>${formatNumber(networkSize)}</strong><small>${t("referral_kpi_network")}</small></article>
+        <article class="rf-kpi rf-kpi-level"><span class="rf-kpi-icon">✧</span><strong>${escapeHTML(currentLevelLabel)}</strong><small>${t("referral_kpi_level")}</small></article>
+      </section>
+
+      <section class="rf-panel rf-link-panel" aria-labelledby="rfLinkTitle">
+        <div class="rf-panel-heading"><span class="rf-panel-symbol">↗</span><div><span class="rf-overline">${t("referral_link_eyebrow")}</span><h2 id="rfLinkTitle">${t("referral_link_title_new")}</h2></div></div>
+        <div class="rf-link-box" dir="ltr"><span aria-hidden="true">⌁</span><b title="${escapeHTML(state.shareLink || "")}">${escapeHTML(state.shareLink || "—")}</b></div>
+        <div class="referralLinkActions rf-link-actions">
+          <button type="button" class="referralCopyBtn" onclick="copyReferralLink()" ${state.shareLink ? "" : "disabled"}>▢ ${t("referral_copy_button")}</button>
+          <button type="button" class="referralShareBtn" onclick="shareReferralLink()" ${state.shareLink ? "" : "disabled"}>↗ ${t("referral_share_button")}</button>
+        </div>
+        <p class="rf-panel-note">${state.referralMiniAppConfigured ? t("referral_link_note") : t("referral_link_config_missing")}</p>
+      </section>
+
+      <section class="rf-panel" aria-labelledby="rfLevelsTitle">
+        <div class="rf-section-heading"><div><span class="rf-overline">${t("referral_rates_eyebrow")}</span><h2 id="rfLevelsTitle">${t("referral_levels_title")}</h2></div><span class="rf-section-glyph">◎</span></div>
+        <div class="rf-level-grid">${levelCards}</div>
+        <p class="rf-panel-note">${t("referral_eligible_earnings_note")}</p>
+      </section>
+
+      <section class="rf-panel" aria-labelledby="rfNetworkTitle">
+        <div class="rf-section-heading"><div><span class="rf-overline">${t("referral_network_eyebrow")}</span><h2 id="rfNetworkTitle">${t("referral_network_title")}</h2></div><span class="rf-network-total">${formatNumber(networkSize)}</span></div>
+        <div class="rf-network-list">${buckets.map(row => `
+          <div class="rf-network-row"><span class="rf-network-level">${escapeHTML(row.label)}</span><span class="rf-network-count">${formatNumber(row.members)} <small>${t("referral_members_label")}</small></span><span class="rf-network-active">${formatNumber(row.active)} ${t("referral_active_short")}</span></div>`).join("")}</div>
+        <p class="rf-panel-note">${t("referral_network_privacy_note")}</p>
+      </section>
+
+      <section class="rf-panel rf-how-panel" aria-labelledby="rfHowTitle">
+        <div class="rf-section-heading"><div><span class="rf-overline">${t("referral_how_eyebrow")}</span><h2 id="rfHowTitle">${t("referral_how_title")}</h2></div><span class="rf-section-glyph">✦</span></div>
+        <ol class="rf-how-list">
+          <li><span>01</span><p>${t("referral_how_step_1")}</p></li>
+          <li><span>02</span><p>${t("referral_how_step_2", { n: formatPoints(rewardPoints) })}</p></li>
+          <li><span>03</span><p>${t("referral_how_step_3")}</p></li>
+          <li><span>04</span><p>${t("referral_how_step_4")}</p></li>
+        </ol>
+      </section>
+
+      <section class="rf-panel" aria-labelledby="rfHistoryTitle">
+        <div class="rf-section-heading"><div><span class="rf-overline">${t("referral_history_eyebrow")}</span><h2 id="rfHistoryTitle">${t("referral_history_title")}</h2></div><span class="rf-section-glyph">◷</span></div>
+        ${historyRows ? `<ul class="rf-history-list">${historyRows}</ul>` : `<div class="rf-empty-history">${t("referral_history_empty")}</div>`}
+      </section>
+
+      ${renderReferralRewardTasks()}
+    </div>`;
+}
+
+let leaderboardMode = "all";
+function setLeaderboardMode(mode) {
+  leaderboardMode = mode === "weekly" ? "weekly" : "all";
+  renderProfile();
+}
+window.setLeaderboardMode = setLeaderboardMode;
+
+let weeklyCountdownTimer = null;
+let weeklyRolloverLoading = false;
+
+function stopWeeklyCompetitionCountdown() {
+  if (weeklyCountdownTimer) clearInterval(weeklyCountdownTimer);
+  weeklyCountdownTimer = null;
+}
+
+function formatWeeklyCountdown(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+}
+
+function renderWeeklyCompetitionBanner() {
+  const prizes = Array.isArray(state.weeklyLeaderboardMeta?.prizes)
+    ? state.weeklyLeaderboardMeta.prizes.slice(0, 3)
+    : [500, 250, 100];
+  return `
+    <div class="weeklyCompetitionBanner">
+      <div class="weeklyCompetitionTitle">🏆 ${t("weekly_competition_title")}</div>
+      <div class="weeklyCompetitionDescription">${t("weekly_competition_description")}</div>
+      <div class="weeklyCompetitionRewardsTitle">🎁 ${t("weekly_rewards_title")}</div>
+      <div class="weeklyCompetitionRewards">
+        <span>🥇 ${t("weekly_reward_first", { n: formatPoints(prizes[0] || 0) })}</span>
+        <span>🥈 ${t("weekly_reward_second", { n: formatPoints(prizes[1] || 0) })}</span>
+        <span>🥉 ${t("weekly_reward_third", { n: formatPoints(prizes[2] || 0) })}</span>
+      </div>
+      <div class="weeklyCompetitionCountdownLabel">⏳ ${t("weekly_competition_ends_in")}</div>
+      <div id="weeklyCompetitionCountdown" class="weeklyCompetitionCountdown">${t("weekly_competition_calculating")}</div>
+      <div class="weeklyCompetitionDescription" style="margin-top:10px">📌 ${t("weekly_competition_rules")}</div>
+      <div class="weeklyCompetitionDescription" style="margin-top:5px">🎁 ${t("weekly_competition_auto_payment")}</div>
     </div>
   `;
 }
 
+async function startWeeklyCompetitionCountdown() {
+  stopWeeklyCompetitionCountdown();
+  if (leaderboardMode !== "weekly") return;
+
+  const countdown = document.getElementById("weeklyCompetitionCountdown");
+  const endAt = new Date(state.weeklyLeaderboardMeta?.weekEnd || 0).getTime();
+  if (!countdown || !Number.isFinite(endAt) || endAt <= 0) return;
+
+  const tick = async () => {
+    const remaining = endAt - (Date.now() + Number(state.weeklyServerOffsetMs || 0));
+    if (remaining <= 0) {
+      countdown.textContent = t("weekly_competition_refreshing");
+      stopWeeklyCompetitionCountdown();
+      if (weeklyRolloverLoading) return;
+      weeklyRolloverLoading = true;
+      try {
+        await loadWeeklyLeaderboard();
+        if (profileView === "leaderboard" && leaderboardMode === "weekly") {
+          const content = $("#content");
+          if (content) {
+            content.innerHTML = renderProfileLeaderboard();
+            startWeeklyCompetitionCountdown();
+          }
+        }
+      } finally {
+        weeklyRolloverLoading = false;
+      }
+      return;
+    }
+    countdown.textContent = formatWeeklyCountdown(remaining);
+  };
+
+  await tick();
+  if (!weeklyCountdownTimer && document.getElementById("weeklyCompetitionCountdown")) {
+    weeklyCountdownTimer = setInterval(tick, 1000);
+  }
+}
+
 function renderProfileLeaderboard() {
-  const rows = state.leaderboard.map((person, index) => {
+  const weekly = leaderboardMode === "weekly";
+  const list = weekly ? state.weeklyLeaderboard : state.leaderboard;
+  const myRank = weekly ? state.weeklyMyRank : state.myRank;
+  const rows = list.map((person, index) => {
     const rank = index + 1;
     const rankClass = rank === 1 ? "top1" : rank === 2 ? "top2" : rank === 3 ? "top3" : "";
     const isMe = Boolean(person.isMe);
@@ -1853,25 +2432,31 @@ function renderProfileLeaderboard() {
       <div class="leaderboardItem ${isMe ? "me" : ""}">
         <div class="rankBadge ${rankClass}">${formatPoints(rank)}</div>
         <div class="leaderName">${escapeHTML(person.firstName || person.username || "—")}</div>
-        <div class="leaderPoints">${formatPoints(person.points)}</div>
+        <div class="leaderPoints">${formatPoints(person.points)}${weekly && person.prizePoints ? `<small class="leaderPrize">+${formatPoints(person.prizePoints)}</small>` : ""}</div>
       </div>`;
   }).join("");
 
   return `
     <div class="sectionHeader">
       <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
-      <h2 class="sectionTitle">${t("leaderboard_title")}</h2>
+      <h2 class="sectionTitle">${weekly ? t("weekly_leaderboard_title") : t("leaderboard_title")}</h2>
       <span></span>
     </div>
 
-    ${state.myRank ? `
+    <div class="card" style="display:flex;gap:8px;padding:8px">
+      <button class="${!weekly ? "primaryBtn" : "secondaryBtn"}" type="button" style="min-height:40px;padding:8px" onclick="setLeaderboardMode('all')">${t("leaderboard_all_time")}</button>
+      <button class="${weekly ? "primaryBtn" : "secondaryBtn"}" type="button" style="min-height:40px;padding:8px" onclick="setLeaderboardMode('weekly')">${t("leaderboard_weekly")}</button>
+    </div>
+    ${weekly ? renderWeeklyCompetitionBanner() : ""}
+    ${myRank ? `
       <div class="card" style="text-align:center">
         <div class="cardSubtitle">${t("leaderboard_rank_label")}</div>
-        <div style="font-size:24px;font-weight:900;margin-top:4px">#${formatPoints(state.myRank)}</div>
+        <div style="font-size:24px;font-weight:900;margin-top:4px">#${formatPoints(myRank)}</div>
+        ${weekly ? `<div class="cardSubtitle">${formatPoints(state.weeklyMyPoints)} ${t("points_unit")}</div>` : ""}
       </div>` : ""
     }
 
-    ${state.leaderboard.length === 0
+    ${list.length === 0
       ? `<div class="card emptyState"><div class="emptyDesc">${t("leaderboard_empty")}</div></div>`
       : rows
     }
@@ -1885,13 +2470,21 @@ function renderProfileHistory() {
     const amountText = `${isPositive ? "+" : ""}${item.currency === "gram" ? formatNumber(item.amount, 6) : formatPoints(item.amount)} ${unit}`;
     const icon = (LEDGER_TYPE_UI[item.type] || {}).icon || "🔸";
     const desc = item.description || t(`history_type_${item.type}`);
+    const referralMeta = item.type === "referral_commission"
+      ? `${t("history_referral_level", { n: item.referralLevel || "—" })} · ${Number(item.commissionRatePercent || 0)}%`
+      : item.type === "referral_initial" ? t("history_referral_initial") : "";
+    const transactionMeta = item.transactionId ? `${t("history_txid_label")} ${truncateMiddle(item.transactionId, 5, 5)}` : "";
+    const earningMeta = item.earningTransactionId ? `${t("history_source_earning")} ${truncateMiddle(item.earningTransactionId, 5, 5)}` : "";
+    const referralUsersMeta = item.sourceUserId || item.recipientUserId
+      ? `${t("history_source_user")} ${truncateMiddle(String(item.sourceUserId || "—"), 5, 5)} · ${t("history_recipient_user")} ${truncateMiddle(String(item.recipientUserId || "—"), 5, 5)}`
+      : "";
 
     return `
       <div class="ledgerRow">
         <div class="ledgerIcon">${icon}</div>
         <div class="ledgerBody">
           <div class="ledgerDesc">${escapeHTML(desc)}</div>
-          <div class="historyMeta">${timeAgo(item.createdAt)}</div>
+          <div class="historyMeta">${timeAgo(item.createdAt)}${referralMeta ? ` · ${escapeHTML(referralMeta)}` : ""}${transactionMeta ? ` · ${escapeHTML(transactionMeta)}` : ""}${earningMeta ? ` · ${escapeHTML(earningMeta)}` : ""}${referralUsersMeta ? ` · ${escapeHTML(referralUsersMeta)}` : ""}</div>
         </div>
         <div class="ledgerAmount ${isPositive ? "positive" : "negative"}">${amountText}</div>
       </div>`;
@@ -1917,9 +2510,14 @@ function renderProfileHistory() {
 
 async function renderProfile() {
   const content = $("#content");
+  if (profileView !== "leaderboard" || leaderboardMode !== "weekly") stopWeeklyCompetitionCountdown();
   if (profileView === "leaderboard" && state.leaderboard.length === 0) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadLeaderboard();
+  }
+  if (profileView === "leaderboard" && leaderboardMode === "weekly" && !state.weeklyLeaderboardMeta) {
+    content.innerHTML = `<div class="loading" style="height:300px"></div>`;
+    await loadWeeklyLeaderboard();
   }
   if (profileView === "history" && historyList.length === 0 && !historyLoading) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
@@ -1927,8 +2525,13 @@ async function renderProfile() {
   }
   if (profileView === "referral") {
     content.innerHTML = renderProfileReferral();
+    if (referralEntryTransitionPending && !state.referralLoading) {
+      content.querySelector(".referralPage")?.classList.add("referralPageEntering");
+      referralEntryTransitionPending = false;
+    }
   } else if (profileView === "leaderboard") {
     content.innerHTML = renderProfileLeaderboard();
+    if (leaderboardMode === "weekly") startWeeklyCompetitionCountdown();
   } else if (profileView === "about") {
     content.innerHTML = renderProfileAbout();
   } else if (profileView === "history") {
@@ -1943,11 +2546,13 @@ async function renderCurrentTab() {
   showLoading();
   try {
     if (state.activeTab === "home") {
-      await Promise.all([loadUserData(), loadTasks(), loadReferralData()]);
+      await Promise.all([loadUserData(), loadTasks()]);
       renderHome();
+      void loadReferralData();
     } else if (state.activeTab === "tasks") {
       await loadTasks();
       renderTasks();
+      void loadReferralData();
     } else if (state.activeTab === "daily") {
       await loadUserData();
       renderDaily();
@@ -1958,8 +2563,9 @@ async function renderCurrentTab() {
       profileView = pendingProfileView || "menu";
       pendingProfileView = null;
       if (profileView === "history") { historyList = []; historyHasMore = false; }
-      await Promise.all([loadUserData(), loadReferralData()]);
+      await loadUserData();
       renderProfile();
+      if (profileView === "referral") void loadReferralData();
     }
   } catch (error) {
     console.error("Render tab failed:", error);

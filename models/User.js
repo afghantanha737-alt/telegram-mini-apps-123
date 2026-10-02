@@ -1,0 +1,34 @@
+'use strict';
+const mongoose = require('mongoose');
+
+const userSchema = new mongoose.Schema(
+  {
+    telegramId: { type: String, required: true, unique: true, index: true },
+    username: { type: String, default: '' },
+    firstName: { type: String, default: '' },
+    lastName: { type: String, default: '' },
+    photoUrl: { type: String, default: '' },
+
+    points: { type: Number, default: 0, min: 0 },
+    gramBalance: { type: Number, default: 0, min: 0 },
+    streak: { type: Number, default: 0, min: 0 },
+    totalCheckins: { type: Number, default: 0, min: 0 },
+    lastCheckIn: { type: Date, default: null },
+    spinChances: { type: Number, default: 0, min: 0 },
+
+    referralCode: { type: String, required: true, unique: true, index: true },
+    referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    invitedCount: { type: Number, default: 0, min: 0 },
+    // پاداش رفرال فقط یک‌بار و فقط بعد از تکمیل حداقل تعداد تسک لازم داده می‌شود
+    referralBonusAwarded: { type: Boolean, default: false },
+
+    walletAddress: { type: String, default: '' },
+    language: { type: String, enum: ['fa', 'ps', 'en'], default: 'fa' },
+    isBanned: { type: Boolean, default: false },
+    // آخرین باری که یادآوری ورود روزانه برایش ارسال شد (برای جلوگیری از ارسال تکراری در همان روز)
+    lastReminderSentAt: { type: Date, default: null }
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model('User', userSchema);

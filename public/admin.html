@@ -123,7 +123,7 @@
     <div id="tab-tasks" class="tabContent">
       <div class="card">
         <div class="flexBetween"><b id="taskFormTitle">افزودن تسک جدید</b></div>
-        <p class="small">روش بررسی را انتخاب کنید. در Screenshot Verification، کاربر تصویر مدرک را ارسال می‌کند و پاداش فقط پس از تأیید ادمین پرداخت می‌شود.</p>
+        <p class="small">Latest Post Engagement فقط با reaction واقعی کاربر به آخرین پست ثبت‌شده در webhook تأیید می‌شود؛ برای آن ربات باید در کانال Admin باشد.</p>
         <label>عنوان</label>
         <input id="taskTitle" placeholder="مثلاً دانلود اپلیکیشن یا Follow صفحه">
         <label>توضیحات (اختیاری)</label>
@@ -132,6 +132,7 @@
         <select id="taskVerifyType" onchange="toggleTaskVerificationFields()">
           <option value="telegram">بررسی خودکار عضویت Telegram</option>
           <option value="manual">Screenshot Verification — بررسی دستی</option>
+          <option value="latest_post">Latest Post Engagement — واکنش به آخرین پست</option>
         </select>
         <label>دسته‌بندی نمایشی</label>
         <select id="taskType">
@@ -141,19 +142,28 @@
           <option value="custom">عمومی</option>
         </select>
         <div id="telegramVerifyFields">
-          <label>آیدی/یوزرنیم کانال یا گروه (chatId)</label>
+          <label id="taskChatIdLabel">آیدی/یوزرنیم کانال یا گروه (chatId)</label>
           <input id="taskChatId" placeholder="مثلاً @mychannel یا -1001234567890">
-          <p class="small">⚠️ ربات باید ادمین همین کانال/گروه باشد. برای سوپرگروه/کانال با آیدی عددی، حتماً باید با <b>-100</b> شروع بشه.</p>
-          <button type="button" class="secondary" onclick="testChatId()" style="margin-bottom:10px">🔍 تست chatId</button>
+          <p id="taskChatIdHint" class="small">⚠️ ربات باید ادمین همین کانال/گروه باشد. برای سوپرگروه/کانال با آیدی عددی، حتماً باید با <b>-100</b> شروع بشه.</p>
+          <button type="button" class="secondary" id="taskChatIdTestButton" onclick="testChatId()" style="margin-bottom:10px">🔍 تست chatId</button>
           <div id="chatIdTestResult" class="small" style="margin-bottom:10px"></div>
         </div>
-        <label>لینک انجام Task (اختیاری؛ برای دکمه‌ی «باز کردن لینک»)</label>
+        <div id="latestPostFields" class="hidden">
+          <label>Required Reaction (اجباری؛ یک ایموجی)</label>
+          <input id="taskRequiredReaction" maxlength="16" placeholder="مثلاً 👍">
+          <label>Cooldown (ساعت)</label>
+          <input id="taskCooldownHours" type="number" min="1" max="720" step="1" value="3">
+          <p class="small">پاداش فقط وقتی پرداخت می‌شود که webhook تغییر reaction همین کاربر را برای آخرین پست ثبت کرده باشد. دریافت `channel_post` و `message_reaction` با تنظیم webhook فعال می‌شود؛ پست قدیمی قابل بازیابی نیست.</p>
+        </div>
+        <label id="taskUrlLabel">لینک انجام Task (اختیاری؛ برای دکمه‌ی «باز کردن لینک»)</label>
         <input id="taskUrl" placeholder="https://...">
         <label>مقدار پاداش (پوینت)</label>
         <input id="taskReward" type="number" placeholder="مثلاً 100">
-        <label>حداکثر تعداد تکمیل (اختیاری — برای تسک اسپانسری نادیده گرفته می‌شود)</label>
-        <input id="taskMaxCompletions" type="number" min="1" placeholder="خالی = بدون محدودیت">
-        <p class="small">اگه پر کنی، فقط همین تعداد نفر اول که تسک رو با موفقیت انجام بدن پاداش می‌گیرن؛ بعدش تسک خودکار غیرفعال می‌شه.</p>
+        <div id="taskCapacityFields">
+          <label>حداکثر تعداد تکمیل (اختیاری — برای تسک اسپانسری نادیده گرفته می‌شود)</label>
+          <input id="taskMaxCompletions" type="number" min="1" placeholder="خالی = بدون محدودیت">
+          <p class="small">اگه پر کنی، فقط همین تعداد نفر اول که تسک رو با موفقیت انجام بدن پاداش می‌گیرن؛ بعدش تسک خودکار غیرفعال می‌شه.</p>
+        </div>
         <label>تاریخ پایان (اختیاری)</label>
         <input id="taskExpiresAt" type="date">
         <label style="display:flex;align-items:center;gap:8px;margin:8px 0 12px">
@@ -165,9 +175,9 @@
           <b>Task فعال باشد</b>
         </label>
 
-        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
+        <div id="taskSponsorCard" style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
           <label style="display:flex;align-items:center;gap:8px;margin:0">
-            <input type="checkbox" id="taskSponsored" style="width:auto" onchange="toggleSponsorFields()">
+            <input type="checkbox" id="taskSponsored" style="width:auto" onchange="toggleSponsorFields();toggleTaskVerificationFields()">
             <b>💰 این تسک اسپانسری است (منبع درآمد)</b>
           </label>
           <p class="small" style="margin:8px 0">یک تبلیغ‌دهنده برای هر عضو تاییدشده مبلغی می‌پردازد. ظرفیت این تسک خودکار از «بودجه ÷ قیمت هر عضو» محاسبه می‌شود و شما نباید حداکثر تکمیل را جدا وارد کنید.</p>
@@ -744,6 +754,12 @@ async function loadTasks() {
             const sponsorLabel = t.isSponsored
               ? `<br><span class="badge approved" title="قیمت هر عضو: ${t.sponsorPriceUsd ?? "—"}$ | بودجه: ${t.sponsorBudgetUsd ?? "—"}$">💰 ${escapeHtml(t.sponsorName || "اسپانسری")}</span>`
               : "";
+            const verificationLabel = t.verifyType === "manual"
+              ? "📸 Screenshot Verification"
+              : t.verifyType === "latest_post" ? "🔁 Latest Post Engagement" : "Telegram Verification";
+            const latestPostDetails = t.verifyType === "latest_post"
+              ? `<br><span class="small">Reaction: ${escapeHtml(t.requiredReaction || "—")} · Cooldown: ${Number(t.cooldownHours) || 3}h · آخرین پست: ${t.latestPostMessageId || "هنوز دریافت نشده"}</span>`
+              : "";
             const expiryLabel = t.expiresAt
               ? `<br><span class="small" style="color:${isExpired ? "var(--danger)" : "var(--text-muted, inherit)"}">پایان: ${new Date(t.expiresAt).toLocaleDateString("fa-IR")}${isExpired ? " (منقضی)" : ""}</span>`
               : "";
@@ -752,7 +768,7 @@ async function loadTasks() {
               : "—";
             return `
             <tr>
-              <td>${escapeHtml(t.title)}<br><span class="badge info">${t.verifyType === "manual" ? "📸 Screenshot Verification" : "Telegram Verification"}</span>${t.verifyType !== "manual" && t.chatId ? `<br><span class="small" style="direction:ltr">${escapeHtml(t.chatId)}</span>` : ""}${sponsorLabel}${expiryLabel}</td>
+              <td>${escapeHtml(t.title)}<br><span class="badge info">${verificationLabel}</span>${t.verifyType !== "manual" && t.chatId ? `<br><span class="small" style="direction:ltr">${escapeHtml(t.chatId)}</span>` : ""}${latestPostDetails}${sponsorLabel}${expiryLabel}</td>
               <td>${t.reward}</td>
               <td>${t.completedCount || 0}</td>
               <td>${hasLimit ? t.maxCompletions : "بدون محدودیت"}</td>
@@ -919,8 +935,26 @@ async function runChatIdCheck(chatId, resultEl) {
 }
 
 function toggleTaskVerificationFields() {
-  const isTelegram = document.getElementById("taskVerifyType").value === "telegram";
-  document.getElementById("telegramVerifyFields").classList.toggle("hidden", !isTelegram);
+  const verifyType = document.getElementById("taskVerifyType").value;
+  const isTelegram = verifyType === "telegram";
+  const isLatestPost = verifyType === "latest_post";
+  if (isLatestPost) document.getElementById("taskType").value = "custom";
+  document.getElementById("telegramVerifyFields").classList.toggle("hidden", !isTelegram && !isLatestPost);
+  document.getElementById("latestPostFields").classList.toggle("hidden", !isLatestPost);
+  document.getElementById("taskCapacityFields").classList.toggle("hidden", isLatestPost);
+  const sponsorEnabled = document.getElementById("taskSponsored").checked;
+  document.getElementById("taskSponsorCard").classList.toggle("hidden", isLatestPost && !sponsorEnabled);
+  document.getElementById("taskChatIdLabel").textContent = isLatestPost ? "Telegram Channel ID (عدد -100…)" : "آیدی/یوزرنیم کانال یا گروه (chatId)";
+  document.getElementById("taskChatId").placeholder = isLatestPost ? "مثلاً -1001234567890" : "مثلاً @mychannel یا -1001234567890";
+  document.getElementById("taskChatIdHint").innerHTML = isLatestPost
+    ? "⚠️ Channel باید عمومی/قابل‌دسترسی باشد، chat ID عددی با <b>-100</b> وارد شود و ربات در آن Admin باشد."
+    : "⚠️ ربات باید ادمین همین کانال/گروه باشد. برای سوپرگروه/کانال با آیدی عددی، حتماً باید با <b>-100</b> شروع بشه.";
+  document.getElementById("taskUrlLabel").textContent = isLatestPost ? "Channel Link (https://t.me/...)" : "لینک انجام Task (اختیاری؛ برای دکمه‌ی «باز کردن لینک»)";
+  document.getElementById("taskUrl").placeholder = isLatestPost ? "https://t.me/channelname" : "https://...";
+  if (isLatestPost) {
+    if (!document.getElementById("taskReward").value) document.getElementById("taskReward").value = "2";
+    if (!document.getElementById("taskCooldownHours").value) document.getElementById("taskCooldownHours").value = "3";
+  }
 }
 
 function readTaskForm() {
@@ -933,6 +967,8 @@ function readTaskForm() {
     chatId: document.getElementById("taskChatId").value.trim(),
     url: document.getElementById("taskUrl").value.trim(),
     reward: Number(document.getElementById("taskReward").value),
+    requiredReaction: document.getElementById("taskRequiredReaction").value.trim(),
+    cooldownHours: Number(document.getElementById("taskCooldownHours").value) || 3,
     maxCompletions: maxCompletionsRaw ? Number(maxCompletionsRaw) : null,
     expiresAt: document.getElementById("taskExpiresAt").value || null,
     isSpecialOfDay: document.getElementById("taskSpecialOfDay").checked,
@@ -946,9 +982,10 @@ function readTaskForm() {
 
 function resetTaskForm() {
   editingTaskId = null;
-  ["taskTitle","taskDesc","taskUrl","taskReward","taskChatId","taskMaxCompletions","taskExpiresAt","sponsorName","sponsorPrice","sponsorBudget"]
+  ["taskTitle","taskDesc","taskUrl","taskReward","taskChatId","taskRequiredReaction","taskMaxCompletions","taskExpiresAt","sponsorName","sponsorPrice","sponsorBudget"]
     .forEach(id => { document.getElementById(id).value = ""; });
   document.getElementById("taskVerifyType").value = "telegram";
+  document.getElementById("taskCooldownHours").value = "3";
   document.getElementById("taskIsActive").checked = true;
   document.getElementById("taskSponsored").checked = false;
   document.getElementById("taskSpecialOfDay").checked = false;
@@ -964,6 +1001,8 @@ async function addTask(force) {
   const form = readTaskForm();
   if (!form.title || !form.reward) return showMsg("عنوان و مقدار پاداش الزامی است.", "error");
   if (form.verifyType === "telegram" && !form.chatId) return showMsg("chatId برای تسک تلگرامی الزامی است.", "error");
+  if (form.verifyType === "latest_post" && (!form.chatId || !form.url || !form.requiredReaction)) return showMsg("Channel ID، لینک کانال و Required Reaction برای Latest Post Task الزامی است.", "error");
+  if (form.verifyType === "latest_post" && form.isSponsored) return showMsg("Latest Post Engagement نمی‌تواند اسپانسری باشد.", "error");
   if (form.isSponsored && !form.sponsorName) return showMsg("نام تبلیغ‌دهنده الزامی است.", "error");
 
   try {
@@ -993,6 +1032,8 @@ function editTask(id) {
     document.getElementById("taskChatId").value = t.chatId || "";
     document.getElementById("taskUrl").value = t.url || "";
     document.getElementById("taskReward").value = t.reward ?? "";
+    document.getElementById("taskRequiredReaction").value = t.requiredReaction || "";
+    document.getElementById("taskCooldownHours").value = t.cooldownHours || 3;
     document.getElementById("taskMaxCompletions").value = t.isSponsored ? "" : (t.maxCompletions ?? "");
     document.getElementById("taskExpiresAt").value = t.expiresAt ? new Date(t.expiresAt).toISOString().slice(0, 10) : "";
     document.getElementById("taskSpecialOfDay").checked = !!t.isSpecialOfDay;

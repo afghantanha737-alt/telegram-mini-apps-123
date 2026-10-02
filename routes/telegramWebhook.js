@@ -13,6 +13,14 @@ const { generateReferralCode } = require('../utils/telegramAuth');
 const { isAdminTelegramId, createAdminSessionStore } = require('../utils/telegramAdmin');
 const { linkReferralByCode } = require('../utils/referralSystem');
 const { extractReactionEmojis, extractAddedReactionEmojis } = require('../utils/latestPostEngagement');
+const { parseTelegramStart, handleTelegramStart } = require('../utils/telegramStart');
+const {
+  recordWebhookUpdate,
+  recordStartWelcomeSent,
+  recordStartHandlerFailure,
+  recordWebhookProcessingFailure,
+  recordWebhookSecretRejection
+} = require('../utils/telegramWebhookMetrics');
 
 // وضعیت موقت گفت‌وگوی «/admin» (در حافظه؛ توضیح کامل در utils/telegramAdmin.js)
 const adminSessions = createAdminSessionStore();
@@ -204,18 +212,58 @@ router.post('/webhook', async (req, res) => {
   if (WEBHOOK_SECRET) {
     const headerSecret = req.headers['x-telegram-bot-api-secret-token'];
     if (headerSecret !== WEBHOOK_SECRET) {
+      recordWebhookSecretRejection();
       return res.sendStatus(401);
     }
   }
 
   const update = req.body;
+  const updateType = update?.channel_post ? 'channel_post'
+    : update?.message_reaction ? 'message_reaction'
+      : update?.callback_query ? 'callback_query'
+        : parseTelegramStart(update?.message?.text) ? 'start'
+          : update?.message ? 'message' : 'other';
+  recordWebhookUpdate(updateType);
+
   if (update?.channel_post || update?.message_reaction) {
     try {
       if (update.channel_post) await handleLatestChannelPost(update);
       if (update.message_reaction) await handleMessageReaction(update);
       return res.sendStatus(200);
     } catch (error) {
+      recordWebhookProcessingFailure();
       console.error('Telegram engagement update processing failed; requesting retry:', error.message || error);
+      return res.sendStatus(500);
+    }
+  }
+
+  // Acknowledge /start only after user creation/referral handling and sendMessage succeed.
+  // This makes Telegram retry transient failures instead of silently losing the Welcome.
+  if (bot && update?.message && updateType === 'start') {
+    try {
+      const result = await handleTelegramStart({
+        message: update.message,
+        bot,
+        User,
+        appUrl: APP_URL,
+        generateReferralCode,
+        linkReferralByCode,
+        botText
+      });
+      if (result?.welcomeSent) recordStartWelcomeSent();
+      console.info('Telegram /start handled', {
+        updateId: update.update_id,
+        isNewUser: Boolean(result?.isNewUser),
+        referralPayloadReceived: Boolean(result?.hadReferralPayload),
+        welcomeSent: Boolean(result?.welcomeSent)
+      });
+      return res.sendStatus(200);
+    } catch (error) {
+      recordStartHandlerFailure();
+      console.error('Telegram /start failed; requesting retry:', {
+        updateId: update.update_id,
+        error: error.message || String(error)
+      });
       return res.sendStatus(500);
     }
   }
@@ -262,49 +310,8 @@ router.post('/webhook', async (req, res) => {
     }
 
     if (!text) return;
-
-    const startMatch = /^\/start(?:@[A-Za-z0-9_]+)?(?:\s+([A-Za-z0-9_-]{1,64}))?\s*$/.exec(text);
-    if (startMatch) {
-      const payload = startMatch[1] || null;
-      const telegramId = String(message.from.id);
-
-      let user = await User.findOne({ telegramId });
-      const isNewUser = !user;
-
-      if (isNewUser) {
-        user = await User.create({
-          telegramId,
-          username: message.from.username || '',
-          firstName: message.from.first_name || '',
-          lastName: message.from.last_name || '',
-          referralCode: generateReferralCode(telegramId)
-        });
-        if (payload) {
-          try {
-            await linkReferralByCode({ referredUserId: user._id, referralCode: payload, source: 'signup' });
-          } catch (error) {
-            console.error('Referral /start linking failed; Mini App fallback will retry:', error.message || error);
-          }
-        }
-
-        // Keep the configured Mini App URL; the referral query is only a fallback
-        // for a newly-created account if the webhook-side link could not be applied.
-        const webAppUrl = APP_URL
-          ? (payload ? `${APP_URL}?ref=${encodeURIComponent(payload)}` : APP_URL)
-          : '';
-
-        const keyboard = webAppUrl
-          ? { inline_keyboard: [[{ text: '🚀 Open GramUp', web_app: { url: webAppUrl } }]] }
-          : undefined;
-
-        await bot.sendMessage(
-          chatId,
-          botText('welcome', user.language || 'fa', message.from.first_name || (user.language === 'en' ? 'friend' : 'دوست عزیز')),
-          keyboard ? { reply_markup: keyboard } : {}
-        );
-      }
-    }
   } catch (error) {
+    recordWebhookProcessingFailure();
     console.error('Webhook handling error:', error);
   }
 });

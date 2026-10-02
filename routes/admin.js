@@ -36,6 +36,7 @@ const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { transitionWithdrawalWithRefund } = require('../utils/withdrawalFinance');
 const { normalizeReferralRates, DEFAULT_REFERRAL_LEVEL_RATES, DEFAULT_REFERRAL_INITIAL_REWARD_POINTS } = require('../utils/referralCore');
 const { validateLatestPostConfig } = require('../utils/latestPostEngagement');
+const { getTelegramWebhookMetrics } = require('../utils/telegramWebhookMetrics');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -83,6 +84,108 @@ router.use(requireAdmin);
 router.post('/logout', (req, res) => {
   revokeAdminSession(req.headers['x-admin-session']);
   res.json({ success: true });
+});
+router.get('/telegram-status', async (req, res) => {
+  const appUrl = String(process.env.APP_URL || '').replace(/\/$/, '');
+  const expectedWebhookUrl = appUrl ? `${appUrl}/api/telegram/webhook` : '';
+  if (!bot) {
+    return res.status(503).json({
+      success: false,
+      message: 'BOT_TOKEN در این سرور تنظیم نشده است.',
+      botConfigured: false,
+      appUrlConfigured: Boolean(appUrl),
+      webhookMetrics: getTelegramWebhookMetrics()
+    });
+  }
+
+  const [meResult, webhookResult] = await Promise.allSettled([bot.getMe(), bot.getWebhookInfo()]);
+  const me = meResult.status === 'fulfilled' ? meResult.value : null;
+  const webhookInfo = webhookResult.status === 'fulfilled' ? webhookResult.value : null;
+  const webhookUrl = webhookInfo?.url || '';
+  const webhookSecret = String(process.env.TELEGRAM_WEBHOOK_SECRET || '');
+  const webhookSecretValid = !webhookSecret || /^[A-Za-z0-9_-]{1,256}$/.test(webhookSecret);
+  const allowedUpdates = Array.isArray(webhookInfo?.allowed_updates) ? webhookInfo.allowed_updates : [];
+  const isUpdateEnabled = update => allowedUpdates.length
+    ? allowedUpdates.includes(update)
+    : !['chat_member', 'message_reaction', 'message_reaction_count'].includes(update);
+  const requiredUpdates = ['message', 'channel_post', 'message_reaction'];
+  const missingUpdates = requiredUpdates.filter(update => !isUpdateEnabled(update));
+  const webhookUrlMatchesExpected = Boolean(expectedWebhookUrl && webhookUrl.replace(/\/$/, '') === expectedWebhookUrl);
+  const checks = {
+    botTokenValid: Boolean(me),
+    appUrlConfigured: Boolean(appUrl),
+    webhookConfigured: Boolean(webhookUrl),
+    webhookUrlMatchesExpected,
+    webhookSecretValid,
+    messageUpdateEnabled: isUpdateEnabled('message'),
+    channelPostUpdateEnabled: isUpdateEnabled('channel_post'),
+    messageReactionUpdateEnabled: isUpdateEnabled('message_reaction')
+  };
+  const issues = [];
+  if (!checks.botTokenValid) issues.push(`Telegram getMe failed: ${meResult.reason?.message || 'نامشخص'}`);
+  if (!checks.appUrlConfigured) issues.push('APP_URL در سرور تنظیم نشده است.');
+  if (!checks.webhookConfigured) issues.push('Webhook برای Bot تنظیم نشده است.');
+  else if (!webhookUrlMatchesExpected) issues.push('Webhook URL با APP_URL فعلی یکسان نیست.');
+  if (!webhookSecretValid) issues.push('TELEGRAM_WEBHOOK_SECRET فرمت موردقبول Telegram را ندارد.');
+  if (missingUpdates.length) issues.push(`Updateهای لازم فعال نیستند: ${missingUpdates.join(', ')}`);
+  if (webhookResult.status === 'rejected') issues.push(`getWebhookInfo failed: ${webhookResult.reason?.message || 'نامشخص'}`);
+  if (webhookInfo?.last_error_message) issues.push(`Telegram last webhook error: ${webhookInfo.last_error_message}`);
+
+  return res.json({
+    success: true,
+    botConfigured: true,
+    bot: { id: me?.id ? String(me.id) : null, username: me?.username || null, getMeOk: Boolean(me) },
+    appUrlConfigured: Boolean(appUrl),
+    webhookSecretConfigured: Boolean(webhookSecret),
+    webhookSecretValid,
+    webhook: {
+      url: webhookUrl,
+      expectedUrl: expectedWebhookUrl,
+      urlMatchesExpected: webhookUrlMatchesExpected,
+      allowedUpdates,
+      pendingUpdateCount: Number(webhookInfo?.pending_update_count) || 0,
+      lastErrorMessage: webhookInfo?.last_error_message || '',
+      lastErrorDate: webhookInfo?.last_error_date ? new Date(Number(webhookInfo.last_error_date) * 1000).toISOString() : null,
+      error: webhookResult.status === 'rejected' ? String(webhookResult.reason?.message || 'getWebhookInfo failed').slice(0, 300) : ''
+    },
+    checks,
+    missingUpdates,
+    pendingIssues: issues,
+    readyForStart: checks.botTokenValid && checks.appUrlConfigured && checks.webhookConfigured && webhookUrlMatchesExpected && webhookSecretValid && checks.messageUpdateEnabled,
+    readyForLatestPost: checks.botTokenValid && checks.appUrlConfigured && checks.webhookConfigured && webhookUrlMatchesExpected && webhookSecretValid && checks.channelPostUpdateEnabled && checks.messageReactionUpdateEnabled,
+    webhookMetrics: getTelegramWebhookMetrics()
+  });
+});
+router.post('/telegram-reconfigure', async (req, res) => {
+  const appUrl = String(process.env.APP_URL || '').replace(/\/$/, '');
+  const webhookSecret = String(process.env.TELEGRAM_WEBHOOK_SECRET || '');
+  if (!bot) return res.status(503).json({ success: false, message: 'BOT_TOKEN تنظیم نشده است.' });
+  if (!appUrl) return res.status(400).json({ success: false, message: 'APP_URL تنظیم نشده است.' });
+  if (webhookSecret && !/^[A-Za-z0-9_-]{1,256}$/.test(webhookSecret)) {
+    return res.status(400).json({ success: false, message: 'TELEGRAM_WEBHOOK_SECRET فرمت معتبر Telegram ندارد.' });
+  }
+  const url = `${appUrl}/api/telegram/webhook`;
+  const options = {
+    allowed_updates: ['message', 'callback_query', 'channel_post', 'message_reaction'],
+    ...(webhookSecret ? { secret_token: webhookSecret } : {})
+  };
+  try {
+    await bot.setWebHook(url, options);
+    const info = await bot.getWebhookInfo();
+    return res.json({
+      success: true,
+      message: 'Webhook دوباره روی تنظیمات فعلی GramUp قرار گرفت.',
+      webhook: {
+        url: info.url || '',
+        urlMatchesExpected: Boolean(info.url && info.url.replace(/\/$/, '') === url),
+        allowedUpdates: info.allowed_updates || [],
+        pendingUpdateCount: Number(info.pending_update_count) || 0,
+        lastErrorMessage: info.last_error_message || ''
+      }
+    });
+  } catch (error) {
+    return res.status(502).json({ success: false, message: `تنظیم Webhook ناموفق بود: ${String(error.message || error).slice(0, 300)}` });
+  }
 });
 router.get('/tasks/:id/latest-post-diagnostics', async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {

@@ -18,6 +18,11 @@ const {
 } = require('../utils/latestPostEngagement');
 
 assert.strictEqual(isValidTelegramChannelId('-1001234567890'), true);
+assert.strictEqual(isValidTelegramChannelId('221234567890'), true);
+assert.strictEqual(isValidTelegramChannelId('-221234567890'), true);
+assert.strictEqual(isValidTelegramChannelId(String((1n << 52n) - 1n)), true);
+assert.strictEqual(isValidTelegramChannelId(String(1n << 52n)), false);
+assert.strictEqual(isValidTelegramChannelId('0'), false);
 assert.strictEqual(isValidTelegramChannelId('@mychannel'), false);
 assert.strictEqual(isValidTelegramChannelUrl('https://t.me/mychannel'), true);
 assert.strictEqual(isValidTelegramChannelUrl('http://t.me/mychannel'), false);
@@ -38,6 +43,12 @@ assert.ok(validateLatestPostConfig({
   requiredReaction: '👍',
   cooldownHours: 3
 }));
+assert.strictEqual(validateLatestPostConfig({
+  chatId: '221234567890',
+  url: 'https://t.me/mychannel',
+  requiredReaction: '👍',
+  cooldownHours: 3
+}), null);
 assert.ok(validateLatestPostConfig({
   chatId: '-1001234567890',
   url: 'https://t.me/mychannel',
@@ -82,6 +93,7 @@ assert.notStrictEqual(buildRecurringTaskSourceId('task1', 'user1', 1), buildRecu
 assert.throws(() => buildRecurringTaskSourceId('task1', 'user1', 0), TypeError);
 
 assert.ok(Task.schema.path('verifyType').enumValues.includes('latest_post'));
+assert.strictEqual(Task.schema.path('chatId').instance, 'String');
 assert.strictEqual(Task.schema.path('cooldownHours').defaultValue, 3);
 assert.ok(Task.schema.path('latestPostMessageId'));
 assert.ok(Task.schema.path('requiredReaction'));

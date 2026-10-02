@@ -17,8 +17,8 @@ const taskSchema = new mongoose.Schema(
       enum: ['telegram', 'manual', 'latest_post'],
       default: 'telegram'
     },
-    // آیدی عددی یا یوزرنیم کانال/گروه مقصد؛ Latest Post از ID عددی کانال استفاده می‌کند.
-    // مثال: "@mychannel" یا "-1001234567890"
+    // Telegram Chat ID/username به‌صورت String نگهداری می‌شود تا تبدیل عددی نداشته باشد.
+    // Latest Post فقط ID عددی می‌خواهد؛ هیچ پیشوند خاصی در schema اجباری نیست.
     chatId: { type: String, default: '' },
     url: { type: String, default: '' },
     // Latest Post Engagement: post IDs are observed from Telegram channel_post updates.

@@ -13,6 +13,12 @@ const taskCompletionSchema = new mongoose.Schema(
     },
     // file_id تلگرامی اسکرین‌شات ارسالی کاربر (برای تسک‌های manual)
     proofFileId: { type: String, default: '' },
+    // Screenshot uploaded by the user; excluded from ordinary queries/API responses.
+    proofImage: { type: Buffer, select: false },
+    proofMimeType: { type: String, enum: ['', 'image/jpeg', 'image/png', 'image/webp'], default: '' },
+    submittedAt: { type: Date, default: null },
+    reviewedAt: { type: Date, default: null },
+    reviewedBy: { type: String, default: '' },
     adminNote: { type: String, default: '' },
     // عکسِ لحظه‌ی تکمیل برای گزارش سود/زیان (تغییر نرخ/قیمت بعداً گزارش قبلی را خراب نمی‌کند)
     revenueUsd: { type: Number, default: 0 }, // دریافتی از تبلیغ‌دهنده برای همین تکمیل (فقط تسک اسپانسری)

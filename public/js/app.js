@@ -226,7 +226,7 @@ function clearDefinitiveIdempotencyFailure(scope, error) {
 async function api(url, options = {}) {
   const config = { ...options, headers: { ...(options.headers || {}) } };
 
-  if (config.body && typeof config.body !== "string") {
+  if (config.body && typeof config.body !== "string" && !(typeof FormData !== "undefined" && config.body instanceof FormData)) {
     config.headers["Content-Type"] = "application/json";
     config.body = JSON.stringify(config.body);
   }
@@ -933,6 +933,9 @@ function completionStatus(taskId) {
   const found = state.completions.find(c => String(c.task) === String(taskId));
   return found ? found.status : null;
 }
+function completionRecord(taskId) {
+  return state.completions.find(c => String(c.task) === String(taskId)) || null;
+}
 
 function renderHome() {
   const approvedTasks = state.completions.filter(c => c.status === "approved").length;
@@ -1060,6 +1063,45 @@ function openTaskLinkOnly(url) {
 }
 window.openTaskLinkOnly = openTaskLinkOnly;
 
+function chooseScreenshotFile(taskId) {
+  document.getElementById(`screenshot-file-${taskId}`)?.click();
+}
+window.chooseScreenshotFile = chooseScreenshotFile;
+
+async function submitScreenshotTask(taskId, file, input) {
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) {
+    toast(t("task_submission_too_large"), "error");
+    if (input) input.value = "";
+    return;
+  }
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    toast(t("task_submission_invalid_image"), "error");
+    if (input) input.value = "";
+    return;
+  }
+
+  const button = document.querySelector(`[data-upload-screenshot="${taskId}"]`);
+  const previousText = button?.textContent || "";
+  if (button) { button.disabled = true; button.textContent = t("task_action_uploading"); }
+  try {
+    const formData = new FormData();
+    formData.append("screenshot", file, file.name || "screenshot");
+    const result = await api(`/api/tasks/${encodeURIComponent(taskId)}/submission`, { method: "POST", body: formData });
+    haptic("success");
+    toast(result.message || t("task_submission_pending"), "success");
+    await loadTasks({ force: true });
+    renderTasks();
+  } catch (error) {
+    haptic("error");
+    toast(error.message || t("error_generic"), "error");
+    if (button) { button.disabled = false; button.textContent = previousText || `📸 ${t("task_action_upload")}`; }
+  } finally {
+    if (input) input.value = "";
+  }
+}
+window.submitScreenshotTask = submitScreenshotTask;
+
 // صفحه‌ی عمومی «تاریخچه‌ی پرداخت‌ها» — بدون نیاز به لاگین، لینک‌های Tonviewer، برای اثبات پرداخت واقعی
 function openProofPage() {
   haptic("selection");
@@ -1155,6 +1197,17 @@ function renderTasks() {
           actionHtml = `<button class="taskAction done" disabled>${t("task_btn_done")}</button>`;
         } else if (status === "pending") {
           actionHtml = `<button class="taskAction pending" disabled>${t("task_btn_pending")}</button>`;
+        } else if (task.verifyType === "manual") {
+          const rejectedRecord = status === "rejected" ? completionRecord(task._id) : null;
+          const rejectedNote = rejectedRecord?.adminNote
+            ? `<div class="taskHint error" style="flex-basis:100%">${escapeHTML(rejectedRecord.adminNote)}</div>`
+            : status === "rejected" ? `<div class="taskHint error" style="flex-basis:100%">${t("task_submission_rejected")}</div>` : "";
+          actionHtml = `
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
+              ${task.url ? `<button class="taskAction" style="background:var(--surface-3);color:var(--text)" onclick="openTaskLinkOnly('${safeUrl}')">${t("task_action_open")}</button>` : ""}
+              <input class="hidden" id="screenshot-file-${task._id}" type="file" accept="image/jpeg,image/png,image/webp" onchange="submitScreenshotTask('${task._id}', this.files[0], this)">
+              <button class="taskAction" data-upload-screenshot="${task._id}" onclick="chooseScreenshotFile('${task._id}')">📸 ${t("task_action_upload")}</button>
+            </div>${rejectedNote}`;
         } else {
           actionHtml = `
             <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">

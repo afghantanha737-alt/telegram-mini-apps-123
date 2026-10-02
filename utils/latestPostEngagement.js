@@ -1,7 +1,17 @@
 'use strict';
 
+const MAX_TELEGRAM_CHAT_ID = (1n << 52n) - 1n;
+
 function isValidTelegramChannelId(value) {
-  return /^-100\d{5,20}$/.test(String(value || '').trim());
+  const text = String(value ?? '').trim();
+  if (!/^-?\d+$/.test(text)) return false;
+  if ((text.startsWith('-') ? text.length - 1 : text.length) > 16) return false;
+  try {
+    const id = BigInt(text);
+    return id !== 0n && id >= -MAX_TELEGRAM_CHAT_ID && id <= MAX_TELEGRAM_CHAT_ID;
+  } catch {
+    return false;
+  }
 }
 
 function isValidTelegramChannelUrl(value) {
@@ -24,7 +34,7 @@ function isSingleEmoji(value) {
 }
 
 function validateLatestPostConfig({ chatId, url, requiredReaction, cooldownHours }) {
-  if (!isValidTelegramChannelId(chatId)) return 'برای Latest Post Engagement، Channel ID عددی با قالب -100… الزامی است.';
+  if (!isValidTelegramChannelId(chatId)) return 'برای Latest Post Engagement یک Telegram Channel ID عددی معتبر (حداکثر ۵۲ بیت) وارد کنید؛ @username پذیرفته نمی‌شود.';
   if (!isValidTelegramChannelUrl(url)) return 'لینک کانال باید یک URL امن https://t.me/... یا https://telegram.me/... باشد.';
   if (!isSingleEmoji(requiredReaction)) return 'یک Required Reaction معتبر (یک ایموجی) الزامی است تا انجام Task قابل تأیید باشد.';
   const cooldown = Number(cooldownHours);

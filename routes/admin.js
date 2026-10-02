@@ -35,6 +35,7 @@ const { snapshot: metricsSnapshot } = require('../utils/metrics');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { transitionWithdrawalWithRefund } = require('../utils/withdrawalFinance');
 const { normalizeReferralRates, DEFAULT_REFERRAL_LEVEL_RATES, DEFAULT_REFERRAL_INITIAL_REWARD_POINTS } = require('../utils/referralCore');
+const { validateLatestPostConfig } = require('../utils/latestPostEngagement');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -186,15 +187,15 @@ router.get('/tasks', async (req, res) => {
 });
 
 router.post('/tasks', async (req, res) => {
-  const { title, description, type, verifyType, url, reward, chatId, maxCompletions, force, isSpecialOfDay, isActive } = req.body || {};
+  const { title, description, type, verifyType, url, reward, chatId, requiredReaction, cooldownHours, maxCompletions, force, isSpecialOfDay, isActive } = req.body || {};
   const taskTitle = String(title || '').trim();
-  const taskReward = Number(reward);
   const taskVerifyType = String(verifyType || 'telegram');
-  const taskType = String(type || (taskVerifyType === 'manual' ? 'custom' : 'link'));
+  const taskReward = Number(reward === undefined && taskVerifyType === 'latest_post' ? 2 : reward);
+  const taskType = String(type || (taskVerifyType === 'manual' || taskVerifyType === 'latest_post' ? 'custom' : 'link'));
   if (!taskTitle || !Number.isFinite(taskReward) || taskReward <= 0) {
     return res.status(400).json({ success: false, message: 'عنوان و مقدار پاداش الزامی است.' });
   }
-  if (!['telegram', 'manual'].includes(taskVerifyType)) {
+  if (!['telegram', 'manual', 'latest_post'].includes(taskVerifyType)) {
     return res.status(400).json({ success: false, message: 'روش بررسی تسک نامعتبر است.' });
   }
   if (!['channel', 'group', 'link', 'custom'].includes(taskType)) {
@@ -202,6 +203,13 @@ router.post('/tasks', async (req, res) => {
   }
   if (taskVerifyType === 'telegram' && !String(chatId || '').trim()) {
     return res.status(400).json({ success: false, message: 'chatId (آیدی/یوزرنیم کانال یا گروه) الزامی است.' });
+  }
+  const finalCooldownHours = taskVerifyType === 'latest_post'
+    ? Number(cooldownHours === undefined || cooldownHours === null || cooldownHours === '' ? 3 : cooldownHours)
+    : 3;
+  if (taskVerifyType === 'latest_post') {
+    const configError = validateLatestPostConfig({ chatId, url, requiredReaction, cooldownHours: finalCooldownHours });
+    if (configError) return res.status(400).json({ success: false, code: 'INVALID_LATEST_POST_TASK', message: configError });
   }
 
   // اگر خالی/صفر/نامعتبر بود یعنی «بدون محدودیت ظرفیت»
@@ -212,6 +220,10 @@ router.post('/tasks', async (req, res) => {
   const sponsor = normalizeSponsorInput(req.body);
   if (sponsor.error) return res.status(400).json({ success: false, message: sponsor.error });
   const sp = sponsor.value;
+  if (taskVerifyType === 'latest_post' && sp.isSponsored) {
+    return res.status(400).json({ success: false, message: 'Latest Post Engagement نمی‌تواند Task اسپانسری یا دارای ظرفیت محدود باشد.' });
+  }
+  if (taskVerifyType === 'latest_post') finalMaxCompletions = null;
 
   if (sp.isSponsored) {
     finalMaxCompletions = sp.maxCompletions;
@@ -241,7 +253,9 @@ router.post('/tasks', async (req, res) => {
     verifyType: taskVerifyType,
     url: String(url || '').trim(),
     reward: taskReward,
-    chatId: taskVerifyType === 'telegram' ? String(chatId).trim() : '',
+    chatId: ['telegram', 'latest_post'].includes(taskVerifyType) ? String(chatId).trim() : '',
+    requiredReaction: taskVerifyType === 'latest_post' ? String(requiredReaction).trim() : '',
+    cooldownHours: finalCooldownHours,
     maxCompletions: finalMaxCompletions,
     isActive: isActive !== false && isActive !== 'false',
     isSpecialOfDay: isSpecialOfDay === true || isSpecialOfDay === 'true',
@@ -273,35 +287,86 @@ router.post('/tasks', async (req, res) => {
 
 router.put('/tasks/:id', async (req, res) => {
   const body = req.body || {};
-  const allowed = ['title', 'description', 'type', 'verifyType', 'chatId', 'url', 'reward', 'maxCompletions', 'isActive', 'isSpecialOfDay'];
+  const allowed = ['title', 'description', 'type', 'verifyType', 'chatId', 'url', 'reward', 'maxCompletions', 'isActive', 'isSpecialOfDay', 'requiredReaction', 'cooldownHours'];
   const update = {};
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(body, key)) update[key] = body[key];
   }
 
-  if ('verifyType' in update || 'chatId' in update) {
-    const currentVerification = await Task.findById(req.params.id).select('verifyType chatId');
+  if (['verifyType', 'chatId', 'url', 'requiredReaction', 'cooldownHours'].some(key => key in update)) {
+    const currentVerification = await Task.findById(req.params.id);
     if (!currentVerification) return res.status(404).json({ success: false, message: 'تسک پیدا نشد.' });
     const verifyType = String(update.verifyType ?? currentVerification.verifyType ?? 'telegram');
     const chatId = String(update.chatId ?? currentVerification.chatId ?? '').trim();
-    if (!['telegram', 'manual'].includes(verifyType)) {
+    if (!['telegram', 'manual', 'latest_post'].includes(verifyType)) {
       return res.status(400).json({ success: false, message: 'روش بررسی تسک نامعتبر است.' });
     }
-    if (currentVerification.verifyType === 'manual' && verifyType !== 'manual') {
-      const hasScreenshotSubmissions = await TaskCompletion.exists({
-        task: req.params.id,
-        proofMimeType: { $in: ['image/jpeg', 'image/png', 'image/webp'] }
-      });
-      if (hasScreenshotSubmissions) {
-        return res.status(409).json({ success: false, message: 'روش بررسی Screenshot Task پس از ثبت submission قابل تغییر نیست.' });
+
+    if (currentVerification.verifyType === 'latest_post' || verifyType === 'latest_post') {
+      if (verifyType !== currentVerification.verifyType && await TaskCompletion.exists({ task: req.params.id })) {
+        return res.status(409).json({ success: false, message: 'نوع بررسی Task پس از ثبت completion قابل تغییر نیست.' });
       }
+      if (verifyType === 'latest_post') {
+        if (currentVerification.isSponsored) {
+          return res.status(400).json({ success: false, message: 'Latest Post Engagement نمی‌تواند Task اسپانسری باشد.' });
+        }
+        const latestConfig = {
+          chatId,
+          url: String(update.url ?? currentVerification.url ?? '').trim(),
+          requiredReaction: String(update.requiredReaction ?? currentVerification.requiredReaction ?? '').trim(),
+          cooldownHours: Number(update.cooldownHours ?? currentVerification.cooldownHours ?? 3)
+        };
+        const configError = validateLatestPostConfig(latestConfig);
+        if (configError) return res.status(400).json({ success: false, code: 'INVALID_LATEST_POST_TASK', message: configError });
+        update.verifyType = 'latest_post';
+        update.chatId = latestConfig.chatId;
+        update.url = latestConfig.url;
+        update.requiredReaction = latestConfig.requiredReaction;
+        update.cooldownHours = latestConfig.cooldownHours;
+        update.maxCompletions = null;
+        if (currentVerification.verifyType !== 'latest_post' || currentVerification.chatId !== latestConfig.chatId) {
+          update.latestPostMessageId = null;
+          update.latestPostDate = null;
+          update.latestPostUpdateId = null;
+        }
+      } else {
+        if (currentVerification.verifyType === 'manual' && verifyType !== 'manual') {
+          const hasScreenshotSubmissions = await TaskCompletion.exists({
+            task: req.params.id,
+            proofMimeType: { $in: ['image/jpeg', 'image/png', 'image/webp'] }
+          });
+          if (hasScreenshotSubmissions) {
+            return res.status(409).json({ success: false, message: 'روش بررسی Screenshot Task پس از ثبت submission قابل تغییر نیست.' });
+          }
+        }
+        if (verifyType === 'telegram' && !chatId) {
+          return res.status(400).json({ success: false, message: 'chatId برای تسک تلگرامی الزامی است.' });
+        }
+        update.verifyType = verifyType;
+        update.chatId = verifyType === 'manual' ? '' : chatId;
+        update.requiredReaction = '';
+        update.cooldownHours = 3;
+        update.latestPostMessageId = null;
+        update.latestPostDate = null;
+        update.latestPostUpdateId = null;
+      }
+    } else {
+      if (currentVerification.verifyType === 'manual' && verifyType !== 'manual') {
+        const hasScreenshotSubmissions = await TaskCompletion.exists({
+          task: req.params.id,
+          proofMimeType: { $in: ['image/jpeg', 'image/png', 'image/webp'] }
+        });
+        if (hasScreenshotSubmissions) {
+          return res.status(409).json({ success: false, message: 'روش بررسی Screenshot Task پس از ثبت submission قابل تغییر نیست.' });
+        }
+      }
+      if (verifyType === 'telegram' && !chatId) {
+        return res.status(400).json({ success: false, message: 'chatId برای تسک تلگرامی الزامی است.' });
+      }
+      update.verifyType = verifyType;
+      if (verifyType === 'manual') update.chatId = '';
+      else if ('chatId' in update) update.chatId = chatId;
     }
-    if (verifyType === 'telegram' && !chatId) {
-      return res.status(400).json({ success: false, message: 'chatId برای تسک تلگرامی الزامی است.' });
-    }
-    update.verifyType = verifyType;
-    if (verifyType === 'manual') update.chatId = '';
-    else if ('chatId' in update) update.chatId = String(update.chatId || '').trim();
   }
 
   // فیلدهای اسپانسری (ویرایش نام/قیمت/بودجه/پایان): با مقدارهای فعلی ادغام و دوباره اعتبارسنجی می‌شوند
@@ -320,6 +385,10 @@ router.put('/tasks/:id', async (req, res) => {
     const sponsor = normalizeSponsorInput(merged, body.expiresAt !== undefined ? new Date() : new Date(0));
     if (sponsor.error) return res.status(400).json({ success: false, message: sponsor.error });
     const sp = sponsor.value;
+
+    if (current.verifyType === 'latest_post' && sp.isSponsored) {
+      return res.status(400).json({ success: false, message: 'Latest Post Engagement نمی‌تواند Task اسپانسری باشد.' });
+    }
 
     if (sp.isSponsored) {
       const rewardNow = update.reward !== undefined ? Number(update.reward) : current.reward;
@@ -360,6 +429,14 @@ router.put('/tasks/:id', async (req, res) => {
     }
   } else if ('maxCompletions' in update) {
     update.maxCompletions = null;
+  }
+  const taskForRules = await Task.findById(req.params.id).select('verifyType');
+  if (!taskForRules) return res.status(404).json({ success: false, message: 'تسک پیدا نشد.' });
+  if ((update.verifyType || taskForRules.verifyType) === 'latest_post') {
+    if ('reward' in update && update.reward <= 0) {
+      return res.status(400).json({ success: false, message: 'پاداش Latest Post Task باید بیشتر از صفر باشد.' });
+    }
+    if ('maxCompletions' in update) update.maxCompletions = null;
   }
   let task;
   try {

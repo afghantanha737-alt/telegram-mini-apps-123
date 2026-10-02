@@ -9,12 +9,14 @@ const { checkChatMembership } = require('../utils/bot');
 const { recordLedgerRequired } = require('../utils/ledger');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
+const TaskReactionState = require('../models/TaskReactionState');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
 const { rewardCostUsd } = require('../utils/sponsor');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { evaluateReferralEligibility, REFERRAL_MIN_TASKS, REFERRAL_MIN_ACTIVE_DAYS, REFERRAL_WAIT_DAYS } = require('../utils/referralEligibility');
 const { SCREENSHOT_MIME_TYPES, isValidScreenshot } = require('../utils/screenshotValidation');
+const { isFreshRequiredReaction, buildRecurringTaskSourceId } = require('../utils/latestPostEngagement');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
@@ -104,7 +106,7 @@ router.get('/', auth, async (req, res) => {
     })
       .select('-sponsorPriceUsd -sponsorBudgetUsd')
       .sort({ isSpecialOfDay: -1, isSponsored: -1, createdAt: -1 });
-    res.json({ success: true, tasks, completions });
+    res.json({ success: true, tasks, completions, serverNow: Date.now() });
   } catch (error) {
     console.error('GET /api/tasks failed:', error);
     res.status(500).json({ success: false, message: 'خطایی در بارگذاری تسک‌ها رخ داد.', code: 'SERVER_ERROR' });
@@ -189,6 +191,181 @@ router.post('/:id/submission', auth, parseScreenshot, async (req, res) => {
   } catch (error) {
     console.error(`POST /api/tasks/${req.params.id}/submission failed:`, error);
     return res.status(500).json({ success: false, message: 'ارسال اسکرین‌شات انجام نشد.', code: 'SERVER_ERROR' });
+  }
+});
+
+/** POST /api/tasks/:id/engagement/check — checks the user's exact reaction on the tracked latest post. */
+router.post('/:id/engagement/check', auth, async (req, res) => {
+  const user = req.dbUser;
+  const now = new Date();
+  const fail = (code, message, status = 409) => Object.assign(new Error(message), { code, status });
+
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ success: false, code: 'TASK_NOT_FOUND', message: 'تسک پیدا نشد.' });
+    }
+
+    const initialTask = await Task.findById(req.params.id);
+    if (!initialTask || initialTask.verifyType !== 'latest_post') {
+      return res.status(404).json({ success: false, code: 'TASK_NOT_FOUND', message: 'Latest Post Task پیدا نشد.' });
+    }
+    if (!initialTask.isActive || (initialTask.expiresAt && initialTask.expiresAt <= now)) {
+      return res.status(409).json({ success: false, code: 'TASK_INACTIVE', message: 'این Task فعال نیست.' });
+    }
+    if (initialTask.isSponsored || !initialTask.chatId || !initialTask.requiredReaction) {
+      return res.status(503).json({ success: false, code: 'TASK_SETUP_INCOMPLETE', message: 'تنظیمات این Task کامل نیست؛ پاداشی پرداخت نشد.' });
+    }
+    if (!Number.isSafeInteger(initialTask.latestPostMessageId) || initialTask.latestPostMessageId <= 0) {
+      return res.status(409).json({ success: false, code: 'LATEST_POST_NOT_TRACKED', message: 'هنوز پست تازه‌ای از کانال توسط webhook ثبت نشده است.' });
+    }
+
+    const settings = await Settings.getGlobal();
+    const payment = await withMongoTransaction(async session => {
+      const currentTask = await Task.findById(initialTask._id).session(session);
+      const transactionNow = new Date();
+      if (!currentTask || currentTask.verifyType !== 'latest_post' || !currentTask.isActive || (currentTask.expiresAt && currentTask.expiresAt <= transactionNow)) {
+        throw fail('TASK_INACTIVE', 'این Task فعال نیست.');
+      }
+      if (currentTask.isSponsored || !currentTask.chatId || !currentTask.requiredReaction || !Number.isSafeInteger(currentTask.latestPostMessageId) || currentTask.latestPostMessageId <= 0 || !Number.isFinite(currentTask.reward) || currentTask.reward <= 0) {
+        throw fail('TASK_SETUP_INCOMPLETE', 'تنظیمات یا آخرین پست این Task آماده نیست.');
+      }
+
+      const completion = await TaskCompletion.findOne({ user: user._id, task: currentTask._id }).session(session);
+      if (completion?.nextAvailableAt && completion.nextAvailableAt > transactionNow) {
+        throw fail('TASK_COOLDOWN_ACTIVE', 'این Task هنوز در Cooldown است.', 429);
+      }
+
+      const reactionState = await TaskReactionState.findOne({
+        chatId: String(currentTask.chatId),
+        messageId: currentTask.latestPostMessageId,
+        telegramUserId: String(user.telegramId)
+      }).session(session).lean();
+      if (!isFreshRequiredReaction({
+        reactionState,
+        requiredReaction: currentTask.requiredReaction,
+        latestPostDate: currentTask.latestPostDate,
+        nextAvailableAt: completion?.nextAvailableAt,
+        lastReactionEventAt: completion?.lastReactionEventAt
+      })) {
+        throw fail('REQUIRED_REACTION_MISSING', `واکنش ${currentTask.requiredReaction} باید روی آخرین پست ثبت یا پس از Cooldown دوباره اضافه شود.`, 400);
+      }
+      const lockedReactionState = await TaskReactionState.findOneAndUpdate(
+        { _id: reactionState._id, lastUpdateId: reactionState.lastUpdateId },
+        { $set: { lastVerifiedAt: transactionNow } },
+        { new: true, session }
+      );
+      if (!isFreshRequiredReaction({
+        reactionState: lockedReactionState,
+        requiredReaction: currentTask.requiredReaction,
+        latestPostDate: currentTask.latestPostDate,
+        nextAvailableAt: completion?.nextAvailableAt,
+        lastReactionEventAt: completion?.lastReactionEventAt
+      })) {
+        throw fail('REQUIRED_REACTION_MISSING', 'واکنش فعلی دیگر معتبر نیست؛ واکنش را دوباره ثبت و بررسی کنید.', 400);
+      }
+
+      const recurringClaimCount = Number(completion?.recurringClaimCount || 0) + 1;
+      const cooldownHours = Number(currentTask.cooldownHours);
+      if (!Number.isInteger(cooldownHours) || cooldownHours < 1 || cooldownHours > 720) {
+        throw fail('TASK_SETUP_INCOMPLETE', 'مقدار Cooldown این Task معتبر نیست.', 503);
+      }
+      const nextAvailableAt = new Date(transactionNow.getTime() + cooldownHours * 60 * 60 * 1000);
+      const costUsd = rewardCostUsd(currentTask.reward, settings.rate, settings.gramUsdPrice);
+      const updatedTask = await Task.findOneAndUpdate(
+        { _id: currentTask._id, verifyType: 'latest_post', isActive: true, latestPostMessageId: currentTask.latestPostMessageId },
+        { $inc: { completedCount: 1 } },
+        { new: true, session }
+      );
+      if (!updatedTask) throw fail('LATEST_POST_CHANGED', 'آخرین پست هم‌زمان عوض شد؛ صفحه را تازه کنید و دوباره بررسی کنید.', 409);
+
+      if (completion) {
+        const savedCompletion = await TaskCompletion.findOneAndUpdate(
+          { _id: completion._id, recurringClaimCount: Number(completion.recurringClaimCount || 0) },
+          {
+            $set: {
+              status: 'approved',
+              reward: currentTask.reward,
+              lastCompletedAt: transactionNow,
+              nextAvailableAt,
+              lastPostMessageId: currentTask.latestPostMessageId,
+              lastReactionEventAt: reactionState.lastEventAt,
+              revenueUsd: 0,
+              costUsd,
+              reviewedAt: transactionNow,
+              reviewedBy: 'telegram-reaction'
+            },
+            $inc: { recurringClaimCount: 1 }
+          },
+          { new: true, session }
+        );
+        if (!savedCompletion) throw fail('TASK_CLAIM_CONFLICT', 'درخواست هم‌زمان تغییر کرد؛ Task را دوباره بارگذاری کنید.');
+      } else {
+        await new TaskCompletion({
+          user: user._id,
+          task: currentTask._id,
+          reward: currentTask.reward,
+          status: 'approved',
+          recurringClaimCount,
+          lastCompletedAt: transactionNow,
+          nextAvailableAt,
+          lastPostMessageId: currentTask.latestPostMessageId,
+          lastReactionEventAt: reactionState.lastEventAt,
+          revenueUsd: 0,
+          costUsd,
+          reviewedAt: transactionNow,
+          reviewedBy: 'telegram-reaction'
+        }).save({ session });
+      }
+
+      const rewardedUser = await User.findByIdAndUpdate(
+        user._id,
+        { $inc: { points: currentTask.reward } },
+        { new: true, session }
+      );
+      if (!rewardedUser) throw new Error('کاربر برای ثبت پاداش پیدا نشد.');
+
+      const ledgerResult = await recordLedgerRequired({
+        user: user._id,
+        type: 'task',
+        amount: currentTask.reward,
+        description: currentTask.title,
+        balanceAfter: rewardedUser.points,
+        sourceId: buildRecurringTaskSourceId(currentTask._id, user._id, recurringClaimCount),
+        session
+      });
+      if (!ledgerResult.created) {
+        throw fail('TASK_CLAIM_CONFLICT', 'این چرخه قبلاً در Transaction ثبت شده است؛ Reward دوباره پرداخت نشد.');
+      }
+
+      return {
+        points: rewardedUser.points,
+        reward: currentTask.reward,
+        recurringClaimCount,
+        nextAvailableAt,
+        serverNow: transactionNow.getTime()
+      };
+    });
+
+    maybeAwardReferralBonus(user._id).catch(error => console.error('Referral bonus check failed:', error));
+    return res.json({
+      success: true,
+      message: `${payment.reward} پوینت به حساب شما اضافه شد.`,
+      points: payment.points,
+      reward: payment.reward,
+      status: 'approved',
+      recurringClaimCount: payment.recurringClaimCount,
+      nextAvailableAt: payment.nextAvailableAt,
+      serverNow: payment.serverNow
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ success: false, code: 'TASK_CLAIM_CONFLICT', message: 'این دوره قبلاً ثبت شده یا درخواست هم‌زمانی انجام شد؛ وضعیت Task را تازه کنید.' });
+    }
+    if (error?.status) {
+      return res.status(error.status).json({ success: false, code: error.code, message: error.message });
+    }
+    console.error(`POST /api/tasks/${req.params.id}/engagement/check failed:`, error);
+    return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: 'تأیید Task انجام نشد و پاداشی پرداخت نشد.' });
   }
 });
 

@@ -6,10 +6,13 @@ const { isValidAdminKey } = require('../utils/adminKey');
 const { bot, broadcastCopyToActiveUsers } = require('../utils/bot');
 const { botText } = require('../utils/botMessages');
 const User = require('../models/User');
+const Task = require('../models/Task');
+const TaskReactionState = require('../models/TaskReactionState');
 const Withdrawal = require('../models/Withdrawal');
 const { generateReferralCode } = require('../utils/telegramAuth');
 const { isAdminTelegramId, createAdminSessionStore } = require('../utils/telegramAdmin');
 const { linkReferralByCode } = require('../utils/referralSystem');
+const { extractReactionEmojis, extractAddedReactionEmojis } = require('../utils/latestPostEngagement');
 
 // وضعیت موقت گفت‌وگوی «/admin» (در حافظه؛ توضیح کامل در utils/telegramAdmin.js)
 const adminSessions = createAdminSessionStore();
@@ -119,6 +122,83 @@ async function handleCallbackQuery(callbackQuery) {
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const APP_URL = process.env.APP_URL || '';
 
+async function handleLatestChannelPost(update) {
+  const message = update.channel_post;
+  const chatId = message?.chat?.id;
+  const messageId = Number(message?.message_id);
+  const updateId = Number(update.update_id);
+  if (chatId == null || !Number.isSafeInteger(messageId) || messageId <= 0 || !Number.isSafeInteger(updateId)) return;
+
+  const normalizedChatId = String(chatId);
+  await Task.updateMany(
+    {
+      verifyType: 'latest_post',
+      chatId: normalizedChatId,
+      $or: [{ latestPostUpdateId: null }, { latestPostUpdateId: { $lt: updateId } }]
+    },
+    {
+      $set: {
+        latestPostMessageId: messageId,
+        latestPostDate: message.date ? new Date(Number(message.date) * 1000) : new Date(),
+        latestPostUpdateId: updateId
+      }
+    }
+  );
+
+  const currentTasks = await Task.find({ verifyType: 'latest_post', chatId: normalizedChatId })
+    .select('latestPostMessageId')
+    .lean();
+  if (currentTasks.some(task => Number(task.latestPostMessageId) === messageId)) {
+    // Keep reaction state only for the currently tracked post to bound storage.
+    await TaskReactionState.deleteMany({ chatId: normalizedChatId, messageId: { $ne: messageId } });
+  }
+}
+
+async function handleMessageReaction(update) {
+  const reaction = update.message_reaction;
+  const chatId = reaction?.chat?.id;
+  const messageId = Number(reaction?.message_id);
+  const telegramUserId = reaction?.user?.id;
+  const updateId = Number(update.update_id);
+  // Anonymous reactions cannot be attributed to an app user, so they never qualify.
+  if (chatId == null || telegramUserId == null || !Number.isSafeInteger(messageId) || !Number.isSafeInteger(updateId)) return;
+
+  const normalizedChatId = String(chatId);
+  const tracked = await Task.exists({
+    verifyType: 'latest_post',
+    chatId: normalizedChatId,
+    latestPostMessageId: messageId
+  });
+  if (!tracked) return;
+
+  const userExists = await User.exists({ telegramId: String(telegramUserId) });
+  if (!userExists) return;
+
+  const key = { chatId: normalizedChatId, messageId, telegramUserId: String(telegramUserId) };
+  const reactionEmojis = extractReactionEmojis(update);
+  const values = {
+    ...key,
+    reactionEmojis,
+    lastAddedReactionEmojis: extractAddedReactionEmojis(update),
+    lastUpdateId: updateId,
+    lastEventAt: reaction.date ? new Date(Number(reaction.date) * 1000) : new Date()
+  };
+
+  try {
+    await TaskReactionState.updateOne(
+      { ...key, $or: [{ lastUpdateId: null }, { lastUpdateId: { $lt: updateId } }] },
+      { $set: values },
+      { upsert: true, runValidators: true }
+    );
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+    const current = await TaskReactionState.findOne(key).select('lastUpdateId').lean();
+    // Duplicate/replayed or out-of-order update; the state already reflects a newer event.
+    if (current && Number(current.lastUpdateId) >= updateId) return;
+    throw error;
+  }
+}
+
 // POST /api/telegram/webhook — دریافت آپدیت از تلگرام
 router.post('/webhook', async (req, res) => {
   if (WEBHOOK_SECRET) {
@@ -128,11 +208,20 @@ router.post('/webhook', async (req, res) => {
     }
   }
 
+  const update = req.body;
+  if (update?.channel_post || update?.message_reaction) {
+    try {
+      if (update.channel_post) await handleLatestChannelPost(update);
+      if (update.message_reaction) await handleMessageReaction(update);
+      return res.sendStatus(200);
+    } catch (error) {
+      console.error('Telegram engagement update processing failed; requesting retry:', error.message || error);
+      return res.sendStatus(500);
+    }
+  }
+
   res.sendStatus(200);
-
   try {
-    const update = req.body;
-
     if (bot && update && update.callback_query) {
       await handleCallbackQuery(update.callback_query);
       return;
@@ -174,14 +263,15 @@ router.post('/webhook', async (req, res) => {
 
     if (!text) return;
 
-    if (text.startsWith('/start')) {
-      const parts = text.split(' ');
-      const payload = parts[1] || null;
+    const startMatch = /^\/start(?:@[A-Za-z0-9_]+)?(?:\s+([A-Za-z0-9_-]{1,64}))?\s*$/.exec(text);
+    if (startMatch) {
+      const payload = startMatch[1] || null;
       const telegramId = String(message.from.id);
 
       let user = await User.findOne({ telegramId });
+      const isNewUser = !user;
 
-      if (!user) {
+      if (isNewUser) {
         user = await User.create({
           telegramId,
           username: message.from.username || '',
@@ -189,28 +279,30 @@ router.post('/webhook', async (req, res) => {
           lastName: message.from.last_name || '',
           referralCode: generateReferralCode(telegramId)
         });
+        if (payload) {
+          try {
+            await linkReferralByCode({ referredUserId: user._id, referralCode: payload, source: 'signup' });
+          } catch (error) {
+            console.error('Referral /start linking failed; Mini App fallback will retry:', error.message || error);
+          }
+        }
+
+        // Keep the configured Mini App URL; the referral query is only a fallback
+        // for a newly-created account if the webhook-side link could not be applied.
+        const webAppUrl = APP_URL
+          ? (payload ? `${APP_URL}?ref=${encodeURIComponent(payload)}` : APP_URL)
+          : '';
+
+        const keyboard = webAppUrl
+          ? { inline_keyboard: [[{ text: '🚀 Open GramUp', web_app: { url: webAppUrl } }]] }
+          : undefined;
+
+        await bot.sendMessage(
+          chatId,
+          botText('welcome', user.language || 'fa', message.from.first_name || (user.language === 'en' ? 'friend' : 'دوست عزیز')),
+          keyboard ? { reply_markup: keyboard } : {}
+        );
       }
-      if (payload && user && !user.referredBy) {
-        await linkReferralByCode({ referredUserId: user._id, referralCode: payload, source: 'signup' });
-        user = await User.findById(user._id);
-      }
-
-      // آدرس اپ را با ref=CODE می‌فرستیم تا اگر کاربر همان لحظه رفرال نشده،
-      // فرانت‌اند بتواند از طریق GET /api/auth/me?ref=CODE آن را اعمال کند.
-      const webAppUrl = APP_URL
-        ? (payload ? `${APP_URL}?ref=${encodeURIComponent(payload)}` : APP_URL)
-        : '';
-
-      const keyboard = webAppUrl
-        ? { inline_keyboard: [[{ text: '🚀 باز کردن اپلیکیشن', web_app: { url: webAppUrl } }]] }
-        : undefined;
-
-      const startedUser = await User.findOne({ telegramId: String(chatId) }, 'language');
-      await bot.sendMessage(
-        chatId,
-        botText('welcome', startedUser?.language || 'fa', message.from.first_name || (startedUser?.language === 'en' ? 'friend' : 'دوست عزیز')),
-        keyboard ? { reply_markup: keyboard } : {}
-      );
     }
   } catch (error) {
     console.error('Webhook handling error:', error);
@@ -228,7 +320,10 @@ router.get('/set-webhook', async (req, res) => {
   }
   try {
     const url = `${APP_URL}/api/telegram/webhook`;
-    const options = WEBHOOK_SECRET ? { secret_token: WEBHOOK_SECRET } : {};
+    const options = {
+      allowed_updates: ['message', 'callback_query', 'channel_post', 'message_reaction'],
+      ...(WEBHOOK_SECRET ? { secret_token: WEBHOOK_SECRET } : {})
+    };
     await bot.setWebHook(url, options);
     res.json({ success: true, message: `Webhook تنظیم شد: ${url}` });
   } catch (error) {

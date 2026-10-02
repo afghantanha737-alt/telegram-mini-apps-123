@@ -1,0 +1,96 @@
+'use strict';
+
+function isValidTelegramChannelId(value) {
+  return /^-100\d{5,20}$/.test(String(value || '').trim());
+}
+
+function isValidTelegramChannelUrl(value) {
+  try {
+    const parsed = new URL(String(value || '').trim());
+    return parsed.protocol === 'https:' && ['t.me', 'www.t.me', 'telegram.me', 'www.telegram.me'].includes(parsed.hostname.toLowerCase()) && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
+function isSingleEmoji(value) {
+  const text = String(value || '').trim();
+  if (!text || text.length > 32 || /\s/u.test(text) || !/\p{Extended_Pictographic}/u.test(text)) return false;
+  if (typeof Intl.Segmenter === 'function') {
+    const segments = Array.from(new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(text));
+    return segments.length === 1;
+  }
+  return Array.from(text).length <= 4;
+}
+
+function validateLatestPostConfig({ chatId, url, requiredReaction, cooldownHours }) {
+  if (!isValidTelegramChannelId(chatId)) return 'برای Latest Post Engagement، Channel ID عددی با قالب -100… الزامی است.';
+  if (!isValidTelegramChannelUrl(url)) return 'لینک کانال باید یک URL امن https://t.me/... یا https://telegram.me/... باشد.';
+  if (!isSingleEmoji(requiredReaction)) return 'یک Required Reaction معتبر (یک ایموجی) الزامی است تا انجام Task قابل تأیید باشد.';
+  const cooldown = Number(cooldownHours);
+  if (!Number.isInteger(cooldown) || cooldown < 1 || cooldown > 720) return 'Cooldown باید عدد صحیح بین ۱ تا ۷۲۰ ساعت باشد.';
+  return null;
+}
+
+function normalizeReactionEmoji(value) {
+  return String(value || '').trim().replace(/[\uFE0E\uFE0F]/gu, '');
+}
+
+function extractReactionList(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter(item => item && item.type === 'emoji' && typeof item.emoji === 'string')
+    .map(item => normalizeReactionEmoji(item.emoji));
+}
+
+function extractReactionEmojis(update) {
+  return extractReactionList(update?.message_reaction?.new_reaction);
+}
+
+function extractAddedReactionEmojis(update) {
+  const reaction = update?.message_reaction;
+  const previous = new Set(extractReactionList(reaction?.old_reaction));
+  return extractReactionList(reaction?.new_reaction).filter(emoji => !previous.has(emoji));
+}
+
+function isReactionSatisfied(reactionEmojis, requiredReaction) {
+  const expected = normalizeReactionEmoji(requiredReaction);
+  return Array.isArray(reactionEmojis) && reactionEmojis.some(item => normalizeReactionEmoji(item) === expected);
+}
+
+function isFreshRequiredReaction({ reactionState, requiredReaction, latestPostDate, nextAvailableAt, lastReactionEventAt }) {
+  const eventAt = reactionState?.lastEventAt instanceof Date ? reactionState.lastEventAt.getTime() : NaN;
+  if (!Number.isFinite(eventAt)) return false;
+  if (!isReactionSatisfied(reactionState.reactionEmojis, requiredReaction)) return false;
+  if (!isReactionSatisfied(reactionState.lastAddedReactionEmojis, requiredReaction)) return false;
+
+  const latestPostTime = latestPostDate instanceof Date ? latestPostDate.getTime() : 0;
+  const availableTime = nextAvailableAt instanceof Date ? nextAvailableAt.getTime() : 0;
+  const eligibleAt = Math.max(latestPostTime, availableTime);
+  if (eligibleAt && eventAt < Math.floor(eligibleAt / 1000) * 1000) return false;
+
+  const previousEventAt = lastReactionEventAt instanceof Date ? lastReactionEventAt.getTime() : 0;
+  if (previousEventAt && eventAt <= previousEventAt) return false;
+  return true;
+}
+
+function buildRecurringTaskSourceId(taskId, userId, cycle) {
+  const cycleNumber = Number(cycle);
+  if (!taskId || !userId || !Number.isSafeInteger(cycleNumber) || cycleNumber < 1) {
+    throw new TypeError('A task ID, user ID, and positive integer recurring cycle are required.');
+  }
+  return `task:${taskId}:user:${userId}:cycle:${cycleNumber}`;
+}
+
+module.exports = {
+  isValidTelegramChannelId,
+  isValidTelegramChannelUrl,
+  isSingleEmoji,
+  validateLatestPostConfig,
+  normalizeReactionEmoji,
+  extractReactionEmojis,
+  extractAddedReactionEmojis,
+  isReactionSatisfied,
+  isFreshRequiredReaction,
+  buildRecurringTaskSourceId
+};

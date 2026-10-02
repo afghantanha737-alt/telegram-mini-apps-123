@@ -78,7 +78,11 @@
         <h1>پنل ادمین</h1>
         <div class="sub">مدیریت تسک‌ها، برداشت‌ها، کاربران و پیام همگانی</div>
       </div>
-      <button class="secondary" onclick="logout()">خروج</button>
+      <div class="row">
+        <button class="secondary" onclick="diagnoseTelegramBot()">بررسی Telegram Bot</button>
+        <button class="secondary" onclick="reconfigureTelegramWebhook()">تنظیم مجدد Webhook</button>
+        <button class="secondary" onclick="logout()">خروج</button>
+      </div>
     </div>
 
     <div class="tabs">
@@ -583,6 +587,53 @@ function logout() {
   ADMIN_SESSION = "";
   document.getElementById("panel").classList.add("hidden");
   document.getElementById("loginBox").classList.remove("hidden");
+}
+
+async function diagnoseTelegramBot() {
+  try {
+    const result = await api("/api/admin/telegram-status");
+    const metrics = result.webhookMetrics || {};
+    const lines = [
+      `Bot Token معتبر (getMe): ${result.checks.botTokenValid ? "بله" : "خیر"}${result.bot.username ? ` (@${result.bot.username})` : ""}`,
+      `APP_URL تنظیم است: ${result.appUrlConfigured ? "بله" : "خیر"}`,
+      `Webhook تنظیم است: ${result.checks.webhookConfigured ? "بله" : "خیر"}`,
+      `Webhook URL صحیح است: ${result.webhook.urlMatchesExpected ? "بله" : "خیر"}`,
+      `Allowed updates: ${result.webhook.allowedUpdates.length ? result.webhook.allowedUpdates.join(", ") : "پیش‌فرض Telegram"}`,
+      `Updateهای غایب: ${result.missingUpdates.join(", ") || "هیچ‌کدام"}`,
+      `آمادهٔ /start: ${result.readyForStart ? "بله" : "خیر"}`,
+      `آمادهٔ Latest Post: ${result.readyForLatestPost ? "بله" : "خیر"}`,
+      `Secret تنظیم است/فرمت معتبر است: ${result.webhookSecretConfigured ? "بله" : "خیر"}/${result.webhookSecretValid ? "بله" : "خیر"}`,
+      `Pending در Telegram: ${result.webhook.pendingUpdateCount}`,
+      `Updateهای دریافتی این process: ${metrics.updatesReceived || 0}`,
+      `/start دریافتی/پاسخ موفق/خطا: ${metrics.startUpdatesReceived || 0}/${metrics.startWelcomeSent || 0}/${metrics.startHandlerFailures || 0}`,
+      `رد Secret / خطای handler: ${metrics.webhookSecretRejections || 0}/${metrics.processingFailures || 0}`,
+      `آخرین Update: ${metrics.lastUpdateType || "ندارد"}${metrics.lastUpdateAt ? ` — ${metrics.lastUpdateAt}` : ""}`,
+      result.webhook.lastErrorMessage ? `آخرین خطای Telegram: ${result.webhook.lastErrorMessage}` : ""
+    ].filter(Boolean);
+    if (result.pendingIssues.length) lines.push("\nموارد نیازمند اصلاح:\n• " + result.pendingIssues.join("\n• "));
+    lines.push(`\nشمارنده‌های update فقط برای همین process و از زمان ${metrics.startedAt || "نامشخص"} هستند.`);
+    alert(lines.join("\n"));
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function reconfigureTelegramWebhook() {
+  const approved = confirm(
+    "Webhook ربات به APP_URL فعلی سرور برمی‌گردد و این updateها فعال می‌شوند: message, callback_query, channel_post, message_reaction.\n" +
+    "Secret فقط از Environment سرور خوانده می‌شود و هیچ pending update حذف نمی‌شود. ادامه می‌دهید؟"
+  );
+  if (!approved) return;
+  try {
+    const result = await api("/api/admin/telegram-reconfigure", {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    const webhook = result.webhook || {};
+    alert(`${result.message}\nURL درست: ${webhook.urlMatchesExpected ? "بله" : "خیر"}\nAllowed updates: ${(webhook.allowedUpdates || []).join(", ")}\nPending: ${webhook.pendingUpdateCount || 0}${webhook.lastErrorMessage ? `\nآخرین خطا: ${webhook.lastErrorMessage}` : ""}`);
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
 function switchTab(tab) {

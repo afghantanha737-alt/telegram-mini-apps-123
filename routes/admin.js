@@ -1,5 +1,7 @@
 'use strict';
 const express = require('express');
+const crypto = require('crypto');
+const mongoose = require('mongoose');
 const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
 const multer = require('multer');
@@ -7,14 +9,17 @@ const Task = require('../models/Task');
 const Withdrawal = require('../models/Withdrawal');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
-const { bot, notifyUser, broadcastToActiveUsers } = require('../utils/bot');
+const { bot, notifyUser, markTelegramBlocked, isTelegramDeliveryBlocked, broadcastToActiveUsers } = require('../utils/bot');
 const { botText } = require('../utils/botMessages');
-const { verifyTonTransaction } = require('../utils/tonVerify');
-const { recordLedger } = require('../utils/ledger');
+const { verifyTonTransaction, normalizeTonTxHash, legacyTonTxHashMatcher } = require('../utils/tonVerify');
+const { recordLedgerRequired } = require('../utils/ledger');
 const { recordAdminLog } = require('../utils/adminLog');
 const AdminLog = require('../models/AdminLog');
 const TaskCompletion = require('../models/TaskCompletion');
 const PointsLedger = require('../models/PointsLedger');
+const BalanceAudit = require('../models/BalanceAudit');
+const ReferralRelationship = require('../models/ReferralRelationship');
+const WeeklyLeaderboardAward = require('../models/WeeklyLeaderboardAward');
 const { isValidAdminKey } = require('../utils/adminKey');
 const RequiredChannel = require('../models/RequiredChannel');
 const { membership, validateChannelRef, normalizeChannelInput } = require('../utils/membership');
@@ -23,10 +28,27 @@ const { COMMON_TIMEZONES, isValidTimezone, targetUtcHour } = require('../utils/t
 const { sendTestReminder } = require('../utils/dailyReminder');
 const { isValidWeights, resolveWeights, checkSpinSettings, spinModel } = require('../utils/spin');
 const { normalizeSponsorInput, marginInfo } = require('../utils/sponsor');
+const { startOfUtcWeek, endOfUtcWeek, weekKey } = require('../utils/weeklyLeaderboard');
+const { createAdminSession, getAdminSession, revokeAdminSession, SESSION_TTL_MS } = require('../utils/adminSession');
+const { buildDiscrepancy, isDiscrepant } = require('../utils/financialAudit');
+const { snapshot: metricsSnapshot } = require('../utils/metrics');
+const { withMongoTransaction } = require('../utils/mongoTransaction');
+const { transitionWithdrawalWithRefund } = require('../utils/withdrawalFinance');
+const { normalizeReferralRates, DEFAULT_REFERRAL_LEVEL_RATES, DEFAULT_REFERRAL_INITIAL_REWARD_POINTS } = require('../utils/referralCore');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
 const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function pageParams(query, defaultLimit = 100, maxLimit = 300) {
+  const page = Math.max(1, Math.floor(Number(query.page) || 1));
+  const limit = Math.min(maxLimit, Math.max(1, Math.floor(Number(query.limit) || defaultLimit)));
+  return { page, limit, skip: (page - 1) * limit };
+}
+
+function safeAdminReferralRates(settings) {
+  try { return normalizeReferralRates(settings?.referralLevelRates); }
+  catch { return [...DEFAULT_REFERRAL_LEVEL_RATES]; }
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -34,18 +56,34 @@ const upload = multer({
 });
 
 function requireAdmin(req, res, next) {
-  // تگ <img> نمی‌تواند هدر سفارشی بفرستد، پس برای مسیر نمایش تصویر
-  // اجازه می‌دهیم کلید از query هم بیاید (؟key=...).
-  const key = req.headers['x-admin-key'] || req.query.key;
-  if (!isValidAdminKey(typeof key === 'string' ? key : '')) {
+  const session = getAdminSession(req.headers['x-admin-session']);
+  // x-admin-key برای سازگاری با نسخه‌های قدیمی نگه داشته شده، اما پنل جدید
+  // بعد از login فقط session کوتاه‌مدت می‌فرستد و کلید اصلی را تکرار نمی‌کند.
+  const legacyKey = req.headers['x-admin-key'];
+  const legacyAllowed = process.env.ALLOW_LEGACY_ADMIN_KEY === 'true';
+  if (!session && (!legacyAllowed || !isValidAdminKey(typeof legacyKey === 'string' ? legacyKey : ''))) {
     return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
   }
-  // نامی که ادمین موقع ورود تایپ کرده (اختیاری) — فقط برای لاگ فعالیت، نه احراز هویت واقعی
-  req.adminActor = String(req.headers['x-admin-name'] || '').trim() || 'ادمین';
+  req.adminActor = session?.actor || String(req.headers['x-admin-name'] || '').trim() || 'ادمین';
+  req.adminId = session?.adminId || 'legacy-admin-key';
   next();
 }
 
+// کلید اصلی فقط یک‌بار در لحظه ورود ارسال می‌شود و بعد از آن session کوتاه‌مدت استفاده می‌شود.
+router.post('/login', async (req, res) => {
+  const key = String(req.body?.key || '');
+  if (!isValidAdminKey(key)) return res.status(403).json({ success: false, message: 'کلید ادمین نادرست است.' });
+  const actor = String(req.body?.name || '').trim() || 'ادمین';
+  const session = createAdminSession(actor);
+  res.json({ success: true, sessionToken: session.token, expiresAt: session.expiresAt, ttlMs: SESSION_TTL_MS });
+});
+
 router.use(requireAdmin);
+
+router.post('/logout', (req, res) => {
+  revokeAdminSession(req.headers['x-admin-session']);
+  res.json({ success: true });
+});
 
 /**
  * POST /api/admin/verify-chat — قبل از ساختن تسک، بررسی می‌کند آیا
@@ -148,7 +186,7 @@ router.get('/tasks', async (req, res) => {
 });
 
 router.post('/tasks', async (req, res) => {
-  const { title, description, type, url, reward, chatId, maxCompletions, force } = req.body || {};
+  const { title, description, type, url, reward, chatId, maxCompletions, force, isSpecialOfDay } = req.body || {};
   if (!title || !reward) {
     return res.status(400).json({ success: false, message: 'عنوان و مقدار پاداش الزامی است.' });
   }
@@ -188,9 +226,12 @@ router.post('/tasks', async (req, res) => {
 
   const task = await Task.create({
     title, description, type, url, reward,
+    // در نسخه production فقط verification خودکار Telegram فعال است؛
+    // Manual Task بدون storage امن Proof و workflow بررسی ساخته نمی‌شود.
     verifyType: 'telegram',
     chatId,
     maxCompletions: finalMaxCompletions,
+    isSpecialOfDay: isSpecialOfDay === true || isSpecialOfDay === 'true',
     isSponsored: sp.isSponsored,
     sponsorName: sp.sponsorName,
     sponsorPriceUsd: sp.sponsorPriceUsd,
@@ -217,7 +258,7 @@ router.post('/tasks', async (req, res) => {
 
 router.put('/tasks/:id', async (req, res) => {
   const body = req.body || {};
-  const allowed = ['title', 'description', 'type', 'verifyType', 'chatId', 'url', 'reward', 'maxCompletions', 'isActive'];
+  const allowed = ['title', 'description', 'type', 'verifyType', 'chatId', 'url', 'reward', 'maxCompletions', 'isActive', 'isSpecialOfDay'];
   const update = {};
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(body, key)) update[key] = body[key];
@@ -312,16 +353,168 @@ router.delete('/tasks/:id', async (req, res) => {
 });
 
 /* -------------------- WITHDRAWALS -------------------- */
+/* -------------------- WEEKLY LEADERBOARD AWARDS -------------------- */
+router.get('/weekly-leaderboard', async (req, res) => {
+  const requestedKey = String(req.query.weekKey || '').trim();
+  const currentKey = weekKey();
+  const selectedKey = requestedKey || currentKey;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedKey)) {
+    return res.status(400).json({ success: false, message: 'weekKey باید به شکل YYYY-MM-DD باشد.' });
+  }
+  const start = new Date(`${selectedKey}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime())) return res.status(400).json({ success: false, message: 'هفته نامعتبر است.' });
+  const end = new Date(start.getTime() + 7 * 86400000);
+  const positiveTypes = ['task', 'checkin', 'spin', 'referral_bonus'];
+  const settings = await Settings.getGlobal();
+  const standings = await PointsLedger.aggregate([
+    { $match: { createdAt: { $gte: start, $lt: end }, currency: 'points', amount: { $gt: 0 }, type: { $in: positiveTypes } } },
+    { $group: { _id: '$user', points: { $sum: '$amount' } } },
+    { $sort: { points: -1, _id: 1 } },
+    { $limit: 50 },
+    { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+    { $unwind: '$user' },
+    { $match: { 'user.isBanned': false } }
+  ]);
+  const awards = await WeeklyLeaderboardAward.find({ weekKey: selectedKey }).populate('user', 'firstName username telegramId').sort({ rank: 1 }).lean();
+  res.json({ success: true, weekKey: selectedKey, weekStart: start, weekEnd: end, isCurrentWeek: selectedKey === currentKey, prizes: settings.weeklyLeaderboardPrizes || [], standings: standings.map((row, index) => ({ rank: index + 1, points: row.points, user: row.user })), awards });
+});
+
+router.post('/weekly-leaderboard/:selectedWeekKey/pay', async (req, res) => {
+  const selectedKey = String(req.params.selectedWeekKey || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedKey)) return res.status(400).json({ success: false, message: 'weekKey نامعتبر است.' });
+  const start = new Date(`${selectedKey}T00:00:00.000Z`);
+  const end = new Date(start.getTime() + 7 * 86400000);
+  if (Number.isNaN(start.getTime())) return res.status(400).json({ success: false, message: 'هفته نامعتبر است.' });
+  if (end > new Date() && req.body?.force !== true) return res.status(409).json({ success: false, message: 'پرداخت جایزه تا پایان هفته امکان‌پذیر نیست؛ برای تست force=true ارسال کنید.' });
+
+  const settings = await Settings.getGlobal();
+  const prizes = (settings.weeklyLeaderboardPrizes || []).map(Number);
+  const positiveTypes = ['task', 'checkin', 'spin', 'referral_bonus'];
+  const standings = await PointsLedger.aggregate([
+    { $match: { createdAt: { $gte: start, $lt: end }, currency: 'points', amount: { $gt: 0 }, type: { $in: positiveTypes } } },
+    { $group: { _id: '$user', points: { $sum: '$amount' } } },
+    { $sort: { points: -1, _id: 1 } },
+    { $limit: prizes.length },
+    { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+    { $unwind: '$user' },
+    { $match: { 'user.isBanned': false } }
+  ]);
+
+  const results = [];
+  for (let index = 0; index < standings.length; index += 1) {
+    const rank = index + 1;
+    const points = Math.floor(Number(prizes[index]) || 0);
+    if (points <= 0) continue;
+    const row = standings[index];
+    try {
+      const payment = await withMongoTransaction(async session => {
+        const award = await WeeklyLeaderboardAward.findOneAndUpdate(
+          { weekKey: selectedKey, rank },
+          { $setOnInsert: { user: row._id, points, status: 'pending' } },
+          { upsert: true, new: true, setDefaultsOnInsert: true, session }
+        );
+        if (award.status === 'paid') return { status: 'already_paid', user: award.user };
+
+        const claimed = await WeeklyLeaderboardAward.findOneAndUpdate(
+          { _id: award._id, status: { $in: ['pending', 'failed'] } },
+          { $set: { status: 'processing', error: '' } },
+          { new: true, session }
+        );
+        if (!claimed) return { status: award.status, user: award.user };
+
+        const sourceId = `weekly-leaderboard:${selectedKey}:${rank}`;
+        const existingLedger = await PointsLedger.findOne({ sourceId }).session(session);
+        let updatedUser;
+        if (existingLedger) {
+          // مهاجرت امن Awardهایی که قبل از این اصلاح، User را افزایش داده
+          // اما در retry دوباره وارد مسیر پرداخت شده‌اند.
+          updatedUser = await User.findById(row._id).session(session);
+          if (!updatedUser) throw new Error('کاربر برنده پیدا نشد.');
+        } else {
+          updatedUser = await User.findOneAndUpdate(
+            { _id: row._id, isBanned: false },
+            { $inc: { points } },
+            { new: true, session }
+          );
+          if (!updatedUser) throw new Error('کاربر برنده پیدا نشد.');
+          await recordLedgerRequired({
+            user: updatedUser._id,
+            type: 'leaderboard_reward',
+            amount: points,
+            description: `جایزه رتبه ${rank} leaderboard هفته ${selectedKey}`,
+            balanceAfter: updatedUser.points,
+            sourceId,
+            session
+          });
+        }
+        await WeeklyLeaderboardAward.updateOne(
+          { _id: claimed._id, status: 'processing' },
+          { $set: { status: 'paid', paidAt: new Date(), error: '' } },
+          { session }
+        );
+        return { status: 'paid', user: updatedUser._id };
+      });
+
+      if (payment.status === 'already_paid') {
+        results.push({ rank, status: 'already_paid', points });
+        continue;
+      }
+      if (payment.status !== 'paid') {
+        results.push({ rank, status: payment.status, points });
+        continue;
+      }
+      if (row.user.telegramId) {
+        notifyUser(row.user.telegramId, botText('leaderboardReward', row.user.language, rank, points, selectedKey)).catch(() => {});
+      }
+      results.push({ rank, status: 'paid', points, user: payment.user });
+    } catch (error) {
+      await WeeklyLeaderboardAward.updateOne(
+        { weekKey: selectedKey, rank, status: 'processing' },
+        { $set: { status: 'failed', error: String(error.message || error).slice(0, 500) } }
+      );
+      results.push({ rank, status: 'failed', points, error: String(error.message || error) });
+    }
+  }
+  recordAdminLog({ actor: req.adminActor, action: 'weekly_leaderboard_pay', targetType: 'settings', details: `هفته ${selectedKey}: ${results.map(item => `${item.rank}:${item.status}`).join(', ')}` });
+  res.json({ success: true, weekKey: selectedKey, results });
+});
+
+// گزارش فقط‌خواندنی برای پیدا کردن اختلاف بین موجودی فعلی و جمع Ledger.
+// این endpoint هیچ موجودی را تغییر نمی‌دهد و برای کنترل قبل از پرداخت/برداشت است.
+router.get('/financial-audit', async (req, res) => {
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+  const [users, sums] = await Promise.all([
+    User.find({}).select('telegramId firstName username points gramBalance').limit(10000).lean(),
+    PointsLedger.aggregate([
+      { $group: { _id: { user: '$user', currency: '$currency' }, total: { $sum: '$amount' } } },
+      { $group: { _id: '$_id.user', values: { $push: { currency: '$_id.currency', total: '$total' } } } }
+    ])
+  ]);
+  const byUser = new Map(sums.map(row => [String(row._id), Object.fromEntries(row.values.map(item => [item.currency, item.total]))]));
+  const discrepancies = users.map(user => buildDiscrepancy(user, byUser.get(String(user._id)) || {})).filter(isDiscrepant).slice(0, limit);
+  res.json({ success: true, checkedUsers: users.length, discrepancyCount: discrepancies.length, discrepancies, generatedAt: new Date().toISOString() });
+});
+
+router.get('/ops-metrics', (req, res) => {
+  res.json({ success: true, metrics: metricsSnapshot(), node: process.version, environment: process.env.NODE_ENV || 'production', timestamp: new Date().toISOString() });
+});
+
 router.get('/withdrawals', async (req, res) => {
   const status = req.query.status;
   const filter = status ? { status } : {};
-  const list = await Withdrawal.find(filter)
-    .populate('user', 'firstName username telegramId')
-    .sort({ createdAt: -1 })
-    .limit(200);
+  const { page, limit, skip } = pageParams(req.query, 100, 300);
+  const [list, total] = await Promise.all([
+    Withdrawal.find(filter)
+      .populate('user', 'firstName username telegramId')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    Withdrawal.countDocuments(filter)
+  ]);
   res.json({
     success: true,
-    withdrawals: list.map(w => ({ ...w.toObject(), timeline: synthesizeHistory(w) }))
+    withdrawals: list.map(w => ({ ...w.toObject(), timeline: synthesizeHistory(w) })),
+    pagination: { page, limit, total, pages: Math.ceil(total / limit) }
   });
 });
 
@@ -335,6 +528,7 @@ router.get('/withdrawals', async (req, res) => {
  */
 router.post('/withdrawals/:id/approve', async (req, res) => {
   const txHash = String((req.body && req.body.txHash) || '').trim();
+  const txHashNormalized = normalizeTonTxHash(txHash);
   const forceManualConfirm = Boolean(req.body && req.body.forceManualConfirm);
 
   if (!txHash) {
@@ -345,6 +539,15 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
   if (!withdrawal) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
   if (!['pending', 'approved', 'processing'].includes(withdrawal.status)) {
     return res.status(400).json({ success: false, message: 'این درخواست قبلاً پردازش شده است.' });
+  }
+
+  // Early rejection; the unique index remains authoritative under concurrent approvals.
+  const duplicate = await Withdrawal.findOne({
+    _id: { $ne: withdrawal._id },
+    $or: [{ txHashNormalized }, { txHash: legacyTonTxHashMatcher(txHash) }]
+  }).select('_id');
+  if (duplicate) {
+    return res.status(409).json({ success: false, message: 'این TxID قبلاً برای برداشت دیگری ثبت شده است.', code: 'DUPLICATE_TX' });
   }
 
   const verification = await verifyTonTransaction({
@@ -371,30 +574,33 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
     });
   }
 
-  // یک TxID نباید برای دو برداشت متفاوت ثبت شود
-  const duplicate = await Withdrawal.findOne({ txHash, status: 'paid', _id: { $ne: withdrawal._id } });
-  if (duplicate) {
-    return res.status(400).json({ success: false, message: 'این TxID قبلاً برای برداشت دیگری ثبت شده است.', code: 'DUPLICATE_TX' });
-  }
-
   // atomic: از هر سه حالت غیرپایانی (pending/approved/processing) می‌توان پرداخت را نهایی کرد
   // (جلوگیری از تایید/رد هم‌زمان با شرط status فعلی)
-  const paid = await Withdrawal.findOneAndUpdate(
-    { _id: withdrawal._id, status: { $in: ['pending', 'approved', 'processing'] } },
-    {
-      $set: {
-        status: 'paid',
-        txHash,
-        verified: !verification.requiresManualAmountCheck,
-        verificationNote: verification.reason,
-        fromAddress: verification.fromAddress || '',
-        paidAt: new Date(),
-        adminNote: (req.body && req.body.note) || withdrawal.adminNote
+  let paid;
+  try {
+    paid = await Withdrawal.findOneAndUpdate(
+      { _id: withdrawal._id, status: { $in: ['pending', 'approved', 'processing'] } },
+      {
+        $set: {
+          status: 'paid',
+          txHash,
+          txHashNormalized,
+          verified: !verification.requiresManualAmountCheck,
+          verificationNote: verification.reason,
+          fromAddress: verification.fromAddress || '',
+          paidAt: new Date(),
+          adminNote: (req.body && req.body.note) || withdrawal.adminNote
+        },
+        $push: { statusHistory: { status: 'paid', at: new Date(), note: (req.body && req.body.note) || '' } }
       },
-      $push: { statusHistory: { status: 'paid', at: new Date(), note: (req.body && req.body.note) || '' } }
-    },
-    { new: true }
-  );
+      { new: true }
+    );
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ success: false, message: 'این TxID قبلاً برای برداشت دیگری ثبت شده است.', code: 'DUPLICATE_TX' });
+    }
+    throw error;
+  }
   if (!paid) {
     return res.status(400).json({ success: false, message: 'این درخواست قبلاً پردازش شده است.' });
   }
@@ -430,34 +636,18 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
   const existing = await Withdrawal.findById(req.params.id);
   if (!existing) return res.status(404).json({ success: false, message: 'رکورد پیدا نشد.' });
 
-  // atomic: فقط درخواستی که هنوز پرداخت/رد/لغو نشده رد می‌شود (pending، approved یا processing)
-  const withdrawal = await Withdrawal.findOneAndUpdate(
-    { _id: existing._id, status: { $in: ['pending', 'approved', 'processing'] } },
-    {
-      $set: { status: 'rejected', adminNote: reason },
-      $push: { statusHistory: { status: 'rejected', at: new Date(), note: reason } }
-    },
-    { new: true }
-  );
-  if (!withdrawal) {
-    return res.status(400).json({ success: false, message: 'این درخواست قبلاً پردازش شده است و قابل رد کردن نیست.' });
-  }
-
-  // مبلغ در زمان درخواست از «موجودی GRAM» کسر شده، پس همان ارز برگردانده می‌شود
-  const refunded = await User.findByIdAndUpdate(
-    withdrawal.user,
-    { $inc: { gramBalance: withdrawal.cryptoAmount } },
-    { new: true }
-  );
-  if (refunded) {
-    recordLedger({
-      user: refunded._id,
-      type: 'admin_adjust',
-      currency: 'gram',
-      amount: withdrawal.cryptoAmount,
-      description: 'بازگشت GRAM بابت رد درخواست برداشت',
-      balanceAfter: refunded.gramBalance
-    }).catch(() => {});
+  let withdrawal;
+  try {
+    ({ withdrawal } = await transitionWithdrawalWithRefund({
+      withdrawalId: existing._id,
+      targetStatus: 'rejected',
+      reason,
+      expectedStatus: existing.status,
+      allowedStatuses: ['pending', 'approved', 'processing']
+    }));
+  } catch (error) {
+    const status = error.code === 'WITHDRAWAL_NOT_FOUND' ? 404 : error.code === 'WITHDRAWAL_CONFLICT' ? 409 : 400;
+    return res.status(status).json({ success: false, message: error.message || 'بازگشت وجه انجام نشد.' });
   }
 
   res.json({ success: true, withdrawal });
@@ -502,38 +692,29 @@ router.post('/withdrawals/:id/status', async (req, res) => {
     return res.status(400).json({ success: false, message: `امکان تغییر وضعیت از «${existing.status}» به «${targetStatus}» وجود ندارد.` });
   }
 
-  // atomic: فقط اگر وضعیت فعلی هنوز همان است که خواندیم اعمال می‌شود (جلوگیری از تغییر هم‌زمان)
-  const update = {
-    $set: { status: targetStatus },
-    $push: { statusHistory: { status: targetStatus, at: new Date(), note: reason } }
-  };
-  if (targetStatus === 'cancelled') update.$set.adminNote = reason;
-
-  const withdrawal = await Withdrawal.findOneAndUpdate(
-    { _id: existing._id, status: existing.status },
-    update,
-    { new: true }
-  );
-  if (!withdrawal) {
-    return res.status(400).json({ success: false, message: 'وضعیت این درخواست هم‌زمان توسط جای دیگری تغییر کرده؛ صفحه را رفرش کنید.' });
-  }
-
-  // لغو هم مثل رد، وجه را برمی‌گرداند (چون از لحظه‌ی درخواست کسر شده بود)
+  let withdrawal;
   if (shouldRefund(targetStatus)) {
-    const refunded = await User.findByIdAndUpdate(
-      withdrawal.user,
-      { $inc: { gramBalance: withdrawal.cryptoAmount } },
+    try {
+      ({ withdrawal } = await transitionWithdrawalWithRefund({
+        withdrawalId: existing._id,
+        targetStatus,
+        reason,
+        expectedStatus: existing.status,
+        allowedStatuses: [existing.status]
+      }));
+    } catch (error) {
+      const status = error.code === 'WITHDRAWAL_NOT_FOUND' ? 404 : error.code === 'WITHDRAWAL_CONFLICT' ? 409 : 400;
+      return res.status(status).json({ success: false, message: error.message || 'لغو و بازگشت وجه انجام نشد.' });
+    }
+  } else {
+    // تغییر وضعیت غیرمالی همچنان با شرط وضعیت قبلی atomic است.
+    withdrawal = await Withdrawal.findOneAndUpdate(
+      { _id: existing._id, status: existing.status },
+      { $set: { status: targetStatus }, $push: { statusHistory: { status: targetStatus, at: new Date(), note: reason } } },
       { new: true }
     );
-    if (refunded) {
-      recordLedger({
-        user: refunded._id,
-        type: 'admin_adjust',
-        currency: 'gram',
-        amount: withdrawal.cryptoAmount,
-        description: 'بازگشت GRAM بابت لغو درخواست برداشت',
-        balanceAfter: refunded.gramBalance
-      }).catch(() => {});
+    if (!withdrawal) {
+      return res.status(400).json({ success: false, message: 'وضعیت این درخواست هم‌زمان توسط جای دیگری تغییر کرده؛ صفحه را رفرش کنید.' });
     }
   }
 
@@ -577,8 +758,181 @@ router.get('/users', async (req, res) => {
   const sortMap = { points: { points: -1 }, invited: { invitedCount: -1 }, newest: { createdAt: -1 }, oldest: { createdAt: 1 } };
   const sortBy = sortMap[sort] || sortMap.newest;
 
-  const users = await User.find(filter).select('-__v').sort(sortBy).limit(200);
-  res.json({ success: true, users });
+  const { page, limit, skip } = pageParams(req.query, 100, 300);
+  const [users, total] = await Promise.all([
+    User.find(filter).select('-__v -signupIpHash -referralRiskFlags -referralRiskScore').sort(sortBy).skip(skip).limit(limit).lean(),
+    User.countDocuments(filter)
+  ]);
+  res.json({ success: true, users, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+});
+
+function balanceField(currency) { return currency === 'gram' ? 'gramBalance' : 'points'; }
+function referralTransactionSummary(user) {
+  return {
+    referralLevel: user.referralLevel || null,
+    sourceUserId: user.sourceUserId || null,
+    recipientUserId: user.recipientUserId || null,
+    commissionRatePercent: user.commissionRatePercent ?? null,
+    earningTransactionId: user.earningTransactionId || ''
+  };
+}
+
+router.get('/users/:id/account', async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: 'شناسه کاربر نامعتبر است.' });
+  const user = await User.findById(req.params.id).select('-__v -signupIpHash -referralRiskFlags').lean();
+  if (!user) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
+  const [earned, gramTotal, withdrawals, referralCount, history, audits] = await Promise.all([
+    PointsLedger.aggregate([{ $match: { user: user._id, currency: 'points', amount: { $gt: 0 }, type: { $nin: ['exchange_in', 'admin_adjust'] } } }, { $group: { _id: null, total: { $sum: '$amount' } } }]),
+    PointsLedger.aggregate([{ $match: { user: user._id, currency: 'gram', amount: { $gt: 0 } } }, { $group: { _id: null, total: { $sum: '$amount' } } }]),
+    Withdrawal.aggregate([{ $match: { user: user._id, status: 'paid' } }, { $group: { _id: null, total: { $sum: '$cryptoAmount' } } }]),
+    User.countDocuments({ referredBy: user._id }),
+    PointsLedger.find({ user: user._id }).sort({ createdAt: -1 }).limit(100).lean(),
+    BalanceAudit.find({ userId: user._id }).sort({ createdAt: -1 }).limit(50).lean()
+  ]);
+  res.json({
+    success: true,
+    user,
+    balances: {
+      totalEarnedPoints: earned[0]?.total || 0,
+      currentPoints: Number(user.points) || 0,
+      totalGramCredited: gramTotal[0]?.total || 0,
+      currentGram: Number(user.gramBalance) || 0,
+      totalWithdrawnGram: withdrawals[0]?.total || 0,
+      referralCount,
+      activeReferralCount: Number(user.activeInvitedCount) || 0
+    },
+    transactions: history.map(entry => ({ ...entry, ...referralTransactionSummary(entry) })),
+    balanceAudits: audits
+  });
+});
+
+router.post('/users/:id/balance', async (req, res) => {
+  const { currency, action, reason } = req.body || {};
+  const actionId = String(req.body?.actionId || '').trim();
+  const cleanReason = String(reason || '').trim();
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: 'شناسه کاربر نامعتبر است.' });
+  if (!['points', 'gram'].includes(currency) || !['add', 'subtract', 'set', 'zero'].includes(action)) return res.status(400).json({ success: false, message: 'نوع موجودی یا عملیات نامعتبر است.' });
+  if (actionId.length < 8 || actionId.length > 150) return res.status(400).json({ success: false, message: 'Action ID معتبر و یکتا لازم است.' });
+  if (!cleanReason || cleanReason.length > 500) return res.status(400).json({ success: false, message: 'دلیل الزامی است و حداکثر ۵۰۰ نویسه می‌تواند باشد.' });
+  if (action === 'zero' && req.body?.confirmText !== 'ZERO') return res.status(400).json({ success: false, message: 'برای صفرکردن موجودی، تأیید صریح لازم است.' });
+  const amount = Number(req.body?.amount);
+  if (action !== 'zero' && (!Number.isFinite(amount) || (['add', 'subtract'].includes(action) ? amount <= 0 : amount < 0) || (action === 'set' && amount === 0) || (currency === 'points' && !Number.isInteger(amount)))) return res.status(400).json({ success: false, message: 'مقدار واردشده نامعتبر است؛ صفرکردن فقط با عملیات zero و تایید جداگانه ممکن است.' });
+  const roundedAmount = currency === 'gram' && action !== 'zero' ? Math.round(amount * 1e6) / 1e6 : amount;
+  const outcome = await withMongoTransaction(async session => {
+    const previousAction = await BalanceAudit.findOne({ actionId }).session(session);
+    if (previousAction) return { duplicate: true, audit: previousAction };
+    const user = await User.findById(req.params.id).session(session);
+    if (!user) return { missing: true };
+    const field = balanceField(currency);
+    const before = Number(user[field]) || 0;
+    const after = action === 'zero' ? 0 : action === 'set' ? roundedAmount : before + (action === 'subtract' ? -roundedAmount : roundedAmount);
+    if (after < 0) return { insufficient: true };
+    const change = after - before;
+    const updated = await User.findByIdAndUpdate(user._id, { $set: { [field]: after } }, { new: true, session });
+    const transactionId = `ADMIN-${crypto.createHash('sha256').update(actionId).digest('hex')}`;
+    await recordLedgerRequired({
+      user: updated._id,
+      type: 'admin_adjust',
+      currency,
+      amount: change,
+      description: `اصلاح موجودی توسط ادمین: ${cleanReason}`,
+      balanceAfter: after,
+      sourceId: `admin-balance:${actionId}`,
+      transactionId,
+      session
+    });
+    const audit = new BalanceAudit({
+      actionId,
+      adminId: String(req.adminId || 'legacy-admin-key'),
+      actor: String(req.adminActor || 'ادمین'),
+      userId: updated._id,
+      action,
+      currency,
+      before,
+      change,
+      after,
+      reason: cleanReason,
+      transactionId
+    });
+    await audit.save({ session });
+    return { updated, audit, duplicate: false };
+  });
+  if (outcome.missing) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
+  if (outcome.insufficient) return res.status(409).json({ success: false, message: 'کسر موجودی باعث منفی‌شدن موجودی می‌شود.' });
+  if (!outcome.duplicate) recordAdminLog({ actor: req.adminActor, action: `balance_${action}`, targetType: 'user', targetId: req.params.id, details: `${currency}; ${cleanReason}; actionId=${actionId}` });
+  res.json({ success: true, duplicate: outcome.duplicate, user: outcome.updated || null, audit: outcome.audit });
+});
+
+router.post('/users/bulk-balance', async (req, res) => {
+  const { currency, action, reason } = req.body || {};
+  const batchId = String(req.body?.actionId || '').trim();
+  const cleanReason = String(reason || '').trim();
+  const userIds = Array.isArray(req.body?.userIds) ? [...new Set(req.body.userIds.map(String))] : [];
+  if (!['points', 'gram'].includes(currency) || !['add', 'zero'].includes(action)) return res.status(400).json({ success: false, message: 'عملیات گروهی فقط برای افزودن یا صفرکردن Points/GRAM است.' });
+  if (batchId.length < 8 || batchId.length > 120) return res.status(400).json({ success: false, message: 'Batch Action ID معتبر و یکتا لازم است.' });
+  if (!cleanReason || cleanReason.length > 500) return res.status(400).json({ success: false, message: 'دلیل الزامی است و حداکثر ۵۰۰ نویسه می‌تواند باشد.' });
+  if (!userIds.length || userIds.length > 100 || userIds.some(id => !mongoose.Types.ObjectId.isValid(id))) return res.status(400).json({ success: false, message: '۱ تا ۱۰۰ شناسه کاربر معتبر انتخاب کنید.' });
+  if (action === 'zero' && req.body?.confirmText !== 'ZERO') return res.status(400).json({ success: false, message: 'برای صفرکردن گروهی، تأیید صریح لازم است.' });
+  const amount = Number(req.body?.amount);
+  if (action === 'add' && (!Number.isFinite(amount) || amount <= 0 || (currency === 'points' && !Number.isInteger(amount)))) return res.status(400).json({ success: false, message: 'مقدار مثبت و معتبر لازم است.' });
+  const value = currency === 'gram' && action === 'add' ? Math.round(amount * 1e6) / 1e6 : amount;
+  const outcome = await withMongoTransaction(async session => {
+    const results = [];
+    for (const id of userIds) {
+      const actionId = `${batchId}:${id}`;
+      const existing = await BalanceAudit.findOne({ actionId }).session(session);
+      if (existing) { results.push({ userId: id, duplicate: true }); continue; }
+      const user = await User.findById(id).session(session);
+      if (!user) throw new Error(`کاربر با شناسه ${id} پیدا نشد؛ کل عملیات لغو شد.`);
+      const field = balanceField(currency);
+      const before = Number(user[field]) || 0;
+      const after = action === 'zero' ? 0 : before + value;
+      const change = after - before;
+      const updated = await User.findByIdAndUpdate(user._id, { $set: { [field]: after } }, { new: true, session });
+      const transactionId = `ADMIN-${crypto.createHash('sha256').update(actionId).digest('hex')}`;
+      await recordLedgerRequired({
+        user: updated._id, type: 'admin_adjust', currency, amount: change,
+        description: `اصلاح گروهی موجودی توسط ادمین: ${cleanReason}`,
+        balanceAfter: after, sourceId: `admin-balance:${actionId}`, transactionId, session
+      });
+      const audit = new BalanceAudit({
+        actionId, batchId, adminId: String(req.adminId || 'legacy-admin-key'), actor: String(req.adminActor || 'ادمین'),
+        userId: updated._id, action, currency, before, change, after, reason: cleanReason, transactionId
+      });
+      await audit.save({ session });
+      results.push({ userId: id, duplicate: false, before, change, after });
+    }
+    return results;
+  });
+  recordAdminLog({ actor: req.adminActor, action: `bulk_balance_${action}`, targetType: 'user_batch', targetId: batchId, details: `${userIds.length} users; ${currency}; ${cleanReason}` });
+  res.json({ success: true, batchId, results: outcome });
+});
+
+router.post('/users/:id/review-status', async (req, res) => {
+  const status = String(req.body?.status || '').trim();
+  const actionId = String(req.body?.actionId || '').trim();
+  const reason = String(req.body?.reason || '').trim();
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: 'شناسه کاربر نامعتبر است.' });
+  if (!['normal', 'under_review', 'restricted', 'fraud_review'].includes(status)) return res.status(400).json({ success: false, message: 'وضعیت بررسی نامعتبر است.' });
+  if (actionId.length < 8 || actionId.length > 150 || !reason || reason.length > 500) return res.status(400).json({ success: false, message: 'Action ID یکتا و دلیل حداکثر ۵۰۰ نویسه الزامی است.' });
+  const outcome = await withMongoTransaction(async session => {
+    const existing = await BalanceAudit.findOne({ actionId }).session(session);
+    if (existing) return { duplicate: true, audit: existing };
+    const user = await User.findById(req.params.id).session(session);
+    if (!user) return { missing: true };
+    const before = user.accountReviewStatus || 'normal';
+    user.accountReviewStatus = status;
+    await user.save({ session });
+    const audit = new BalanceAudit({
+      actionId, adminId: String(req.adminId || 'legacy-admin-key'), actor: String(req.adminActor || 'ادمین'),
+      userId: user._id, action: 'account_status', currency: 'account', statusBefore: before, statusAfter: status, reason
+    });
+    await audit.save({ session });
+    return { duplicate: false, user, audit };
+  });
+  if (outcome.missing) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
+  if (!outcome.duplicate) recordAdminLog({ actor: req.adminActor, action: 'user_review_status', targetType: 'user', targetId: req.params.id, details: `${outcome.audit.statusBefore} -> ${status}; ${reason}` });
+  res.json({ success: true, duplicate: outcome.duplicate, user: outcome.user || null, audit: outcome.audit });
 });
 
 router.post('/users/:id/ban', async (req, res) => {
@@ -777,7 +1131,12 @@ router.get('/settings', async (req, res) => {
   const settings = await Settings.getGlobal();
   res.json({
     success: true,
-    settings: { ...settings.toObject(), paidSpinWeights: resolveWeights(settings.paidSpinWeights) },
+    settings: {
+      ...settings.toObject(),
+      paidSpinWeights: resolveWeights(settings.paidSpinWeights),
+      referralInitialRewardPoints: DEFAULT_REFERRAL_INITIAL_REWARD_POINTS,
+      referralLevelRates: safeAdminReferralRates(settings)
+    },
     spinModel: spinModel(),
     timezones: COMMON_TIMEZONES
   });
@@ -829,6 +1188,30 @@ router.put('/settings', async (req, res) => {
     }
     changes.dailyReminderMessage = msg;
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'weeklyLeaderboardEnabled')) {
+    changes.weeklyLeaderboardEnabled = body.weeklyLeaderboardEnabled === true || body.weeklyLeaderboardEnabled === 'true';
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'weeklyLeaderboardPrizes')) {
+    const prizes = Array.isArray(body.weeklyLeaderboardPrizes) ? body.weeklyLeaderboardPrizes.map(Number) : null;
+    if (!prizes || prizes.length < 3 || prizes.length > 10 || prizes.some(value => !Number.isInteger(value) || value < 0 || value > 100000000)) {
+      return res.status(400).json({ success: false, message: 'جوایز leaderboard هفتگی باید ۳ تا ۱۰ عدد صحیح غیرمنفی باشد.' });
+    }
+    changes.weeklyLeaderboardPrizes = prizes;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'referralInitialRewardPoints')) {
+    const points = Number(body.referralInitialRewardPoints);
+    if (points !== DEFAULT_REFERRAL_INITIAL_REWARD_POINTS) {
+      return res.status(400).json({ success: false, message: 'پاداش دعوت مستقیم طبق سیاست فعلی دقیقاً ۱۰ Points است.' });
+    }
+    changes.referralInitialRewardPoints = DEFAULT_REFERRAL_INITIAL_REWARD_POINTS;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'referralLevelRates')) {
+    try {
+      changes.referralLevelRates = normalizeReferralRates(body.referralLevelRates);
+    } catch (error) {
+      return res.status(400).json({ success: false, message: `نرخ‌های Referral نامعتبر است: ${error.message}` });
+    }
+  }
 
   const settings = await Settings.getGlobal();
 
@@ -859,7 +1242,12 @@ router.put('/settings', async (req, res) => {
   await settings.save();
   res.json({
     success: true,
-    settings: { ...settings.toObject(), paidSpinWeights: resolveWeights(settings.paidSpinWeights) },
+    settings: {
+      ...settings.toObject(),
+      paidSpinWeights: resolveWeights(settings.paidSpinWeights),
+      referralInitialRewardPoints: DEFAULT_REFERRAL_INITIAL_REWARD_POINTS,
+      referralLevelRates: safeAdminReferralRates(settings)
+    },
     spinModel: spinModel(),
     timezones: COMMON_TIMEZONES
   });
@@ -911,7 +1299,12 @@ router.get('/stats', async (req, res) => {
     totalUsers,
     bannedUsers,
     totalReferred,
-    convertedReferred,
+    activeReferred,
+    legacyConvertedReferred,
+    initialRewardedReferred,
+    referralCommissionStats,
+    referralLevelStats,
+    topReferralActivity,
     pendingWithdrawals,
     paidTodayAgg,
     newUsersTrend,
@@ -922,7 +1315,41 @@ router.get('/stats', async (req, res) => {
     User.countDocuments({}),
     User.countDocuments({ isBanned: true }),
     User.countDocuments({ referredBy: { $ne: null } }),
+    User.countDocuments({ referredBy: { $ne: null }, referralEligibilityStatus: 'eligible' }),
     User.countDocuments({ referredBy: { $ne: null }, referralBonusAwarded: true }),
+    ReferralRelationship.countDocuments({ level: 1, initialRewardStatus: 'paid' }),
+    PointsLedger.aggregate([
+      { $match: { type: 'referral_commission', currency: 'points', amount: { $gt: 0 } } },
+      { $group: { _id: null, totalPoints: { $sum: '$amount' }, transactions: { $sum: 1 } } }
+    ]),
+    ReferralRelationship.aggregate([
+      { $group: {
+        _id: '$level',
+        members: { $sum: 1 },
+        activeMembers: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } }
+      } },
+      { $sort: { _id: 1 } }
+    ]),
+    User.aggregate([
+      { $match: { referredBy: { $ne: null } } },
+      { $group: {
+        _id: '$referredBy',
+        totalReferrals: { $sum: 1 },
+        activeReferrals: { $sum: { $cond: [{ $eq: ['$referralEligibilityStatus', 'eligible'] }, 1, 0] } }
+      } },
+      { $sort: { totalReferrals: -1, activeReferrals: -1 } },
+      { $limit: 10 },
+      { $lookup: { from: User.collection.name, localField: '_id', foreignField: '_id', as: 'owner' } },
+      { $unwind: { path: '$owner', preserveNullAndEmptyArrays: true } },
+      { $project: {
+        _id: 0,
+        userId: '$_id',
+        firstName: '$owner.firstName',
+        username: '$owner.username',
+        totalReferrals: 1,
+        activeReferrals: 1
+      } }
+    ]),
     Withdrawal.countDocuments({ status: 'pending' }),
     Withdrawal.aggregate([
       { $match: { status: 'paid', paidAt: { $gte: startOfToday } } },
@@ -939,6 +1366,9 @@ router.get('/stats', async (req, res) => {
   ]);
 
   // پر کردن روزهای بدون داده با صفر، تا نمودار ۷ ستون کامل داشته باشد
+  const convertedReferred = legacyConvertedReferred + initialRewardedReferred;
+  const referralCommissionTotalPoints = Number(referralCommissionStats[0]?.totalPoints) || 0;
+  const referralCommissionTransactions = Number(referralCommissionStats[0]?.transactions) || 0;
   function buildTrend(aggResult) {
     const map = new Map(aggResult.map(r => [r._id, r.count]));
     const days = [];
@@ -960,8 +1390,23 @@ router.get('/stats', async (req, res) => {
       totalUsers,
       bannedUsers,
       totalReferred,
+      activeReferred,
       convertedReferred,
       referralConversionRate,
+      referralCommissionTotalPoints,
+      referralCommissionTransactions,
+      referralLevelStats: referralLevelStats.map(row => ({
+        level: Number(row._id) || null,
+        members: Number(row.members) || 0,
+        activeMembers: Number(row.activeMembers) || 0
+      })),
+      topReferralActivity: topReferralActivity.map(row => ({
+        userId: String(row.userId || ''),
+        firstName: String(row.firstName || ''),
+        username: String(row.username || ''),
+        totalReferrals: Number(row.totalReferrals) || 0,
+        activeReferrals: Number(row.activeReferrals) || 0
+      })),
       pendingWithdrawals,
       paidToday: paidTodayAgg,
       newUsersTrend: buildTrend(newUsersTrend),
@@ -980,9 +1425,12 @@ router.get('/logs', async (req, res) => {
   if (action) filter.action = action;
   if (targetType) filter.targetType = targetType;
 
-  const limit = Math.min(Number(req.query.limit) || 100, 300);
-  const logs = await AdminLog.find(filter).sort({ createdAt: -1 }).limit(limit);
-  res.json({ success: true, logs });
+  const { page, limit, skip } = pageParams(req.query, 100, 300);
+  const [logs, total] = await Promise.all([
+    AdminLog.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    AdminLog.countDocuments(filter)
+  ]);
+  res.json({ success: true, logs, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
 });
 
 /* -------------------- BROADCAST (پیام همگانی) -------------------- */
@@ -995,7 +1443,7 @@ router.post('/broadcast', upload.single('image'), async (req, res) => {
     return res.status(400).json({ success: false, message: 'متن پیام الزامی است.' });
   }
 
-  const users = await User.find({ isBanned: false }, 'telegramId');
+  const users = await User.find({ isBanned: false, telegramBlockedAt: null }, 'telegramId');
   let sent = 0;
   let failed = 0;
 
@@ -1029,6 +1477,7 @@ router.post('/broadcast', upload.single('image'), async (req, res) => {
           }
           sent += 1;
         } catch (error) {
+          if (isTelegramDeliveryBlocked(error)) await markTelegramBlocked(user.telegramId);
           failed += 1;
         }
       })

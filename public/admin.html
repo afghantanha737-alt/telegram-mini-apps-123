@@ -122,24 +122,33 @@
     <!-- TASKS -->
     <div id="tab-tasks" class="tabContent">
       <div class="card">
-        <div class="flexBetween"><b id="taskFormTitle">افزودن تسک تلگرامی جدید</b></div>
-        <p class="small">در حال حاضر فقط تسک‌های عضویت در کانال/گروه تلگرام فعال است — عضویت به‌صورت خودکار توسط خود تلگرام بررسی می‌شود. ارسال Proof دستی هنوز فعال نشده است.</p>
+        <div class="flexBetween"><b id="taskFormTitle">افزودن تسک جدید</b></div>
+        <p class="small">روش بررسی را انتخاب کنید. در Screenshot Verification، کاربر تصویر مدرک را ارسال می‌کند و پاداش فقط پس از تأیید ادمین پرداخت می‌شود.</p>
         <label>عنوان</label>
-        <input id="taskTitle" placeholder="مثلاً عضویت در کانال تلگرام">
+        <input id="taskTitle" placeholder="مثلاً دانلود اپلیکیشن یا Follow صفحه">
         <label>توضیحات (اختیاری)</label>
-        <input id="taskDesc" placeholder="توضیح کوتاه">
-        <label>نوع نمایشی</label>
+        <textarea id="taskDesc" rows="3" placeholder="توضیحات و دستور انجام کار"></textarea>
+        <label>روش بررسی</label>
+        <select id="taskVerifyType" onchange="toggleTaskVerificationFields()">
+          <option value="telegram">بررسی خودکار عضویت Telegram</option>
+          <option value="manual">Screenshot Verification — بررسی دستی</option>
+        </select>
+        <label>دسته‌بندی نمایشی</label>
         <select id="taskType">
           <option value="channel">عضویت کانال</option>
           <option value="group">عضویت گروه</option>
+          <option value="link">باز کردن لینک</option>
+          <option value="custom">عمومی</option>
         </select>
-        <label>آیدی/یوزرنیم کانال یا گروه (chatId)</label>
-        <input id="taskChatId" placeholder="مثلاً @mychannel یا -1001234567890">
-        <p class="small">⚠️ ربات باید ادمین همین کانال/گروه باشد. برای سوپرگروه/کانال با آیدی عددی، حتماً باید با <b>-100</b> شروع بشه (مثلاً -1001234567890)، وگرنه تلگرام خطای «chat not found» می‌ده.</p>
-        <button type="button" class="secondary" onclick="testChatId()" style="margin-bottom:10px">🔍 تست chatId</button>
-        <div id="chatIdTestResult" class="small" style="margin-bottom:10px"></div>
-        <label>لینک عضویت (برای دکمه‌ی «باز کردن لینک»)</label>
-        <input id="taskUrl" placeholder="https://t.me/...">
+        <div id="telegramVerifyFields">
+          <label>آیدی/یوزرنیم کانال یا گروه (chatId)</label>
+          <input id="taskChatId" placeholder="مثلاً @mychannel یا -1001234567890">
+          <p class="small">⚠️ ربات باید ادمین همین کانال/گروه باشد. برای سوپرگروه/کانال با آیدی عددی، حتماً باید با <b>-100</b> شروع بشه.</p>
+          <button type="button" class="secondary" onclick="testChatId()" style="margin-bottom:10px">🔍 تست chatId</button>
+          <div id="chatIdTestResult" class="small" style="margin-bottom:10px"></div>
+        </div>
+        <label>لینک انجام Task (اختیاری؛ برای دکمه‌ی «باز کردن لینک»)</label>
+        <input id="taskUrl" placeholder="https://...">
         <label>مقدار پاداش (پوینت)</label>
         <input id="taskReward" type="number" placeholder="مثلاً 100">
         <label>حداکثر تعداد تکمیل (اختیاری — برای تسک اسپانسری نادیده گرفته می‌شود)</label>
@@ -150,6 +159,10 @@
         <label style="display:flex;align-items:center;gap:8px;margin:8px 0 12px">
           <input type="checkbox" id="taskSpecialOfDay" style="width:auto">
           <b>⭐ Special Task of the Day</b>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;margin:8px 0 12px">
+          <input type="checkbox" id="taskIsActive" style="width:auto" checked>
+          <b>Task فعال باشد</b>
         </label>
 
         <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
@@ -195,6 +208,19 @@
           </select>
         </div>
         <div id="tasksList" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <div class="flexBetween"><b>📸 Screenshot Submissions</b><button type="button" class="secondary" onclick="loadScreenshotSubmissions()">تازه‌سازی</button></div>
+        <div class="row" style="margin-top:10px">
+          <select id="screenshotSubmissionFilter" onchange="loadScreenshotSubmissions()" style="max-width:220px">
+            <option value="pending">در انتظار بررسی</option>
+            <option value="rejected">ردشده‌ها</option>
+            <option value="approved">تأییدشده‌ها</option>
+            <option value="all">همه</option>
+          </select>
+        </div>
+        <div id="screenshotSubmissions" style="margin-top:10px"></div>
       </div>
     </div>
 
@@ -460,6 +486,13 @@
   </div>
 </div>
 
+<div id="screenshotImageModal" role="dialog" aria-modal="true" aria-label="Screenshot submission" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.82);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this) closeScreenshotImage()">
+  <div style="max-width:96vw;max-height:94vh;background:var(--card);padding:12px;border-radius:14px;overflow:auto;text-align:center">
+    <button type="button" class="secondary" onclick="closeScreenshotImage()" style="margin-bottom:10px">بستن</button>
+    <img id="screenshotImagePreview" alt="Screenshot submission" style="display:block;max-width:90vw;max-height:82vh;object-fit:contain;border-radius:8px">
+  </div>
+</div>
+
 <script>
 "use strict";
 
@@ -547,7 +580,7 @@ function switchTab(tab) {
   document.querySelectorAll(".tabs button").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
   document.getElementById("tab-" + tab).classList.remove("hidden");
   if (tab === "stats") loadStats();
-  if (tab === "tasks") loadTasks();
+  if (tab === "tasks") { loadTasks(); loadScreenshotSubmissions(); }
   if (tab === "withdrawals") loadWithdrawals();
   if (tab === "users") loadUsers();
   if (tab === "logs") loadLogs();
@@ -719,7 +752,7 @@ async function loadTasks() {
               : "—";
             return `
             <tr>
-              <td>${escapeHtml(t.title)}<br><span class="small" style="direction:ltr">${escapeHtml(t.chatId || "—")}</span>${sponsorLabel}${expiryLabel}</td>
+              <td>${escapeHtml(t.title)}<br><span class="badge info">${t.verifyType === "manual" ? "📸 Screenshot Verification" : "Telegram Verification"}</span>${t.verifyType !== "manual" && t.chatId ? `<br><span class="small" style="direction:ltr">${escapeHtml(t.chatId)}</span>` : ""}${sponsorLabel}${expiryLabel}</td>
               <td>${t.reward}</td>
               <td>${t.completedCount || 0}</td>
               <td>${hasLimit ? t.maxCompletions : "بدون محدودیت"}</td>
@@ -727,7 +760,7 @@ async function loadTasks() {
               <td>${profitCell}</td>
               <td>${statusLabel}${isExpired && t.isActive ? '<br><span class="badge pending">منقضی</span>' : ""}</td>
               <td class="row">
-                <button class="secondary" onclick="testExistingChatId('${(t.chatId || '').replaceAll("'", "\\'")}',this)">تست</button>
+                ${t.verifyType !== "manual" ? `<button class="secondary" onclick="testExistingChatId('${(t.chatId || '').replaceAll("'", "\\'")}',this)">تست</button>` : ""}
                 <button class="secondary" onclick="editTask('${t._id}')">ویرایش</button>
                 <button class="secondary" onclick="toggleTask('${t._id}', ${!t.isActive})">${t.isActive ? "غیرفعال" : "فعال"}</button>
                 <button class="danger" onclick="deleteTask('${t._id}')">حذف</button>
@@ -740,6 +773,92 @@ async function loadTasks() {
   } catch (error) {
     container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }
+}
+
+async function loadScreenshotSubmissions() {
+  const container = document.getElementById("screenshotSubmissions");
+  if (!container) return;
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  const status = document.getElementById("screenshotSubmissionFilter")?.value || "pending";
+  try {
+    const data = await api(`/api/admin/task-submissions?status=${encodeURIComponent(status)}`);
+    const submissions = Array.isArray(data.submissions) ? data.submissions : [];
+    if (!submissions.length) {
+      container.innerHTML = '<div class="empty">submission تصویری برای این وضعیت وجود ندارد.</div>';
+      return;
+    }
+    const labels = { pending: "در انتظار بررسی", approved: "تأیید شد", rejected: "رد شد" };
+    container.innerHTML = `<div style="overflow:auto"><table>
+      <thead><tr><th>کاربر</th><th>Task</th><th>Screenshot</th><th>Reward</th><th>تاریخ ارسال</th><th>وضعیت/عملیات</th></tr></thead>
+      <tbody>${submissions.map(item => {
+        const userName = item.user
+          ? [item.user.firstName, item.user.lastName].filter(Boolean).join(" ") || item.user.username || item.user.telegramId
+          : "کاربر حذف‌شده";
+        const submitted = item.submittedAt || item.createdAt;
+        const statusLabel = labels[item.status] || item.status;
+        return `<tr>
+          <td>${escapeHtml(userName)}<br><span class="small">${escapeHtml(item.user?.telegramId || "—")}</span></td>
+          <td>${escapeHtml(item.task?.title || "Task حذف‌شده")}</td>
+          <td><button class="secondary" type="button" onclick="viewScreenshotSubmission('${item._id}')">مشاهده تصویر</button></td>
+          <td>+${escapeHtml(item.reward)} Points</td>
+          <td>${submitted ? new Date(submitted).toLocaleString("fa-IR") : "—"}</td>
+          <td><span class="badge ${item.status === "approved" ? "approved" : item.status === "rejected" ? "rejected" : "pending"}">${escapeHtml(statusLabel)}</span>
+            ${item.status === "pending" ? `<div class="row" style="margin-top:6px"><button type="button" onclick="approveScreenshotSubmission('${item._id}')">تأیید و پرداخت</button><button type="button" class="danger" onclick="rejectScreenshotSubmission('${item._id}')">رد</button></div>` : ""}
+            ${item.status === "rejected" && item.adminNote ? `<div class="small">دلیل: ${escapeHtml(item.adminNote)}</div>` : ""}
+          </td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table></div>`;
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+let screenshotImageObjectUrl = "";
+async function viewScreenshotSubmission(id) {
+  try {
+    const response = await fetch(`/api/admin/task-submissions/${encodeURIComponent(id)}/image`, {
+      headers: { "x-admin-session": ADMIN_SESSION }
+    });
+    if (!response.ok) {
+      let data = {};
+      try { data = await response.json(); } catch {}
+      throw new Error(data.message || "تصویر در دسترس نیست.");
+    }
+    const blob = await response.blob();
+    if (screenshotImageObjectUrl) URL.revokeObjectURL(screenshotImageObjectUrl);
+    screenshotImageObjectUrl = URL.createObjectURL(blob);
+    document.getElementById("screenshotImagePreview").src = screenshotImageObjectUrl;
+    document.getElementById("screenshotImageModal").style.display = "flex";
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+function closeScreenshotImage() {
+  document.getElementById("screenshotImageModal").style.display = "none";
+  document.getElementById("screenshotImagePreview").removeAttribute("src");
+  if (screenshotImageObjectUrl) URL.revokeObjectURL(screenshotImageObjectUrl);
+  screenshotImageObjectUrl = "";
+}
+
+async function approveScreenshotSubmission(id) {
+  if (!confirm("این Screenshot را تأیید و پاداش ثبت‌شده در سرور را پرداخت می‌کنید؟")) return;
+  try {
+    const result = await api(`/api/admin/task-submissions/${id}/approve`, { method: "POST", body: JSON.stringify({}) });
+    showMsg(`تأیید شد؛ ${result.reward} پوینت پرداخت شد.`, "success");
+    await Promise.all([loadScreenshotSubmissions(), loadTasks()]);
+  } catch (error) { showMsg(error.message, "error"); }
+}
+
+async function rejectScreenshotSubmission(id) {
+  const note = prompt("دلیل رد را وارد کنید (اختیاری؛ کاربر می‌تواند دوباره ارسال کند):", "");
+  if (note === null) return;
+  try {
+    await api(`/api/admin/task-submissions/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) });
+    showMsg("Screenshot رد شد؛ کاربر می‌تواند تصویر جدید ارسال کند.", "success");
+    loadScreenshotSubmissions();
+  } catch (error) { showMsg(error.message, "error"); }
 }
 
 async function testChatId() {
@@ -791,18 +910,25 @@ async function runChatIdCheck(chatId, resultEl) {
   }
 }
 
+function toggleTaskVerificationFields() {
+  const isTelegram = document.getElementById("taskVerifyType").value === "telegram";
+  document.getElementById("telegramVerifyFields").classList.toggle("hidden", !isTelegram);
+}
+
 function readTaskForm() {
   const maxCompletionsRaw = document.getElementById("taskMaxCompletions").value.trim();
   return {
     title: document.getElementById("taskTitle").value.trim(),
     description: document.getElementById("taskDesc").value.trim(),
     type: document.getElementById("taskType").value,
+    verifyType: document.getElementById("taskVerifyType").value,
     chatId: document.getElementById("taskChatId").value.trim(),
     url: document.getElementById("taskUrl").value.trim(),
     reward: Number(document.getElementById("taskReward").value),
     maxCompletions: maxCompletionsRaw ? Number(maxCompletionsRaw) : null,
     expiresAt: document.getElementById("taskExpiresAt").value || null,
     isSpecialOfDay: document.getElementById("taskSpecialOfDay").checked,
+    isActive: document.getElementById("taskIsActive").checked,
     isSponsored: document.getElementById("taskSponsored").checked,
     sponsorName: document.getElementById("sponsorName").value.trim(),
     sponsorPriceUsd: Number(document.getElementById("sponsorPrice").value) || 0,
@@ -814,19 +940,22 @@ function resetTaskForm() {
   editingTaskId = null;
   ["taskTitle","taskDesc","taskUrl","taskReward","taskChatId","taskMaxCompletions","taskExpiresAt","sponsorName","sponsorPrice","sponsorBudget"]
     .forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("taskVerifyType").value = "telegram";
+  document.getElementById("taskIsActive").checked = true;
   document.getElementById("taskSponsored").checked = false;
   document.getElementById("taskSpecialOfDay").checked = false;
   toggleSponsorFields();
   document.getElementById("chatIdTestResult").textContent = "";
-  document.getElementById("taskFormTitle").textContent = "افزودن تسک تلگرامی جدید";
+  document.getElementById("taskFormTitle").textContent = "افزودن تسک جدید";
   document.getElementById("taskSubmitBtn").textContent = "افزودن تسک";
   document.getElementById("taskCancelBtn").classList.add("hidden");
+  toggleTaskVerificationFields();
 }
 
 async function addTask(force) {
   const form = readTaskForm();
   if (!form.title || !form.reward) return showMsg("عنوان و مقدار پاداش الزامی است.", "error");
-  if (!form.chatId) return showMsg("chatId الزامی است.", "error");
+  if (form.verifyType === "telegram" && !form.chatId) return showMsg("chatId برای تسک تلگرامی الزامی است.", "error");
   if (form.isSponsored && !form.sponsorName) return showMsg("نام تبلیغ‌دهنده الزامی است.", "error");
 
   try {
@@ -852,17 +981,20 @@ function editTask(id) {
     document.getElementById("taskTitle").value = t.title || "";
     document.getElementById("taskDesc").value = t.description || "";
     document.getElementById("taskType").value = t.type || "channel";
+    document.getElementById("taskVerifyType").value = t.verifyType || "telegram";
     document.getElementById("taskChatId").value = t.chatId || "";
     document.getElementById("taskUrl").value = t.url || "";
     document.getElementById("taskReward").value = t.reward ?? "";
     document.getElementById("taskMaxCompletions").value = t.isSponsored ? "" : (t.maxCompletions ?? "");
     document.getElementById("taskExpiresAt").value = t.expiresAt ? new Date(t.expiresAt).toISOString().slice(0, 10) : "";
     document.getElementById("taskSpecialOfDay").checked = !!t.isSpecialOfDay;
+    document.getElementById("taskIsActive").checked = t.isActive !== false;
     document.getElementById("taskSponsored").checked = !!t.isSponsored;
     document.getElementById("sponsorName").value = t.sponsorName || "";
     document.getElementById("sponsorPrice").value = t.sponsorPriceUsd || "";
     document.getElementById("sponsorBudget").value = t.sponsorBudgetUsd || "";
     toggleSponsorFields();
+    toggleTaskVerificationFields();
     document.getElementById("taskFormTitle").textContent = "ویرایش تسک: " + t.title;
     document.getElementById("taskSubmitBtn").textContent = "ذخیره‌ی تغییرات";
     document.getElementById("taskCancelBtn").classList.remove("hidden");

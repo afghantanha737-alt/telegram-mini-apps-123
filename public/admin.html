@@ -776,6 +776,7 @@ async function loadTasks() {
               <td>${profitCell}</td>
               <td>${statusLabel}${isExpired && t.isActive ? '<br><span class="badge pending">منقضی</span>' : ""}</td>
               <td class="row">
+                ${t.verifyType === "latest_post" ? `<button class="secondary" onclick="diagnoseLatestPostTask('${t._id}',this)">تشخیص</button>` : ""}
                 ${t.verifyType !== "manual" ? `<button class="secondary" onclick="testExistingChatId('${(t.chatId || '').replaceAll("'", "\\'")}',this)">تست</button>` : ""}
                 <button class="secondary" onclick="editTask('${t._id}')">ویرایش</button>
                 <button class="secondary" onclick="toggleTask('${t._id}', ${!t.isActive})">${t.isActive ? "غیرفعال" : "فعال"}</button>
@@ -910,6 +911,33 @@ async function testExistingChatId(chatId, buttonEl) {
       body: JSON.stringify({ chatId })
     });
     alert(result.message);
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    buttonEl.textContent = original;
+    buttonEl.disabled = false;
+  }
+}
+
+async function diagnoseLatestPostTask(taskId, buttonEl) {
+  const original = buttonEl.textContent;
+  buttonEl.textContent = "در حال بررسی...";
+  buttonEl.disabled = true;
+  try {
+    const result = await api(`/api/admin/tasks/${encodeURIComponent(taskId)}/latest-post-diagnostics`);
+    const updates = result.webhook.allowedUpdates.length ? result.webhook.allowedUpdates.join(", ") : "پیش‌فرض Telegram";
+    const lines = [
+      `ربات ادمین کانال: ${result.botChannel.isAdmin ? "بله" : "خیر"}${result.botChannel.status ? ` (${result.botChannel.status})` : ""}`,
+      `Webhook تنظیم است: ${result.webhook.configured ? "بله" : "خیر"}`,
+      `Webhook برای APP_URL فعلی: ${result.webhook.urlMatchesExpected ? "بله" : "خیر"}`,
+      `Allowed updates: ${updates}`,
+      `Updateهای لازمِ غایب: ${result.missingUpdates.join(", ") || "هیچ‌کدام"}`,
+      `آخرین پست ثبت‌شده: ${result.task.latestPostMessageId || "وجود ندارد"}`,
+      `Pending updates: ${result.webhook.pendingUpdateCount}`,
+      result.webhook.lastErrorMessage ? `آخرین خطای Telegram: ${result.webhook.lastErrorMessage}` : ""
+    ].filter(Boolean);
+    if (result.pendingIssues.length) lines.push("\nموارد نیازمند اصلاح:\n• " + result.pendingIssues.join("\n• "));
+    alert(lines.join("\n"));
   } catch (error) {
     alert(error.message);
   } finally {

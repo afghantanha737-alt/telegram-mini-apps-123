@@ -80,12 +80,85 @@ router.post('/login', async (req, res) => {
 });
 
 router.use(requireAdmin);
-
 router.post('/logout', (req, res) => {
   revokeAdminSession(req.headers['x-admin-session']);
   res.json({ success: true });
 });
+router.get('/tasks/:id/latest-post-diagnostics', async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(404).json({ success: false, message: 'تسک پیدا نشد.' });
+  }
+  const task = await Task.findById(req.params.id)
+    .select('title verifyType chatId latestPostMessageId latestPostDate requiredReaction')
+    .lean();
+  if (!task || task.verifyType !== 'latest_post') {
+    return res.status(404).json({ success: false, message: 'Latest Post Task پیدا نشد.' });
+  }
+  if (!bot) return res.status(503).json({ success: false, message: 'BOT_TOKEN تنظیم نشده است.' });
 
+  const webhook = { configured: false, url: '', urlMatchesExpected: false, allowedUpdates: [], pendingUpdateCount: 0, lastErrorMessage: '', error: '' };
+  const botChannel = { id: '', username: '', status: '', isAdmin: false, error: '' };
+  try {
+    const info = await bot.getWebhookInfo();
+    webhook.configured = Boolean(info.url);
+    webhook.url = info.url || '';
+    const expectedUrl = process.env.APP_URL ? `${process.env.APP_URL.replace(/\/$/, '')}/api/telegram/webhook` : '';
+    webhook.urlMatchesExpected = Boolean(expectedUrl && webhook.url.replace(/\/$/, '') === expectedUrl);
+    webhook.allowedUpdates = Array.isArray(info.allowed_updates) ? info.allowed_updates : [];
+    webhook.pendingUpdateCount = Number(info.pending_update_count) || 0;
+    webhook.lastErrorMessage = info.last_error_message || '';
+    webhook.lastErrorDate = info.last_error_date ? new Date(Number(info.last_error_date) * 1000).toISOString() : null;
+  } catch (error) {
+    webhook.error = String(error.message || 'getWebhookInfo failed').slice(0, 300);
+  }
+  try {
+    const me = await bot.getMe();
+    botChannel.id = String(me.id);
+    botChannel.username = me.username || '';
+    const member = await bot.getChatMember(task.chatId, me.id);
+    botChannel.status = member.status || '';
+    botChannel.isAdmin = ['administrator', 'creator'].includes(member.status);
+  } catch (error) {
+    botChannel.error = String(error.message || 'Could not read bot membership').slice(0, 300);
+  }
+
+  const requiredUpdates = ['channel_post', 'message_reaction'];
+  // Telegram defaults to all update types except chat_member and reaction updates.
+  const isUpdateEnabled = update => Array.isArray(webhook.allowedUpdates) && webhook.allowedUpdates.length
+    ? webhook.allowedUpdates.includes(update)
+    : !['chat_member', 'message_reaction', 'message_reaction_count'].includes(update);
+  const missingUpdates = requiredUpdates.filter(update => !isUpdateEnabled(update));
+  const latestPostTracked = Number.isSafeInteger(task.latestPostMessageId) && task.latestPostMessageId > 0;
+  const issues = [];
+  if (webhook.error) issues.push(`خواندن وضعیت webhook ناموفق بود: ${webhook.error}`);
+  if (!webhook.configured) issues.push('Webhook برای ربات تنظیم نشده است.');
+  else if (!webhook.urlMatchesExpected) issues.push('آدرس webhook با APP_URL فعلی پروژه یکسان نیست.');
+  if (missingUpdates.includes('channel_post')) issues.push('channel_post در allowed_updates فعال نیست.');
+  if (missingUpdates.includes('message_reaction')) issues.push('message_reaction در allowed_updates فعال نیست.');
+  if (!botChannel.isAdmin) issues.push('ربات در کانال ادمین نیست؛ برای دریافت channel_post و reaction آن را ادمین کانال کنید.');
+  if (botChannel.error) issues.push(`بررسی عضویت ربات در کانال ناموفق بود: ${botChannel.error}`);
+  if (webhook.lastErrorMessage) issues.push(`Telegram آخرین خطای webhook را گزارش کرده: ${webhook.lastErrorMessage}`);
+  if (!latestPostTracked) issues.push('هنوز channel_post برای این کانال ثبت نشده است؛ Bot API تاریخچه را واکشی نمی‌کند. پس از اصلاح تنظیمات، یک پست جدید در کانال منتشر کنید تا webhook آن را ثبت کند.');
+
+  return res.json({
+    success: true,
+    task: {
+      id: String(task._id),
+      title: task.title,
+      chatId: task.chatId,
+      requiredReaction: task.requiredReaction,
+      latestPostMessageId: task.latestPostMessageId || null,
+      latestPostDate: task.latestPostDate || null,
+      latestPostTracked
+    },
+    webhook,
+    botChannel,
+    requiredUpdates,
+    missingUpdates,
+    pendingIssues: issues,
+    readyForReactionVerification: issues.length === 0 && latestPostTracked
+  });
+});
 /**
  * POST /api/admin/verify-chat — قبل از ساختن تسک، بررسی می‌کند آیا
  * chatId وارد‌شده واقعاً معتبر است و ربات در آن ادمین هست یا نه.

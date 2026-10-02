@@ -318,14 +318,27 @@ router.get('/set-webhook', async (req, res) => {
   if (!bot || !APP_URL) {
     return res.status(400).json({ success: false, message: 'BOT_TOKEN یا APP_URL تنظیم نشده است.' });
   }
+  if (WEBHOOK_SECRET && !/^[A-Za-z0-9_-]{1,256}$/.test(WEBHOOK_SECRET)) {
+    return res.status(400).json({ success: false, message: 'TELEGRAM_WEBHOOK_SECRET باید ۱ تا ۲۵۶ کاراکتر و فقط شامل حروف انگلیسی، عدد، _ یا - باشد.' });
+  }
   try {
-    const url = `${APP_URL}/api/telegram/webhook`;
+    const url = `${APP_URL.replace(/\/$/, '')}/api/telegram/webhook`;
     const options = {
       allowed_updates: ['message', 'callback_query', 'channel_post', 'message_reaction'],
       ...(WEBHOOK_SECRET ? { secret_token: WEBHOOK_SECRET } : {})
     };
     await bot.setWebHook(url, options);
-    res.json({ success: true, message: `Webhook تنظیم شد: ${url}` });
+    const info = await bot.getWebhookInfo();
+    res.json({
+      success: true,
+      message: `Webhook تنظیم شد: ${url}`,
+      webhook: {
+        url: info.url || '',
+        allowedUpdates: info.allowed_updates || [],
+        pendingUpdateCount: Number(info.pending_update_count) || 0,
+        lastErrorMessage: info.last_error_message || ''
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

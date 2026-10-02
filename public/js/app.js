@@ -62,6 +62,7 @@ const state = {
   tasks: [],
   taskCategoryFilter: "all",
   completions: [],
+  tasksServerOffsetMs: 0,
   userDataLoadedAt: 0,
   tasksLoadedAt: 0,
   leaderboard: [],
@@ -840,6 +841,8 @@ async function loadTasks({ force = false } = {}) {
     const data = await api("/api/tasks");
     state.tasks = Array.isArray(data?.tasks) ? data.tasks : [];
     state.completions = Array.isArray(data?.completions) ? data.completions : [];
+    const serverNow = Number(data?.serverNow);
+    state.tasksServerOffsetMs = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
     state.tasksLoadedAt = Date.now();
     return state.tasks;
   } catch (error) {
@@ -1156,6 +1159,69 @@ async function verifyTelegramTask(taskId) {
 }
 window.verifyTelegramTask = verifyTelegramTask;
 
+async function verifyLatestPostTask(taskId) {
+  const button = document.querySelector(`[data-latest-post-check="${taskId}"]`);
+  if (button) { button.disabled = true; button.textContent = t("task_action_verifying"); }
+  try {
+    const result = await api(`/api/tasks/${encodeURIComponent(taskId)}/engagement/check`, { method: "POST" });
+    state.points = Number(result.points) || state.points;
+    const serverNow = Number(result.serverNow);
+    if (Number.isFinite(serverNow)) state.tasksServerOffsetMs = serverNow - Date.now();
+    haptic("success");
+    toast(t("task_latest_post_reward", { n: formatPoints(result.reward) }), "success");
+    await loadTasks({ force: true });
+    updateHeader();
+    renderTasks();
+  } catch (error) {
+    haptic("error");
+    toast(translateServerMessage(error.code, error.message), error.code === "TASK_COOLDOWN_ACTIVE" ? "warning" : "error");
+    await loadTasks({ force: true });
+    renderTasks();
+  }
+}
+window.verifyLatestPostTask = verifyLatestPostTask;
+
+let latestPostCooldownTimer = null;
+function formatCountdown(milliseconds) {
+  const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  return `${pad2(hours)}:${pad2(minutes)}:${pad2(remainingSeconds)}`;
+}
+
+function startLatestPostCooldownCountdown() {
+  clearInterval(latestPostCooldownTimer);
+  const buttons = Array.from(document.querySelectorAll("[data-latest-post-cooldown]"));
+  if (!buttons.length) return;
+
+  const tick = () => {
+    const now = Date.now() + state.tasksServerOffsetMs;
+    buttons.forEach(button => {
+      const remaining = Date.parse(button.dataset.until || "") - now;
+      if (remaining > 0) {
+        button.textContent = t("task_latest_post_available_in", { time: formatCountdown(remaining) });
+        return;
+      }
+      button.disabled = false;
+      button.classList.remove("pending");
+      button.textContent = t("task_action_check");
+      const taskId = button.dataset.taskId;
+      button.setAttribute("data-latest-post-check", taskId);
+      button.removeAttribute("data-task-id");
+      button.removeAttribute("data-latest-post-cooldown");
+      button.removeAttribute("data-until");
+      button.onclick = () => verifyLatestPostTask(taskId);
+    });
+    if (!document.querySelector("[data-latest-post-cooldown]")) {
+      clearInterval(latestPostCooldownTimer);
+      latestPostCooldownTimer = null;
+    }
+  };
+  tick();
+  latestPostCooldownTimer = setInterval(tick, 1000);
+}
+
 function renderTasks() {
   const content = $("#content");
   const activeCategory = state.taskCategoryFilter || "all";
@@ -1164,6 +1230,8 @@ function renderTasks() {
   const categoryTabs = renderTaskCategoryTabs(activeCategory);
 
   if (state.tasks.length === 0 || visibleTasks.length === 0) {
+    clearInterval(latestPostCooldownTimer);
+    latestPostCooldownTimer = null;
     content.innerHTML = `
       <div class="sectionHeader"><h2 class="sectionTitle">${t("tasks_title")}</h2></div>
       ${categoryTabs}
@@ -1193,7 +1261,26 @@ function renderTasks() {
         const safeUrl = (task.url || "").replaceAll("'", "\\'");
         let actionHtml;
 
-        if (status === "approved") {
+        if (task.verifyType === "latest_post") {
+          const completion = completionRecord(task._id);
+          const nextAvailableAt = completion?.nextAvailableAt ? new Date(completion.nextAvailableAt) : null;
+          const remaining = nextAvailableAt && Number.isFinite(nextAvailableAt.getTime())
+            ? nextAvailableAt.getTime() - (Date.now() + state.tasksServerOffsetMs)
+            : 0;
+          const latestPostUrlArgument = escapeHTML(JSON.stringify(String(task.url || "")).replaceAll("<", "\\u003c"));
+          const openButton = task.url
+            ? `<button class="taskAction" style="background:var(--surface-3);color:var(--text)" onclick="openTaskLinkOnly(${latestPostUrlArgument})">${t("task_action_open_task")}</button>`
+            : "";
+          let checkButton;
+          if (remaining > 0) {
+            checkButton = `<button class="taskAction pending" data-latest-post-cooldown data-task-id="${escapeHTML(task._id)}" data-until="${escapeHTML(nextAvailableAt.toISOString())}" disabled>${t("task_latest_post_available_in", { time: formatCountdown(remaining) })}</button>`;
+          } else if (!Number.isSafeInteger(Number(task.latestPostMessageId)) || Number(task.latestPostMessageId) <= 0) {
+            checkButton = `<button class="taskAction pending" disabled>${t("task_latest_post_waiting")}</button>`;
+          } else {
+            checkButton = `<button class="taskAction" data-latest-post-check="${escapeHTML(task._id)}" onclick="verifyLatestPostTask('${escapeHTML(task._id)}')">${t("task_action_check")}</button>`;
+          }
+          actionHtml = `<div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">${openButton}${checkButton}</div>`;
+        } else if (status === "approved") {
           actionHtml = `<button class="taskAction done" disabled>${t("task_btn_done")}</button>`;
         } else if (status === "pending") {
           actionHtml = `<button class="taskAction pending" disabled>${t("task_btn_pending")}</button>`;
@@ -1224,6 +1311,7 @@ function renderTasks() {
           <div class="taskBody">
             <div class="taskTitle">${task.isSpecialOfDay ? `<span class="sponsoredTag">⭐ ${t("special_task_badge")}</span> ` : ""}${task.isSponsored ? `<span class="sponsoredTag">${t("task_sponsored_tag")}</span> ` : ""}${escapeHTML(task.title)}</div>
             ${task.description ? `<div class="taskDesc">${escapeHTML(task.description)}</div>` : ""}
+            ${task.verifyType === "latest_post" ? `<div class="taskDesc">${t("task_latest_post_reaction_hint", { emoji: escapeHTML(task.requiredReaction || "") })}</div>` : ""}
             ${task.isSpecialOfDay && task.expiresAt ? `<div class="taskDesc" style="color:var(--warning)">⏳ ${t("special_task_deadline", { date: new Date(task.expiresAt).toLocaleString(state.language === "en" ? "en-US" : "fa-IR") })}</div>` : ""}
             <div class="taskReward">+${formatPoints(task.reward)} ${t("points_unit")}</div>
           </div>
@@ -1233,6 +1321,7 @@ function renderTasks() {
       }).join("")}
     </div>
   `;
+  startLatestPostCooldownCountdown();
 }
 
 const TASK_CATEGORY_OPTIONS = ["all", "on-chain", "company", "social", "partners"];

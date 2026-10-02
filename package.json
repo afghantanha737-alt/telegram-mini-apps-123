@@ -7,7 +7,6 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "for f in tests/*.test.js; do node \"$f\" || exit 1; done",
-    "audit:referrals": "node scripts/referral-audit.js",
     "migrate:referral-v2": "node scripts/migrate-referral-v2.js"
   },
   "dependencies": {

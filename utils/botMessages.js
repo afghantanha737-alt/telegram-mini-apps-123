@@ -54,6 +54,11 @@ const MESSAGES = {
     fa: () => `⏰ یادت نره امروز وارد Gramup بشی و پاداش روزانه‌ت رو بگیری!\nاستریکت رو از دست نده — هر ۷ روز پیوسته یک شانس گردونه‌ی رایگان می‌گیری.`,
     ps: () => `⏰ مه هېروئ چې نن Gramup ته ننوځئ او خپله ورځنۍ ګټه ترلاسه کړئ!\nخپل پرله‌پسې ورځې مه ورکوئ — هره ۷ ورځې یو وړیا د ګردونې چانس ترلاسه کوئ.`,
     en: () => `⏰ Don't forget to check in on Gramup today and claim your daily reward!\nKeep your streak alive — every 7 days in a row earns a free spin.`
+  },
+  leaderboardReward: {
+    fa: (rank, points, week) => `🏆 تبریک! شما رتبه ${rank} لیدربورد هفتگی را کسب کردید.\n\n${points} پوینت جایزه هفته ${week} به حسابتان اضافه شد.`,
+    ps: (rank, points, week) => `🏆 مبارک شه! تاسو د اونیز غوره لیست ${rank} مقام ترلاسه کړ.\n\n${points} پوائنټ د ${week} اونۍ جایزه ستاسو حساب ته اضافه شوه.`,
+    en: (rank, points, week) => `🏆 Congratulations! You finished #${rank} on the weekly leaderboard.\n\n${points} reward points for week ${week} were added to your account.`
   }
 };
 

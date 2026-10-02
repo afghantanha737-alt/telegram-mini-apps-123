@@ -27,7 +27,7 @@ const { canTransition, requiresReason, shouldRefund, synthesizeHistory, isTermin
 const { COMMON_TIMEZONES, isValidTimezone, targetUtcHour } = require('../utils/timezones');
 const { sendTestReminder } = require('../utils/dailyReminder');
 const { isValidWeights, resolveWeights, checkSpinSettings, spinModel } = require('../utils/spin');
-const { normalizeSponsorInput, marginInfo } = require('../utils/sponsor');
+const { normalizeSponsorInput, marginInfo, rewardCostUsd } = require('../utils/sponsor');
 const { startOfUtcWeek, endOfUtcWeek, weekKey } = require('../utils/weeklyLeaderboard');
 const { createAdminSession, getAdminSession, revokeAdminSession, SESSION_TTL_MS } = require('../utils/adminSession');
 const { buildDiscrepancy, isDiscrepant } = require('../utils/financialAudit');
@@ -186,11 +186,21 @@ router.get('/tasks', async (req, res) => {
 });
 
 router.post('/tasks', async (req, res) => {
-  const { title, description, type, url, reward, chatId, maxCompletions, force, isSpecialOfDay } = req.body || {};
-  if (!title || !reward) {
+  const { title, description, type, verifyType, url, reward, chatId, maxCompletions, force, isSpecialOfDay, isActive } = req.body || {};
+  const taskTitle = String(title || '').trim();
+  const taskReward = Number(reward);
+  const taskVerifyType = String(verifyType || 'telegram');
+  const taskType = String(type || (taskVerifyType === 'manual' ? 'custom' : 'link'));
+  if (!taskTitle || !Number.isFinite(taskReward) || taskReward <= 0) {
     return res.status(400).json({ success: false, message: 'عنوان و مقدار پاداش الزامی است.' });
   }
-  if (!chatId) {
+  if (!['telegram', 'manual'].includes(taskVerifyType)) {
+    return res.status(400).json({ success: false, message: 'روش بررسی تسک نامعتبر است.' });
+  }
+  if (!['channel', 'group', 'link', 'custom'].includes(taskType)) {
+    return res.status(400).json({ success: false, message: 'نوع تسک نامعتبر است.' });
+  }
+  if (taskVerifyType === 'telegram' && !String(chatId || '').trim()) {
     return res.status(400).json({ success: false, message: 'chatId (آیدی/یوزرنیم کانال یا گروه) الزامی است.' });
   }
 
@@ -207,7 +217,7 @@ router.post('/tasks', async (req, res) => {
     finalMaxCompletions = sp.maxCompletions;
     const settings = await Settings.getGlobal();
     const margin = marginInfo({
-      reward: Number(reward), rate: settings.rate, gramUsdPrice: settings.gramUsdPrice,
+      reward: taskReward, rate: settings.rate, gramUsdPrice: settings.gramUsdPrice,
       priceUsd: sp.sponsorPriceUsd, budgetUsd: sp.sponsorBudgetUsd
     });
     if (!margin.canCompute && !force) {
@@ -225,12 +235,15 @@ router.post('/tasks', async (req, res) => {
   }
 
   const task = await Task.create({
-    title, description, type, url, reward,
-    // در نسخه production فقط verification خودکار Telegram فعال است؛
-    // Manual Task بدون storage امن Proof و workflow بررسی ساخته نمی‌شود.
-    verifyType: 'telegram',
-    chatId,
+    title: taskTitle,
+    description: String(description || '').trim(),
+    type: taskType,
+    verifyType: taskVerifyType,
+    url: String(url || '').trim(),
+    reward: taskReward,
+    chatId: taskVerifyType === 'telegram' ? String(chatId).trim() : '',
     maxCompletions: finalMaxCompletions,
+    isActive: isActive !== false && isActive !== 'false',
     isSpecialOfDay: isSpecialOfDay === true || isSpecialOfDay === 'true',
     isSponsored: sp.isSponsored,
     sponsorName: sp.sponsorName,
@@ -247,13 +260,15 @@ router.post('/tasks', async (req, res) => {
     targetType: 'task',
     targetId: task._id,
     details: sp.isSponsored
-      ? `«${title}» — اسپانسر: ${sp.sponsorName} (${sp.sponsorPriceUsd}$ هر عضو، بودجه ${sp.sponsorBudgetUsd}$، ظرفیت ${finalMaxCompletions}) — پاداش ${reward} پوینت`
-      : `«${title}» — پاداش ${reward} پوینت`
+      ? `«${taskTitle}» — اسپانسر: ${sp.sponsorName} (${sp.sponsorPriceUsd}$ هر عضو، بودجه ${sp.sponsorBudgetUsd}$، ظرفیت ${finalMaxCompletions}) — پاداش ${taskReward} پوینت`
+      : `«${taskTitle}» — پاداش ${taskReward} پوینت`
   });
 
   // اطلاع‌رسانی تسک جدید به همه‌ی کاربران فعال، هرکدام به زبان خودش؛ عمداً بدون await تا پاسخ به پنل ادمین معطل نماند
-  broadcastToActiveUsers(User, u => botText('taskNew', u.language, title, reward, sp.isSponsored ? sp.sponsorName : ''))
-    .catch(error => console.warn('Task broadcast failed:', error.message || error));
+  if (task.isActive) {
+    broadcastToActiveUsers(User, u => botText('taskNew', u.language, taskTitle, taskReward, sp.isSponsored ? sp.sponsorName : ''))
+      .catch(error => console.warn('Task broadcast failed:', error.message || error));
+  }
 });
 
 router.put('/tasks/:id', async (req, res) => {
@@ -262,6 +277,31 @@ router.put('/tasks/:id', async (req, res) => {
   const update = {};
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(body, key)) update[key] = body[key];
+  }
+
+  if ('verifyType' in update || 'chatId' in update) {
+    const currentVerification = await Task.findById(req.params.id).select('verifyType chatId');
+    if (!currentVerification) return res.status(404).json({ success: false, message: 'تسک پیدا نشد.' });
+    const verifyType = String(update.verifyType ?? currentVerification.verifyType ?? 'telegram');
+    const chatId = String(update.chatId ?? currentVerification.chatId ?? '').trim();
+    if (!['telegram', 'manual'].includes(verifyType)) {
+      return res.status(400).json({ success: false, message: 'روش بررسی تسک نامعتبر است.' });
+    }
+    if (currentVerification.verifyType === 'manual' && verifyType !== 'manual') {
+      const hasScreenshotSubmissions = await TaskCompletion.exists({
+        task: req.params.id,
+        proofMimeType: { $in: ['image/jpeg', 'image/png', 'image/webp'] }
+      });
+      if (hasScreenshotSubmissions) {
+        return res.status(409).json({ success: false, message: 'روش بررسی Screenshot Task پس از ثبت submission قابل تغییر نیست.' });
+      }
+    }
+    if (verifyType === 'telegram' && !chatId) {
+      return res.status(400).json({ success: false, message: 'chatId برای تسک تلگرامی الزامی است.' });
+    }
+    update.verifyType = verifyType;
+    if (verifyType === 'manual') update.chatId = '';
+    else if ('chatId' in update) update.chatId = String(update.chatId || '').trim();
   }
 
   // فیلدهای اسپانسری (ویرایش نام/قیمت/بودجه/پایان): با مقدارهای فعلی ادغام و دوباره اعتبارسنجی می‌شوند
@@ -340,6 +380,17 @@ router.put('/tasks/:id', async (req, res) => {
 });
 
 router.delete('/tasks/:id', async (req, res) => {
+  const currentTask = await Task.findById(req.params.id).select('_id verifyType');
+  if (currentTask?.verifyType === 'manual') {
+    const pendingSubmission = await TaskCompletion.exists({
+      task: currentTask._id,
+      status: 'pending',
+      proofMimeType: { $in: ['image/jpeg', 'image/png', 'image/webp'] }
+    });
+    if (pendingSubmission) {
+      return res.status(409).json({ success: false, message: 'تا زمان بررسی Screenshotهای در انتظار، این Task قابل حذف نیست.' });
+    }
+  }
   const task = await Task.findByIdAndDelete(req.params.id);
   res.json({ success: true });
 
@@ -349,6 +400,202 @@ router.delete('/tasks/:id', async (req, res) => {
     targetType: 'task',
     targetId: req.params.id,
     details: task ? `«${task.title}» حذف شد (پاداش بود: ${task.reward} پوینت، chatId: ${task.chatId || '—'})` : 'تسک (که قبلاً هم پیدا نشد) حذف شد'
+  });
+});
+
+router.get('/task-submissions', async (req, res) => {
+  const requestedStatus = String(req.query.status || 'pending');
+  const allowedStatuses = ['pending', 'approved', 'rejected'];
+  if (requestedStatus !== 'all' && !allowedStatuses.includes(requestedStatus)) {
+    return res.status(400).json({ success: false, message: 'وضعیت submission نامعتبر است.' });
+  }
+  const filter = { proofMimeType: { $in: ['image/jpeg', 'image/png', 'image/webp'] } };
+  if (requestedStatus !== 'all') filter.status = requestedStatus;
+  const submissions = await TaskCompletion.find(filter)
+    .select('user task reward status proofMimeType submittedAt reviewedAt reviewedBy adminNote createdAt')
+    .populate('user', 'telegramId firstName lastName username')
+    .populate('task', 'title reward verifyType')
+    .sort({ submittedAt: -1, createdAt: -1 })
+    .limit(200)
+    .lean();
+  res.json({ success: true, submissions });
+});
+
+router.get('/task-submissions/:id/image', async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(404).json({ success: false, message: 'Submission پیدا نشد.' });
+  }
+  const submission = await TaskCompletion.findById(req.params.id).select('+proofImage proofMimeType');
+  if (!submission || !submission.proofImage || !['image/jpeg', 'image/png', 'image/webp'].includes(submission.proofMimeType)) {
+    return res.status(404).json({ success: false, message: 'تصویر submission پیدا نشد.' });
+  }
+  const image = Buffer.from(submission.proofImage);
+  res.set('Content-Type', submission.proofMimeType);
+  res.set('Content-Length', String(image.length));
+  res.set('Cache-Control', 'private, no-store');
+  return res.status(200).send(image);
+});
+
+router.post('/task-submissions/:id/approve', async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(404).json({ success: false, message: 'Submission پیدا نشد.' });
+  }
+  const settings = await Settings.getGlobal();
+  const reviewedAt = new Date();
+  try {
+    const payment = await withMongoTransaction(async session => {
+      const submission = await TaskCompletion.findById(req.params.id).session(session);
+      if (!submission) {
+        const error = new Error('Submission پیدا نشد.');
+        error.code = 'SUBMISSION_NOT_FOUND';
+        throw error;
+      }
+      if (submission.status !== 'pending') {
+        const error = new Error('این submission دیگر در انتظار بررسی نیست.');
+        error.code = 'SUBMISSION_NOT_PENDING';
+        throw error;
+      }
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(submission.proofMimeType)) {
+        const error = new Error('تصویر معتبر برای این submission ثبت نشده است.');
+        error.code = 'SUBMISSION_IMAGE_MISSING';
+        throw error;
+      }
+
+      const task = await Task.findById(submission.task).session(session);
+      if (!task) {
+        const error = new Error('Task Screenshot Verification پیدا نشد.');
+        error.code = 'TASK_NOT_FOUND';
+        throw error;
+      }
+      const reward = Number(submission.reward);
+      if (!Number.isFinite(reward) || reward <= 0) {
+        const error = new Error('پاداش ثبت‌شده برای submission نامعتبر است.');
+        error.code = 'INVALID_REWARD';
+        throw error;
+      }
+
+      const sourceId = `task:${task._id}:user:${submission.user}`;
+      const existingLedger = await PointsLedger.findOne({ sourceId }).select('_id').session(session);
+      if (existingLedger) {
+        const error = new Error('پاداش این task قبلاً در تاریخچه ثبت شده است.');
+        error.code = 'TASK_REWARD_ALREADY_PAID';
+        throw error;
+      }
+
+      const reservedTask = await Task.findOneAndUpdate(
+        {
+          _id: task._id,
+          $or: [
+            { maxCompletions: null },
+            { $expr: { $lt: ['$completedCount', '$maxCompletions'] } }
+          ]
+        },
+        { $inc: { completedCount: 1 } },
+        { new: true, session }
+      );
+      if (!reservedTask) {
+        const error = new Error('ظرفیت task تکمیل شده است.');
+        error.code = 'TASK_FULL';
+        throw error;
+      }
+
+      const approved = await TaskCompletion.findOneAndUpdate(
+        { _id: submission._id, status: 'pending' },
+        { $set: { status: 'approved', reviewedAt, reviewedBy: req.adminActor } },
+        { new: true, session }
+      );
+      if (!approved) {
+        const error = new Error('این submission هم‌زمان توسط ادمین دیگری بررسی شد.');
+        error.code = 'SUBMISSION_NOT_PENDING';
+        throw error;
+      }
+
+      if (reservedTask.maxCompletions != null && reservedTask.completedCount >= reservedTask.maxCompletions) {
+        await Task.updateOne({ _id: reservedTask._id }, { $set: { isActive: false } }, { session });
+      }
+
+      const user = await User.findByIdAndUpdate(
+        submission.user,
+        { $inc: { points: reward } },
+        { new: true, session }
+      );
+      if (!user) {
+        const error = new Error('کاربر submission پیدا نشد.');
+        error.code = 'SUBMISSION_USER_NOT_FOUND';
+        throw error;
+      }
+
+      const ledger = await recordLedgerRequired({
+        user: user._id,
+        type: 'task',
+        amount: reward,
+        description: `Task Reward — ${task.title}`,
+        balanceAfter: user.points,
+        sourceId,
+        session
+      });
+      if (!ledger.created) {
+        const error = new Error('پاداش task قبلاً ثبت شده است؛ پرداخت دوباره انجام نشد.');
+        error.code = 'TASK_REWARD_ALREADY_PAID';
+        throw error;
+      }
+
+      const revenueUsd = reservedTask.isSponsored ? Number(reservedTask.sponsorPriceUsd) || 0 : 0;
+      const costUsd = rewardCostUsd(reward, settings.rate, settings.gramUsdPrice);
+      await TaskCompletion.updateOne(
+        { _id: approved._id, status: 'approved' },
+        { $set: { revenueUsd, costUsd } },
+        { session }
+      );
+      return { reward, points: user.points, taskTitle: task.title, userId: user._id };
+    });
+
+    res.json({ success: true, status: 'approved', reward: payment.reward, points: payment.points });
+    recordAdminLog({
+      actor: req.adminActor,
+      action: 'task_submission_approve',
+      targetType: 'task_completion',
+      targetId: req.params.id,
+      details: `«${payment.taskTitle}» — پاداش ${payment.reward} پوینت به کاربر ${payment.userId} پرداخت شد`
+    });
+  } catch (error) {
+    const status = error.code === 'SUBMISSION_NOT_FOUND' || error.code === 'TASK_NOT_FOUND' || error.code === 'SUBMISSION_USER_NOT_FOUND'
+      ? 404
+      : ['SUBMISSION_NOT_PENDING', 'TASK_FULL', 'TASK_REWARD_ALREADY_PAID'].includes(error.code)
+        ? 409
+        : error.code === 'INVALID_REWARD' || error.code === 'SUBMISSION_IMAGE_MISSING'
+          ? 400
+          : 500;
+    if (status === 500) console.error('Screenshot task approval failed:', error);
+    return res.status(status).json({ success: false, message: error.message || 'تأیید submission انجام نشد.', code: error.code || 'SERVER_ERROR' });
+  }
+});
+
+router.post('/task-submissions/:id/reject', async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(404).json({ success: false, message: 'Submission پیدا نشد.' });
+  }
+  const note = String(req.body?.note || '').trim().slice(0, 500);
+  const submission = await TaskCompletion.findOneAndUpdate(
+    { _id: req.params.id, status: 'pending', proofMimeType: { $in: ['image/jpeg', 'image/png', 'image/webp'] } },
+    { $set: { status: 'rejected', adminNote: note, reviewedAt: new Date(), reviewedBy: req.adminActor } },
+    { new: true }
+  );
+  if (!submission) {
+    const exists = await TaskCompletion.exists({ _id: req.params.id });
+    return res.status(exists ? 409 : 404).json({
+      success: false,
+      message: exists ? 'این submission دیگر در انتظار بررسی نیست.' : 'Submission پیدا نشد.',
+      code: exists ? 'SUBMISSION_NOT_PENDING' : 'SUBMISSION_NOT_FOUND'
+    });
+  }
+  res.json({ success: true, status: 'rejected' });
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'task_submission_reject',
+    targetType: 'task_completion',
+    targetId: submission._id,
+    details: note || 'Screenshot task submission رد شد.'
   });
 });
 

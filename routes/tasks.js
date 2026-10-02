@@ -1,5 +1,7 @@
 'use strict';
 const express = require('express');
+const multer = require('multer');
+const mongoose = require('mongoose');
 const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth } = require('../utils/telegramAuth');
@@ -12,10 +14,35 @@ const Settings = require('../models/Settings');
 const { rewardCostUsd } = require('../utils/sponsor');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { evaluateReferralEligibility, REFERRAL_MIN_TASKS, REFERRAL_MIN_ACTIVE_DAYS, REFERRAL_WAIT_DAYS } = require('../utils/referralEligibility');
+const { SCREENSHOT_MIME_TYPES, isValidScreenshot } = require('../utils/screenshotValidation');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
 const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
+const screenshotUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0 },
+  fileFilter(req, file, callback) {
+    if (!SCREENSHOT_MIME_TYPES.includes(file.mimetype)) {
+      return callback(new Error('فقط تصویر JPEG، PNG یا WebP قابل ارسال است.'));
+    }
+    callback(null, true);
+  }
+});
+
+function parseScreenshot(req, res, next) {
+  screenshotUpload.single('screenshot')(req, res, error => {
+    if (error) {
+      const tooLarge = error.code === 'LIMIT_FILE_SIZE';
+      return res.status(400).json({
+        success: false,
+        message: tooLarge ? 'حجم تصویر باید حداکثر ۵ مگابایت باشد.' : (error.message || 'تصویر ارسالی نامعتبر است.'),
+        code: tooLarge ? 'SCREENSHOT_TOO_LARGE' : 'INVALID_SCREENSHOT'
+      });
+    }
+    next();
+  });
+}
 
 /**
  * Eligibility قدیمی برای تبدیل/برداشت و شمارنده‌ی دعوت فعال را به‌روز می‌کند؛
@@ -63,17 +90,105 @@ async function maybeAwardReferralBonus(userId) {
 // GET /api/tasks
 router.get('/', auth, async (req, res) => {
   try {
-    const [tasks, completions] = await Promise.all([
-      // قیمت/بودجه‌ی تبلیغ‌دهنده هرگز به کاربر داده نمی‌شود؛ تسک‌های منقضی‌شده هم نمایش داده نمی‌شوند
-      Task.find({ isActive: true, $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] })
-        .select('-sponsorPriceUsd -sponsorBudgetUsd')
-        .sort({ isSpecialOfDay: -1, isSponsored: -1, createdAt: -1 }),
-      TaskCompletion.find({ user: req.dbUser._id })
-    ]);
+    const completions = await TaskCompletion.find({ user: req.dbUser._id });
+    const pendingScreenshotTaskIds = completions
+      .filter(item => item.status === 'pending' && ['image/jpeg', 'image/png', 'image/webp'].includes(item.proofMimeType))
+      .map(item => item.task);
+    // قیمت/بودجه‌ی تبلیغ‌دهنده هرگز به کاربر داده نمی‌شود. تسک‌های عادیِ منقضی/غیرفعال پنهان‌اند؛
+    // فقط تسکی که همین کاربر برایش screenshot pending دارد نمایش داده می‌شود تا وضعیت بررسی را ببیند.
+    const tasks = await Task.find({
+      $or: [
+        { isActive: true, $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] },
+        ...(pendingScreenshotTaskIds.length ? [{ _id: { $in: pendingScreenshotTaskIds } }] : [])
+      ]
+    })
+      .select('-sponsorPriceUsd -sponsorBudgetUsd')
+      .sort({ isSpecialOfDay: -1, isSponsored: -1, createdAt: -1 });
     res.json({ success: true, tasks, completions });
   } catch (error) {
     console.error('GET /api/tasks failed:', error);
     res.status(500).json({ success: false, message: 'خطایی در بارگذاری تسک‌ها رخ داد.', code: 'SERVER_ERROR' });
+  }
+});
+
+/** POST /api/tasks/:id/submission — screenshot proof for generic manual-verification tasks. */
+router.post('/:id/submission', auth, parseScreenshot, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ success: false, message: 'تسک پیدا نشد.', code: 'TASK_NOT_FOUND' });
+    }
+    if (!req.file || !isValidScreenshot(req.file.buffer, req.file.mimetype)) {
+      return res.status(400).json({ success: false, message: 'فایل انتخاب‌شده تصویر معتبر نیست.', code: 'INVALID_SCREENSHOT' });
+    }
+
+    const task = await Task.findById(req.params.id);
+    if (!task || task.verifyType !== 'manual') {
+      return res.status(404).json({ success: false, message: 'تسک Screenshot Verification پیدا نشد.', code: 'TASK_NOT_FOUND' });
+    }
+    if (!task.isActive || (task.expiresAt && task.expiresAt <= new Date())) {
+      return res.status(409).json({ success: false, message: 'این تسک دیگر فعال نیست.', code: 'TASK_INACTIVE' });
+    }
+    if (task.maxCompletions != null && task.completedCount >= task.maxCompletions) {
+      return res.status(409).json({ success: false, message: 'ظرفیت این تسک تکمیل شده است.', code: 'TASK_FULL' });
+    }
+
+    const now = new Date();
+    const existing = await TaskCompletion.findOne({ user: req.dbUser._id, task: task._id });
+    if (existing && existing.status !== 'rejected') {
+      return res.status(409).json({
+        success: false,
+        message: existing.status === 'pending' ? 'اسکرین‌شات شما در انتظار بررسی است.' : 'این تسک قبلاً تکمیل شده است.',
+        code: existing.status === 'pending' ? 'SUBMISSION_PENDING' : 'ALREADY_DONE'
+      });
+    }
+
+    try {
+      if (existing) {
+        const resubmission = await TaskCompletion.findOneAndUpdate(
+          { _id: existing._id, status: 'rejected' },
+          {
+            $set: {
+              status: 'pending',
+              reward: task.reward,
+              proofImage: req.file.buffer,
+              proofMimeType: req.file.mimetype,
+              submittedAt: now,
+              reviewedAt: null,
+              reviewedBy: '',
+              adminNote: ''
+            }
+          },
+          { new: true, runValidators: true }
+        );
+        if (!resubmission) {
+          return res.status(409).json({ success: false, message: 'درخواست قبلی هم‌زمان تغییر کرده است؛ صفحه را تازه کنید.', code: 'SUBMISSION_CONFLICT' });
+        }
+      } else {
+        await new TaskCompletion({
+          user: req.dbUser._id,
+          task: task._id,
+          reward: task.reward,
+          status: 'pending',
+          proofImage: req.file.buffer,
+          proofMimeType: req.file.mimetype,
+          submittedAt: now
+        }).save();
+      }
+    } catch (error) {
+      if (error?.code === 11000) {
+        return res.status(409).json({ success: false, message: 'برای این تسک قبلاً submission ثبت شده است.', code: 'SUBMISSION_DUPLICATE' });
+      }
+      throw error;
+    }
+
+    return res.status(201).json({
+      success: true,
+      status: 'pending',
+      message: 'اسکرین‌شات ارسال شد و در انتظار بررسی ادمین است.'
+    });
+  } catch (error) {
+    console.error(`POST /api/tasks/${req.params.id}/submission failed:`, error);
+    return res.status(500).json({ success: false, message: 'ارسال اسکرین‌شات انجام نشد.', code: 'SERVER_ERROR' });
   }
 });
 

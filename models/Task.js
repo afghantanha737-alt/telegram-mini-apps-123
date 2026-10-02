@@ -15,7 +15,7 @@ const taskSchema = new mongoose.Schema(
     verifyType: {
       type: String,
       enum: ['telegram', 'manual'],
-      default: 'manual'
+      default: 'telegram'
     },
     // آیدی عددی یا یوزرنیم کانال/گروه مقصد (فقط برای verifyType=telegram)
     // مثال: "@mychannel" یا "-1001234567890"
@@ -28,6 +28,8 @@ const taskSchema = new mongoose.Schema(
     // تعداد تکمیل‌های موفق (approved) — به‌صورت atomic در routes/tasks.js افزایش می‌یابد
     completedCount: { type: Number, default: 0, min: 0 },
     isActive: { type: Boolean, default: true },
+    // تسک ویژه‌ی امروز؛ در لیست کاربر قبل از تسک‌های عادی نمایش داده می‌شود.
+    isSpecialOfDay: { type: Boolean, default: false },
 
     // ---- تسک اسپانسری (درآمد): تبلیغ‌دهنده برای هر عضو تاییدشده مبلغی می‌پردازد ----
     isSponsored: { type: Boolean, default: false },
@@ -39,5 +41,8 @@ const taskSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+taskSchema.index({ isActive: 1, expiresAt: 1, isSpecialOfDay: -1, isSponsored: -1, createdAt: -1 });
+taskSchema.index({ isActive: 1, type: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Task', taskSchema);

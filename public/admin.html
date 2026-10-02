@@ -1,0 +1,1397 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>پنل ادمین | Points Rewards</title>
+<style>
+  :root{
+    --bg:#0b0c11; --surface:#12141c; --surface2:#171a22; --line:rgba(255,255,255,.09);
+    --text:#f2f3f7; --muted:#8a90a1; --primary:#8b5cf6; --primary2:#a78bfa;
+    --success:#22c55e; --danger:#ef4444; --warning:#f59e0b; --gold:#f5c451; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:Vazirmatn,Tahoma,sans-serif;min-height:100vh}
+  .wrap{max-width:960px;margin:0 auto;padding:20px 16px 60px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:20px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:16px}
+  .statsGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  input,select,textarea{
+    background:var(--surface2);border:1px solid var(--line);color:var(--text);
+    border-radius:10px;padding:10px 12px;font-size:13px;width:100%;margin-bottom:8px;font-family:inherit
+  }
+  textarea{min-height:90px;resize:vertical}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  button{
+    background:linear-gradient(135deg,var(--primary2),var(--primary));color:#fff;border:0;
+    padding:10px 16px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer
+  }
+  button.secondary{background:var(--surface2);border:1px solid var(--line);color:var(--text)}
+  button.danger{background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.3)}
+  button.success{background:rgba(34,197,94,.15);color:var(--success);border:1px solid rgba(34,197,94,.3)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .tabs button{background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
+  .tabs button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{color:var(--muted);font-weight:700}
+  .badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:700}
+  .badge.pending{background:rgba(245,158,11,.15);color:var(--warning)}
+  .badge.approved{background:rgba(34,197,94,.15);color:var(--success)}
+  .badge.rejected{background:rgba(239,68,68,.15);color:var(--danger)}
+  .badge.paid{background:rgba(34,197,94,.15);color:var(--success)}
+  .badge.processing{background:rgba(59,130,246,.15);color:#3b82f6}
+  .badge.cancelled{background:rgba(148,163,184,.18);color:var(--muted)}
+  .empty{color:var(--muted);text-align:center;padding:24px;font-size:12px}
+  #loginBox{max-width:360px;margin:60px auto}
+  #msg{font-size:12px;margin-top:8px;min-height:16px}
+  #msg.error{color:var(--danger)}
+  #msg.success{color:var(--success)}
+  .flexBetween{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .small{font-size:11px;color:var(--muted)}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div id="loginBox" class="card">
+    <h1>ورود به پنل ادمین</h1>
+    <p class="sub">کلید ADMIN_KEY که در Environment سرور تنظیم کردی را وارد کن.</p>
+    <label>ADMIN_KEY</label>
+    <input id="adminKeyInput" type="password" placeholder="کلید ادمین">
+    <label>نام شما (اختیاری — برای لاگ فعالیت)</label>
+    <input id="adminNameInput" placeholder="مثلاً امیر">
+    <button onclick="login()">ورود</button>
+    <div id="loginMsg" style="font-size:12px;margin-top:8px;color:var(--danger)"></div>
+  </div>
+
+  <div id="panel" class="hidden">
+    <div class="flexBetween">
+      <div>
+        <h1>پنل ادمین</h1>
+        <div class="sub">مدیریت تسک‌ها، برداشت‌ها، کاربران و پیام همگانی</div>
+      </div>
+      <button class="secondary" onclick="logout()">خروج</button>
+    </div>
+
+    <div class="tabs">
+      <button data-tab="stats" onclick="switchTab('stats')">آمار</button>
+      <button data-tab="tasks" onclick="switchTab('tasks')">تسک‌ها</button>
+      <button data-tab="withdrawals" onclick="switchTab('withdrawals')">برداشت‌ها</button>
+      <button data-tab="users" onclick="switchTab('users')">کاربران</button>
+      <button data-tab="broadcast" onclick="switchTab('broadcast')">پیام همگانی</button>
+      <button data-tab="logs" onclick="switchTab('logs')">لاگ فعالیت</button>
+      <button data-tab="channels" onclick="switchTab('channels')">کانال‌های اجباری</button>
+      <button data-tab="settings" onclick="switchTab('settings')">تنظیمات</button>
+    </div>
+
+    <div id="msg"></div>
+
+    <!-- STATS -->
+    <div id="tab-stats" class="tabContent hidden">
+      <div class="statsGrid" id="statsGrid">
+        <div class="empty">در حال بارگذاری...</div>
+      </div>
+      <div class="card">
+        <b>کاربران جدید — ۷ روز اخیر</b>
+        <div id="chartNewUsers" style="margin-top:12px"></div>
+      </div>
+      <div class="card">
+        <b>تسک‌های تکمیل‌شده — ۷ روز اخیر</b>
+        <div id="chartTasksDone" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- TASKS -->
+    <div id="tab-tasks" class="tabContent">
+      <div class="card">
+        <div class="flexBetween"><b id="taskFormTitle">افزودن تسک تلگرامی جدید</b></div>
+        <p class="small">فقط تسک‌های عضویت در کانال/گروه تلگرام پشتیبانی می‌شود — عضویت به‌صورت خودکار توسط خود تلگرام بررسی می‌شود.</p>
+        <label>عنوان</label>
+        <input id="taskTitle" placeholder="مثلاً عضویت در کانال تلگرام">
+        <label>توضیحات (اختیاری)</label>
+        <input id="taskDesc" placeholder="توضیح کوتاه">
+        <label>نوع نمایشی</label>
+        <select id="taskType">
+          <option value="channel">عضویت کانال</option>
+          <option value="group">عضویت گروه</option>
+        </select>
+        <label>آیدی/یوزرنیم کانال یا گروه (chatId)</label>
+        <input id="taskChatId" placeholder="مثلاً @mychannel یا -1001234567890">
+        <p class="small">⚠️ ربات باید ادمین همین کانال/گروه باشد. برای سوپرگروه/کانال با آیدی عددی، حتماً باید با <b>-100</b> شروع بشه (مثلاً -1001234567890)، وگرنه تلگرام خطای «chat not found» می‌ده.</p>
+        <button type="button" class="secondary" onclick="testChatId()" style="margin-bottom:10px">🔍 تست chatId</button>
+        <div id="chatIdTestResult" class="small" style="margin-bottom:10px"></div>
+        <label>لینک عضویت (برای دکمه‌ی «باز کردن لینک»)</label>
+        <input id="taskUrl" placeholder="https://t.me/...">
+        <label>مقدار پاداش (پوینت)</label>
+        <input id="taskReward" type="number" placeholder="مثلاً 100">
+        <label>حداکثر تعداد تکمیل (اختیاری — برای تسک اسپانسری نادیده گرفته می‌شود)</label>
+        <input id="taskMaxCompletions" type="number" min="1" placeholder="خالی = بدون محدودیت">
+        <p class="small">اگه پر کنی، فقط همین تعداد نفر اول که تسک رو با موفقیت انجام بدن پاداش می‌گیرن؛ بعدش تسک خودکار غیرفعال می‌شه.</p>
+        <label>تاریخ پایان (اختیاری)</label>
+        <input id="taskExpiresAt" type="date">
+
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
+          <label style="display:flex;align-items:center;gap:8px;margin:0">
+            <input type="checkbox" id="taskSponsored" style="width:auto" onchange="toggleSponsorFields()">
+            <b>💰 این تسک اسپانسری است (منبع درآمد)</b>
+          </label>
+          <p class="small" style="margin:8px 0">یک تبلیغ‌دهنده برای هر عضو تاییدشده مبلغی می‌پردازد. ظرفیت این تسک خودکار از «بودجه ÷ قیمت هر عضو» محاسبه می‌شود و شما نباید حداکثر تکمیل را جدا وارد کنید.</p>
+          <div id="sponsorFields" class="hidden">
+            <label>نام تبلیغ‌دهنده</label>
+            <input id="sponsorName" placeholder="مثلاً Acme Exchange">
+            <label>دریافتی شما از تبلیغ‌دهنده به‌ازای هر عضو (دلار)</label>
+            <input id="sponsorPrice" type="number" step="0.0001" min="0" placeholder="مثلاً 0.05" oninput="updateSponsorPreview()">
+            <label>بودجه‌ی کل تبلیغ‌دهنده (دلار)</label>
+            <input id="sponsorBudget" type="number" step="0.01" min="0" placeholder="مثلاً 10" oninput="updateSponsorPreview()">
+            <div id="sponsorPreview" class="small" style="line-height:1.9;margin-top:6px"></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <button onclick="addTask()" id="taskSubmitBtn">افزودن تسک</button>
+          <button type="button" class="secondary hidden" id="taskCancelBtn" onclick="resetTaskForm()">انصراف از ویرایش</button>
+        </div>
+      </div>
+
+      <div class="card" id="sponsorSummaryCard"></div>
+
+      <div class="card">
+        <div class="flexBetween"><b>لیست تسک‌ها</b></div>
+        <div class="row" style="margin-top:10px">
+          <input id="taskSearch" placeholder="جستجو در عنوان/توضیحات/chatId..." style="flex:2;min-width:160px;margin:0" oninput="debouncedLoadTasks()">
+          <select id="taskTypeFilter" onchange="loadTasks()" style="flex:1;min-width:110px;margin:0">
+            <option value="">همه نوع‌ها</option>
+            <option value="channel">کانال</option>
+            <option value="group">گروه</option>
+            <option value="link">لینک</option>
+            <option value="custom">سفارشی</option>
+          </select>
+          <select id="taskStatusFilter" onchange="loadTasks()" style="flex:1;min-width:110px;margin:0">
+            <option value="">همه وضعیت‌ها</option>
+            <option value="active">فعال</option>
+            <option value="inactive">غیرفعال</option>
+          </select>
+        </div>
+        <div id="tasksList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- WITHDRAWALS -->
+    <div id="tab-withdrawals" class="tabContent hidden">
+      <div class="card">
+        <div class="flexBetween">
+          <b>درخواست‌های برداشت</b>
+          <select id="withdrawFilter" onchange="loadWithdrawals()" style="width:auto;margin:0">
+            <option value="">همه</option>
+            <option value="pending" selected>در انتظار بررسی</option>
+            <option value="approved">تاییدشده</option>
+            <option value="processing">در حال پردازش</option>
+            <option value="paid">پرداخت‌شده</option>
+            <option value="rejected">رد شده</option>
+            <option value="cancelled">لغوشده</option>
+          </select>
+        </div>
+        <div id="withdrawalsList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- USERS -->
+    <div id="tab-users" class="tabContent hidden">
+      <div class="card">
+        <div class="flexBetween"><b>کاربران</b></div>
+        <div class="row" style="margin-top:10px">
+          <input id="userSearch" placeholder="جستجو با نام/یوزرنیم/آیدی تلگرام..." style="flex:2;min-width:160px;margin:0" oninput="debouncedLoadUsers()">
+          <select id="userStatusFilter" onchange="loadUsers()" style="flex:1;min-width:110px;margin:0">
+            <option value="">همه</option>
+            <option value="active">فعال</option>
+            <option value="banned">مسدود</option>
+          </select>
+          <select id="userSortFilter" onchange="loadUsers()" style="flex:1;min-width:110px;margin:0">
+            <option value="newest">جدیدترین</option>
+            <option value="oldest">قدیمی‌ترین</option>
+            <option value="points">بیشترین پوینت</option>
+            <option value="invited">بیشترین دعوت</option>
+          </select>
+        </div>
+        <div id="usersList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- BROADCAST -->
+    <div id="tab-broadcast" class="tabContent hidden">
+      <div class="card">
+        <b>ارسال پیام همگانی</b>
+        <p class="small">این پیام برای همه‌ی کاربران فعال (غیرمسدود) ربات ارسال می‌شود.</p>
+        <br>
+        <label>متن پیام</label>
+        <textarea id="broadcastText" placeholder="متن پیام همگانی..."></textarea>
+        <label>تصویر (اختیاری)</label>
+        <input id="broadcastImage" type="file" accept="image/*">
+        <button onclick="sendBroadcast()">ارسال به همه کاربران</button>
+        <div id="broadcastMsg" class="small" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- LOGS -->
+    <div id="tab-logs" class="tabContent hidden">
+      <div class="card">
+        <div class="flexBetween">
+          <b>لاگ فعالیت ادمین</b>
+          <select id="logFilter" onchange="loadLogs()" style="width:auto;margin:0">
+            <option value="">همه اکشن‌ها</option>
+            <option value="task_create">افزودن تسک</option>
+            <option value="task_update">ویرایش تسک</option>
+            <option value="task_delete">حذف تسک</option>
+            <option value="withdrawal_approve">تایید برداشت</option>
+            <option value="withdrawal_reject">رد برداشت</option>
+            <option value="user_ban">مسدود کردن کاربر</option>
+            <option value="user_unban">رفع مسدودی کاربر</option>
+            <option value="settings_update">تغییر تنظیمات</option>
+            <option value="broadcast_send">پیام همگانی</option>
+          </select>
+        </div>
+        <div id="logsList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- REQUIRED CHANNELS -->
+    <div id="tab-channels" class="tabContent hidden">
+      <div id="channelsWarn"></div>
+
+      <div class="card">
+        <div class="flexBetween"><b id="channelFormTitle">افزودن کانال اجباری</b></div>
+        <p class="small">کاربران برای استفاده از مینی‌اپ باید عضو <b>همه‌ی کانال‌های فعال</b> باشند. عضویت هر بار که کاربر وارد برنامه می‌شود دوباره از خود تلگرام بررسی می‌شود. اگر هیچ کانالی فعال نباشد، ورود آزاد است.</p>
+        <label>نام کانال (برای نمایش به کاربر)</label>
+        <input id="chName" placeholder="مثلاً GramUp Official">
+        <label>یوزرنیم تلگرام</label>
+        <input id="chUsername" placeholder="@GramUpOfficial" style="direction:ltr">
+        <label>آیدی عددی کانال (اختیاری — اگر خالی باشد بعد از اعتبارسنجی خودکار پر می‌شود)</label>
+        <input id="chChatId" placeholder="-1001234567890" style="direction:ltr">
+        <label>لینک کانال (خالی = ساخت خودکار از یوزرنیم)</label>
+        <input id="chUrl" placeholder="https://t.me/GramUpOfficial" style="direction:ltr">
+        <label>وضعیت</label>
+        <select id="chActive">
+          <option value="true">فعال (اجباری)</option>
+          <option value="false">غیرفعال</option>
+        </select>
+        <p class="small">⚠️ ربات باید در این کانال <b>ادمین</b> باشد؛ وگرنه تلگرام اجازه‌ی بررسی عضویت کاربران را نمی‌دهد. قبل از ذخیره، اتصال ربات بررسی می‌شود.</p>
+        <div class="row">
+          <button onclick="saveRequiredChannel()" id="chSaveBtn">ذخیره</button>
+          <button type="button" class="secondary hidden" id="chCancelBtn" onclick="resetChannelForm()">انصراف از ویرایش</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="flexBetween"><b>لیست کانال‌های اجباری</b><button class="secondary" onclick="loadRequiredChannels()">🔄</button></div>
+        <div id="channelsList" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="tab-settings" class="tabContent hidden">
+      <div class="card">
+        <b>تنظیمات کلی</b>
+        <br><br>
+        <label>نرخ تبدیل (هر پوینت به GRAM)</label>
+        <input id="setRate" type="number" step="0.000001">
+        <label>قیمت هر ۱ GRAM به دلار (برای نمایش ≈ USD؛ صفر = مخفی)</label>
+        <input id="setGramUsd" type="number" step="0.0001" min="0">
+        <label>هزینه‌ی چرخاندن گردونه با پوینت (پیش‌فرض ۳۰؛ برای اینکه ضرر نکنید کمتر از ۲۶ نگذارید)</label>
+        <input id="setSpinCost" type="number" min="1" step="1" oninput="updateSpinPreview()">
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:4px 0 12px;background:var(--surface2)">
+          <b style="font-size:13px">🎡 شانس گردونه هنگام چرخش با پوینت</b>
+          <p class="small" style="margin:6px 0 10px">برای هر خانه یک عدد صحیح بنویسید؛ درصد شانس = عدد ÷ مجموع همه‌ی عددها. (چرخش‌های رایگان استریک همیشه شانس مساوی دارند.)</p>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0 10px">
+            <div><label>خانه‌ی ۲۰ پوینت</label><input id="setW0" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+            <div><label>خانه‌ی ۴۰ پوینت</label><input id="setW1" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+            <div><label>خانه‌ی ۶۰ پوینت</label><input id="setW2" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+            <div><label>خانه‌ی ۱۰۰ پوینت</label><input id="setW3" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+            <div><label>خانه‌ی پوچ</label><input id="setW4" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+            <div><label>خانه‌ی شانس دوباره (چرخش رایگان)</label><input id="setW5" type="number" min="0" max="1000" step="1" oninput="updateSpinPreview()"></div>
+          </div>
+          <div id="spinPreview" class="small" style="line-height:1.9"></div>
+          <button type="button" class="secondary" onclick="resetSpinWeights()" style="margin-top:8px">بازگشت به مقادیر پیش‌فرض</button>
+        </div>
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:4px 0 12px;background:var(--surface2)">
+          <b>⏰ Daily Check Reminder (یادآوری ورود روزانه)</b>
+          <p class="small" style="margin:8px 0">به کاربرانی که آن روز هنوز ورود روزانه نزده‌اند، یک‌بار در روز پیام یادآوری فرستاده می‌شود (به زبان خودشان، مگر متن سفارشی زیر را پر کنید). سرور هر ۱۰ دقیقه چک می‌کند و فقط در همان ساعتی که اینجا تنظیم می‌شود ارسال می‌شود؛ بعد از ذخیره، زمان‌بندی خودش از تنظیمات جدید استفاده می‌کند و نیازی به ری‌استارت نیست.</p>
+
+          <label style="display:flex;align-items:center;gap:8px;margin:10px 0 0">
+            <input type="checkbox" id="setReminderEnabled" style="width:auto">
+            <b>فعال باشد</b>
+          </label>
+
+          <label>منطقه‌ی زمانی</label>
+          <select id="setReminderTz" onchange="updateReminderUtcHint()"></select>
+
+          <label>ساعت ارسال (به وقت محلی همین منطقه‌ی زمانی)</label>
+          <input id="setReminderLocalHour" type="number" min="0" max="23" step="1" oninput="updateReminderUtcHint()">
+          <p class="small" id="reminderUtcHint" style="margin-top:4px"></p>
+
+          <label>مخاطبان</label>
+          <select id="setReminderAudience">
+            <option value="all">همه‌ی کاربران</option>
+            <option value="active">فقط کاربران فعال (فعالیت در ۳۰ روز اخیر)</option>
+          </select>
+
+          <label>متن سفارشی پیام (اختیاری — خالی = متن پیش‌فرض به زبان خود هر کاربر)</label>
+          <textarea id="setReminderMessage" rows="4" placeholder="🔔 وقت انجام Daily Check امروز شماست..." oninput="updateReminderPreview()"></textarea>
+          <div class="small" style="margin:6px 0 12px;padding:10px;border-radius:10px;background:var(--surface3,var(--surface))">
+            <b>پیش‌نمایش:</b><br>
+            <span id="reminderPreview" style="white-space:pre-wrap"></span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;align-items:end;margin-bottom:10px">
+            <div><label>آیدی عددی تلگرام برای تست (خودتان)</label><input id="reminderTestId" placeholder="مثلاً 123456789" style="margin:0"></div>
+            <button type="button" class="secondary" onclick="sendReminderTest()">ارسال Test</button>
+          </div>
+          <div id="reminderTestMsg" class="small" style="margin-bottom:10px"></div>
+
+          <div class="small" style="line-height:2">
+            <b>وضعیت آخرین اجرای سیستم:</b><br>
+            <span id="reminderStatusBox">هنوز اجرا نشده.</span>
+          </div>
+        </div>
+        <label>حداقل پوینت برای برداشت</label>
+        <input id="setMinWithdraw" type="number">
+        <label>پاداش ورود روزانه (پایه)</label>
+        <input id="setDaily" type="number">
+        <label>پاداش اضافه به ازای هر روز استریک</label>
+        <input id="setStreakBonus" type="number">
+        <button onclick="saveSettings()">ذخیره تنظیمات</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+"use strict";
+
+let ADMIN_KEY = localStorage.getItem("adminKey") || "";
+let ADMIN_NAME = localStorage.getItem("adminName") || "";
+
+function showMsg(text, type) {
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = type || "";
+  setTimeout(() => { el.textContent = ""; }, 3500);
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-key": ADMIN_KEY,
+      "x-admin-name": ADMIN_NAME,
+      ...(options.headers || {})
+    }
+  });
+  let data = {};
+  try { data = await res.json(); } catch {}
+  if (!res.ok) {
+    const err = new Error(data.message || "خطا در ارتباط با سرور");
+    err.code = data.code;
+    err.raw = data.raw;
+    throw err;
+  }
+  return data;
+}
+
+async function apiUpload(path, formData) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "x-admin-key": ADMIN_KEY, "x-admin-name": ADMIN_NAME },
+    body: formData
+  });
+  let data = {};
+  try { data = await res.json(); } catch {}
+  if (!res.ok) throw new Error(data.message || "خطا در ارتباط با سرور");
+  return data;
+}
+
+async function login() {
+  const key = document.getElementById("adminKeyInput").value.trim();
+  const name = document.getElementById("adminNameInput").value.trim();
+  if (!key) return;
+  ADMIN_KEY = key;
+  ADMIN_NAME = name;
+  try {
+    await api("/api/admin/settings");
+    localStorage.setItem("adminKey", key);
+    localStorage.setItem("adminName", name);
+    document.getElementById("loginBox").classList.add("hidden");
+    document.getElementById("panel").classList.remove("hidden");
+    switchTab("stats");
+  } catch (error) {
+    document.getElementById("loginMsg").textContent = "کلید نادرست است یا سرور در دسترس نیست.";
+  }
+}
+
+function logout() {
+  localStorage.removeItem("adminKey");
+  ADMIN_KEY = "";
+  document.getElementById("panel").classList.add("hidden");
+  document.getElementById("loginBox").classList.remove("hidden");
+}
+
+function switchTab(tab) {
+  document.querySelectorAll(".tabContent").forEach(el => el.classList.add("hidden"));
+  document.querySelectorAll(".tabs button").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
+  document.getElementById("tab-" + tab).classList.remove("hidden");
+  if (tab === "stats") loadStats();
+  if (tab === "tasks") loadTasks();
+  if (tab === "withdrawals") loadWithdrawals();
+  if (tab === "users") loadUsers();
+  if (tab === "logs") loadLogs();
+  if (tab === "tasks") loadTaskFormSettings();
+  if (tab === "channels") loadRequiredChannels();
+  if (tab === "settings") loadSettings();
+}
+
+/* ---------- STATS (داشبورد آمار) ---------- */
+function renderBarChart(days, color) {
+  const max = Math.max(1, ...days.map(d => d.count));
+  const weekdays = ["ی", "د", "س", "چ", "پ", "ج", "ش"];
+  return `
+    <div style="display:flex;align-items:flex-end;gap:8px;height:110px">
+      ${days.map(d => {
+        const h = Math.round((d.count / max) * 90) + 4;
+        const dow = weekdays[new Date(d.date + "T00:00:00").getDay()];
+        return `
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+            <div class="small" style="font-weight:700">${d.count}</div>
+            <div style="width:100%;max-width:28px;height:${h}px;background:${color};border-radius:6px 6px 0 0"></div>
+            <div class="small">${dow}</div>
+          </div>`;
+      }).join("")}
+    </div>`;
+}
+
+async function loadStats() {
+  const grid = document.getElementById("statsGrid");
+  grid.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  try {
+    const data = await api("/api/admin/stats");
+    const s = data.stats;
+
+    const paidTodayText = (s.paidToday || []).length
+      ? s.paidToday.map(p => `${p.total} ${p._id}`).join(" · ")
+      : "۰";
+
+    grid.innerHTML = `
+      <div class="card" style="margin-bottom:0"><div class="small">کاربر جدید امروز</div><div style="font-size:22px;font-weight:800">${s.newUsersToday}</div></div>
+      <div class="card" style="margin-bottom:0"><div class="small">تسک تکمیل‌شده امروز</div><div style="font-size:22px;font-weight:800">${s.tasksCompletedToday}</div></div>
+      <div class="card" style="margin-bottom:0"><div class="small">نرخ تبدیل ریفرال</div><div style="font-size:22px;font-weight:800">٪${s.referralConversionRate}</div><div class="small">${s.convertedReferred} از ${s.totalReferred} دعوت‌شده</div></div>
+      <div class="card" style="margin-bottom:0"><div class="small">کل کاربران</div><div style="font-size:22px;font-weight:800">${s.totalUsers}</div><div class="small">${s.bannedUsers} مسدود</div></div>
+      <div class="card" style="margin-bottom:0"><div class="small">برداشت در انتظار</div><div style="font-size:22px;font-weight:800">${s.pendingWithdrawals}</div></div>
+      <div class="card" style="margin-bottom:0"><div class="small">پرداخت‌شده امروز</div><div style="font-size:18px;font-weight:800">${paidTodayText}</div></div>
+    `;
+
+    document.getElementById("chartNewUsers").innerHTML = renderBarChart(s.newUsersTrend, "var(--accent, #6366f1)");
+    document.getElementById("chartTasksDone").innerHTML = renderBarChart(s.tasksTrend, "var(--success, #22c55e)");
+  } catch (error) {
+    grid.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+/* ---------- ADMIN ACTIVITY LOG ---------- */
+const ACTION_FA = {
+  task_create: "➕ افزودن تسک", task_update: "✏️ ویرایش تسک", task_delete: "🗑️ حذف تسک",
+  withdrawal_approve: "✅ تایید برداشت", withdrawal_reject: "❌ رد برداشت",
+  user_ban: "🚫 مسدود کردن کاربر", user_unban: "♻️ رفع مسدودی کاربر",
+  settings_update: "⚙️ تغییر تنظیمات", broadcast_send: "📢 پیام همگانی"
+};
+
+async function loadLogs() {
+  const container = document.getElementById("logsList");
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  const action = document.getElementById("logFilter")?.value || "";
+  const params = new URLSearchParams();
+  if (action) params.set("action", action);
+
+  try {
+    const data = await api(`/api/admin/logs${params.toString() ? "?" + params.toString() : ""}`);
+    const logs = data.logs || [];
+    if (logs.length === 0) {
+      container.innerHTML = '<div class="empty">هنوز لاگی ثبت نشده.</div>';
+      return;
+    }
+    container.innerHTML = logs.map(l => `
+      <div style="padding:10px 0;border-bottom:1px solid var(--line)">
+        <div class="flexBetween">
+          <b>${ACTION_FA[l.action] || l.action}</b>
+          <span class="small">${new Date(l.createdAt).toLocaleString("fa-IR")}</span>
+        </div>
+        <div class="small" style="margin-top:2px">توسط: ${escapeHtml(l.actor)}</div>
+        ${l.details ? `<div class="small" style="margin-top:2px">${escapeHtml(l.details)}</div>` : ""}
+      </div>
+    `).join("");
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+/* ---------- TASKS ---------- */
+let taskSearchDebounce = null;
+function debouncedLoadTasks() {
+  clearTimeout(taskSearchDebounce);
+  taskSearchDebounce = setTimeout(loadTasks, 350);
+}
+
+async function loadTasks() {
+  const container = document.getElementById("tasksList");
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  const search = document.getElementById("taskSearch")?.value.trim() || "";
+  const type = document.getElementById("taskTypeFilter")?.value || "";
+  const status = document.getElementById("taskStatusFilter")?.value || "";
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (type) params.set("type", type);
+  if (status) params.set("status", status);
+
+  try {
+    const data = await api(`/api/admin/tasks${params.toString() ? "?" + params.toString() : ""}`);
+    const tasks = data.tasks || [];
+    renderSponsorSummary(data.summary);
+    if (tasks.length === 0) {
+      container.innerHTML = `<div class="empty">${search || type || status ? "با این فیلتر چیزی پیدا نشد." : "هنوز تسکی ثبت نشده."}</div>`;
+      return;
+    }
+    container.innerHTML = `
+      <table>
+        <thead><tr><th>عنوان</th><th>پاداش</th><th>تکمیل‌شده</th><th>ظرفیت کل</th><th>باقی‌مانده</th><th>سود/زیان</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <tbody>
+          ${tasks.map(t => {
+            const hasLimit = t.maxCompletions != null;
+            const remaining = hasLimit ? Math.max(0, t.maxCompletions - t.completedCount) : "∞";
+            const isFull = hasLimit && t.completedCount >= t.maxCompletions;
+            const statusLabel = isFull
+              ? '<span class="badge rejected">تکمیل شد</span>'
+              : t.isActive
+                ? '<span class="badge approved">فعال</span>'
+                : '<span class="badge pending">غیرفعال</span>';
+            const isExpired = t.expiresAt && new Date(t.expiresAt).getTime() <= Date.now();
+            const stats = t.stats || { revenueUsd: 0, costUsd: 0 };
+            const profit = stats.revenueUsd - stats.costUsd;
+            const sponsorLabel = t.isSponsored
+              ? `<br><span class="badge approved" title="قیمت هر عضو: ${t.sponsorPriceUsd ?? "—"}$ | بودجه: ${t.sponsorBudgetUsd ?? "—"}$">💰 ${escapeHtml(t.sponsorName || "اسپانسری")}</span>`
+              : "";
+            const expiryLabel = t.expiresAt
+              ? `<br><span class="small" style="color:${isExpired ? "var(--danger)" : "var(--text-muted, inherit)"}">پایان: ${new Date(t.expiresAt).toLocaleDateString("fa-IR")}${isExpired ? " (منقضی)" : ""}</span>`
+              : "";
+            const profitCell = t.isSponsored
+              ? `<span style="color:${profit >= 0 ? "var(--success)" : "var(--danger)"}">${profit >= 0 ? "+" : ""}${profit.toFixed(2)}$</span><br><span class="small">${stats.revenueUsd.toFixed(2)}$ − ${stats.costUsd.toFixed(2)}$</span>`
+              : "—";
+            return `
+            <tr>
+              <td>${escapeHtml(t.title)}<br><span class="small" style="direction:ltr">${escapeHtml(t.chatId || "—")}</span>${sponsorLabel}${expiryLabel}</td>
+              <td>${t.reward}</td>
+              <td>${t.completedCount || 0}</td>
+              <td>${hasLimit ? t.maxCompletions : "بدون محدودیت"}</td>
+              <td>${remaining}</td>
+              <td>${profitCell}</td>
+              <td>${statusLabel}${isExpired && t.isActive ? '<br><span class="badge pending">منقضی</span>' : ""}</td>
+              <td class="row">
+                <button class="secondary" onclick="testExistingChatId('${(t.chatId || '').replaceAll("'", "\\'")}',this)">تست</button>
+                <button class="secondary" onclick="editTask('${t._id}')">ویرایش</button>
+                <button class="secondary" onclick="toggleTask('${t._id}', ${!t.isActive})">${t.isActive ? "غیرفعال" : "فعال"}</button>
+                <button class="danger" onclick="deleteTask('${t._id}')">حذف</button>
+              </td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    `;
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function testChatId() {
+  const chatId = document.getElementById("taskChatId").value.trim();
+  const resultEl = document.getElementById("chatIdTestResult");
+  if (!chatId) {
+    resultEl.textContent = "اول chatId رو وارد کن.";
+    resultEl.style.color = "var(--danger)";
+    return;
+  }
+  await runChatIdCheck(chatId, resultEl);
+}
+
+async function testExistingChatId(chatId, buttonEl) {
+  if (!chatId) {
+    alert("این تسک chatId ندارد.");
+    return;
+  }
+  const original = buttonEl.textContent;
+  buttonEl.textContent = "...";
+  buttonEl.disabled = true;
+  try {
+    const result = await api("/api/admin/verify-chat", {
+      method: "POST",
+      body: JSON.stringify({ chatId })
+    });
+    alert(result.message);
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    buttonEl.textContent = original;
+    buttonEl.disabled = false;
+  }
+}
+
+async function runChatIdCheck(chatId, resultEl) {
+  resultEl.textContent = "در حال بررسی...";
+  resultEl.style.color = "var(--muted)";
+  try {
+    const result = await api("/api/admin/verify-chat", {
+      method: "POST",
+      body: JSON.stringify({ chatId })
+    });
+    resultEl.textContent = result.message;
+    resultEl.style.color = result.botIsAdmin ? "var(--success)" : "var(--warning)";
+  } catch (error) {
+    resultEl.textContent = error.message;
+    resultEl.style.color = "var(--danger)";
+  }
+}
+
+function readTaskForm() {
+  const maxCompletionsRaw = document.getElementById("taskMaxCompletions").value.trim();
+  return {
+    title: document.getElementById("taskTitle").value.trim(),
+    description: document.getElementById("taskDesc").value.trim(),
+    type: document.getElementById("taskType").value,
+    chatId: document.getElementById("taskChatId").value.trim(),
+    url: document.getElementById("taskUrl").value.trim(),
+    reward: Number(document.getElementById("taskReward").value),
+    maxCompletions: maxCompletionsRaw ? Number(maxCompletionsRaw) : null,
+    expiresAt: document.getElementById("taskExpiresAt").value || null,
+    isSponsored: document.getElementById("taskSponsored").checked,
+    sponsorName: document.getElementById("sponsorName").value.trim(),
+    sponsorPriceUsd: Number(document.getElementById("sponsorPrice").value) || 0,
+    sponsorBudgetUsd: Number(document.getElementById("sponsorBudget").value) || 0
+  };
+}
+
+function resetTaskForm() {
+  editingTaskId = null;
+  ["taskTitle","taskDesc","taskUrl","taskReward","taskChatId","taskMaxCompletions","taskExpiresAt","sponsorName","sponsorPrice","sponsorBudget"]
+    .forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("taskSponsored").checked = false;
+  toggleSponsorFields();
+  document.getElementById("chatIdTestResult").textContent = "";
+  document.getElementById("taskFormTitle").textContent = "افزودن تسک تلگرامی جدید";
+  document.getElementById("taskSubmitBtn").textContent = "افزودن تسک";
+  document.getElementById("taskCancelBtn").classList.add("hidden");
+}
+
+async function addTask(force) {
+  const form = readTaskForm();
+  if (!form.title || !form.reward) return showMsg("عنوان و مقدار پاداش الزامی است.", "error");
+  if (!form.chatId) return showMsg("chatId الزامی است.", "error");
+  if (form.isSponsored && !form.sponsorName) return showMsg("نام تبلیغ‌دهنده الزامی است.", "error");
+
+  try {
+    const path = editingTaskId ? `/api/admin/tasks/${editingTaskId}` : "/api/admin/tasks";
+    await api(path, { method: editingTaskId ? "PUT" : "POST", body: JSON.stringify({ ...form, force: force === true }) });
+    showMsg(editingTaskId ? "تسک ویرایش شد." : "تسک با موفقیت اضافه شد.", "success");
+    resetTaskForm();
+    loadTasks();
+  } catch (error) {
+    if (error.code === "LOSS_MAKING" && force !== true) {
+      if (confirm(error.message + "\n\nبا این حال ذخیره شود؟")) return addTask(true);
+      return;
+    }
+    showMsg(error.message, "error");
+  }
+}
+
+function editTask(id) {
+  api(`/api/admin/tasks?search=`).then(data => {
+    const t = (data.tasks || []).find(x => x._id === id);
+    if (!t) return;
+    editingTaskId = id;
+    document.getElementById("taskTitle").value = t.title || "";
+    document.getElementById("taskDesc").value = t.description || "";
+    document.getElementById("taskType").value = t.type || "channel";
+    document.getElementById("taskChatId").value = t.chatId || "";
+    document.getElementById("taskUrl").value = t.url || "";
+    document.getElementById("taskReward").value = t.reward ?? "";
+    document.getElementById("taskMaxCompletions").value = t.isSponsored ? "" : (t.maxCompletions ?? "");
+    document.getElementById("taskExpiresAt").value = t.expiresAt ? new Date(t.expiresAt).toISOString().slice(0, 10) : "";
+    document.getElementById("taskSponsored").checked = !!t.isSponsored;
+    document.getElementById("sponsorName").value = t.sponsorName || "";
+    document.getElementById("sponsorPrice").value = t.sponsorPriceUsd || "";
+    document.getElementById("sponsorBudget").value = t.sponsorBudgetUsd || "";
+    toggleSponsorFields();
+    document.getElementById("taskFormTitle").textContent = "ویرایش تسک: " + t.title;
+    document.getElementById("taskSubmitBtn").textContent = "ذخیره‌ی تغییرات";
+    document.getElementById("taskCancelBtn").classList.remove("hidden");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }).catch(error => showMsg(error.message, "error"));
+}
+
+async function toggleTask(id, newState) {
+  try {
+    await api(`/api/admin/tasks/${id}`, { method: "PUT", body: JSON.stringify({ isActive: newState }) });
+    loadTasks();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+async function deleteTask(id) {
+  if (!confirm("این تسک حذف شود؟")) return;
+  try {
+    await api(`/api/admin/tasks/${id}`, { method: "DELETE" });
+    showMsg("تسک حذف شد.", "success");
+    loadTasks();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+/* ---------- WITHDRAWALS (نمایش بر اساس GRAM) ---------- */
+const STATUS_FA = {
+  pending: "در انتظار بررسی", approved: "تاییدشده", processing: "در حال پردازش",
+  paid: "پرداخت‌شده", rejected: "رد شده", cancelled: "لغوشده"
+};
+// همان قوانین utils/withdrawalStatus.js#TRANSITIONS سمت سرور — چون این فایل داخل مرورگر اجرا می‌شود و require ندارد،
+// این نگاشت باید دستی با آن هماهنگ بماند (فقط برای تصمیم اینکه کدام دکمه نشان داده شود؛ اعتبارسنجی واقعی سمت سرور است).
+const STATUS_LIGHT_ACTIONS = {
+  pending: [["approved", "تاییدِ اولیه"], ["processing", "شروع پردازش"], ["cancelled", "لغو"]],
+  approved: [["processing", "شروع پردازش"], ["cancelled", "لغو"]],
+  processing: [["cancelled", "لغو"]],
+  paid: [], rejected: [], cancelled: []
+};
+const NON_TERMINAL = ["pending", "approved", "processing"];
+
+function truncateMiddle(str, head = 8, tail = 6) {
+  const s = String(str || "");
+  if (s.length <= head + tail + 3) return s;
+  return `${s.slice(0, head)}…${s.slice(-tail)}`;
+}
+
+function renderWithdrawTimeline(timeline) {
+  if (!Array.isArray(timeline) || !timeline.length) return "";
+  return `<div style="margin:10px 0;padding:10px;border-inline-start:2px solid var(--line);display:flex;flex-direction:column;gap:8px">
+    ${timeline.map(step => `
+      <div style="font-size:11px">
+        <b>${escapeHtml(STATUS_FA[step.status] || step.status)}</b>
+        <span style="color:var(--muted)"> — ${new Date(step.at).toLocaleString("fa-IR")}</span>
+        ${step.note ? `<div style="color:var(--muted);margin-top:2px">دلیل: ${escapeHtml(step.note)}</div>` : ""}
+      </div>`).join("")}
+  </div>`;
+}
+
+async function loadWithdrawals() {
+  const container = document.getElementById("withdrawalsList");
+  const status = document.getElementById("withdrawFilter").value;
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  try {
+    const data = await api(`/api/admin/withdrawals${status ? "?status=" + status : ""}`);
+    const list = data.withdrawals || [];
+    if (list.length === 0) {
+      container.innerHTML = '<div class="empty">درخواستی یافت نشد.</div>';
+      return;
+    }
+    container.innerHTML = list.map(w => `
+      <div class="card" style="margin-bottom:10px" id="wd-${w._id}">
+        <div class="flexBetween" style="margin-bottom:8px">
+          <b>${escapeHtml(w.user?.firstName || w.user?.username || "—")}</b>
+          <span class="badge ${w.status}">${STATUS_FA[w.status] || w.status}</span>
+        </div>
+        <div class="small" style="margin-bottom:2px">شناسه‌ی برداشت: <span style="font-family:monospace">${escapeHtml(w._id)}</span></div>
+        <div class="small" style="margin-bottom:6px">مقدار: <b style="color:var(--text)">${w.cryptoAmount} ${escapeHtml(w.token || "GRAM")}</b> · شبکه: ${escapeHtml(w.network || "TON")}</div>
+        <label class="small" style="margin-bottom:4px">آدرس مقصد (کیف‌پول کاربر)</label>
+        <div style="display:flex;gap:6px;align-items:stretch;margin-bottom:8px">
+          <input type="text" readonly value="${escapeHtml(w.address)}" style="margin:0;direction:ltr;font-family:monospace;font-size:11px" onclick="this.select()">
+          <button class="secondary" style="white-space:nowrap" onclick="copyAddress('${escapeHtml(w.address).replaceAll("'", "\\'")}', this)">کپی</button>
+        </div>
+
+        ${w.status === "paid" ? `
+          <div class="small" style="margin-bottom:4px">هش تراکنش (TxID)</div>
+          <div style="display:flex;gap:6px;align-items:stretch;margin-bottom:6px">
+            <input type="text" readonly value="${escapeHtml(w.txHash || "")}" style="margin:0;direction:ltr;font-family:monospace;font-size:11px" onclick="this.select()">
+            <button class="secondary" style="white-space:nowrap" onclick="copyAddress('${escapeHtml(w.txHash || "").replaceAll("'", "\\'")}', this)">کپی</button>
+          </div>
+          <div class="small">${w.verified ? "✅ به‌صورت خودکار روی زنجیره تایید شد" : "⚠️ تایید دستی توسط ادمین (Jetton)"}</div>
+          ${w.fromAddress ? `<div class="small" style="margin-top:2px">فرستنده: <span style="font-family:monospace">${escapeHtml(truncateMiddle(w.fromAddress))}</span></div>` : ""}
+        ` : ""}
+
+        <details style="margin-bottom:8px"><summary class="small" style="cursor:pointer">مشاهده‌ی Timeline</summary>${renderWithdrawTimeline(w.timeline)}</details>
+
+        ${NON_TERMINAL.includes(w.status) ? `
+          <div id="wd-approve-form-${w._id}" class="hidden" style="margin-bottom:8px;padding:10px;border:1px solid var(--line);border-radius:10px">
+            <label class="small" style="margin-bottom:4px">Transaction Hash (TxID) واقعی پرداخت</label>
+            <input type="text" id="wd-txhash-${w._id}" placeholder="مثلاً a1b2c3..." style="margin:0 0 8px;direction:ltr;font-family:monospace;font-size:12px">
+            <div id="wd-verify-msg-${w._id}" class="small" style="margin-bottom:8px"></div>
+            <div class="row">
+              <button class="success" onclick="submitApprove('${w._id}')">بررسی و تکمیل پرداخت</button>
+              <button class="secondary" onclick="hideApproveForm('${w._id}')">انصراف</button>
+            </div>
+          </div>
+          <div class="row" style="flex-wrap:wrap;gap:6px">
+            <button class="success" onclick="showApproveForm('${w._id}')">پرداخت نهایی (وارد کردن Hash)</button>
+            ${(STATUS_LIGHT_ACTIONS[w.status] || []).map(([target, label]) =>
+              `<button class="${target === "cancelled" ? "danger" : "secondary"}" onclick="withdrawSetStatus('${w._id}','${target}')">${label}</button>`
+            ).join("")}
+            ${w.status === "pending" ? `<button class="danger" onclick="withdrawReject('${w._id}')">رد</button>` : ""}
+          </div>
+        ` : ""}
+      </div>
+    `).join("");
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function showApproveForm(id) {
+  document.getElementById(`wd-approve-form-${id}`)?.classList.remove("hidden");
+}
+
+function hideApproveForm(id) {
+  document.getElementById(`wd-approve-form-${id}`)?.classList.add("hidden");
+}
+
+async function submitApprove(id, forceManualConfirm = false) {
+  const input = document.getElementById(`wd-txhash-${id}`);
+  const msgBox = document.getElementById(`wd-verify-msg-${id}`);
+  const txHash = (input?.value || "").trim();
+
+  if (!txHash) {
+    if (msgBox) { msgBox.textContent = "وارد کردن Transaction Hash الزامی است."; msgBox.style.color = "var(--danger)"; }
+    return;
+  }
+
+  if (msgBox) { msgBox.textContent = "در حال بررسی تراکنش روی زنجیره..."; msgBox.style.color = "var(--text-muted)"; }
+
+  try {
+    await api(`/api/admin/withdrawals/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ txHash, forceManualConfirm })
+    });
+    showMsg("پرداخت با موفقیت تایید و ثبت شد.", "success");
+    loadWithdrawals();
+  } catch (error) {
+    if (error.code === "MANUAL_CONFIRM_REQUIRED") {
+      if (msgBox) {
+        msgBox.style.color = "var(--warning)";
+        msgBox.innerHTML = `⚠️ ${escapeHtml(error.message)}<br><button class="secondary" style="margin-top:6px" onclick="submitApprove('${id}', true)">تایید می‌کنم، دستی بررسی کردم — ثبت پرداخت</button>`;
+      }
+      return;
+    }
+    if (msgBox) { msgBox.textContent = error.message; msgBox.style.color = "var(--danger)"; }
+  }
+}
+
+// رد کردن همیشه دلیل می‌خواهد (هم اینجا هم سمت سرور چک می‌شود)
+async function withdrawReject(id) {
+  const reason = prompt("دلیل رد این درخواست را بنویسید (الزامی):");
+  if (reason === null) return; // انصراف از prompt
+  const trimmed = reason.trim();
+  if (!trimmed) { showMsg("برای رد درخواست، دلیل الزامی است.", "error"); return; }
+  try {
+    await api(`/api/admin/withdrawals/${id}/reject`, { method: "POST", body: JSON.stringify({ note: trimmed }) });
+    showMsg("درخواست رد شد.", "success");
+    loadWithdrawals();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+// تغییر وضعیت «نمایشی» (approved/processing/cancelled) — پولی جابه‌جا نمی‌کند مگر cancelled (بازگشت وجه)
+async function withdrawSetStatus(id, target) {
+  let note = "";
+  if (target === "cancelled") {
+    const reason = prompt("دلیل لغو این درخواست را بنویسید (الزامی):");
+    if (reason === null) return;
+    note = reason.trim();
+    if (!note) { showMsg("برای لغو درخواست، دلیل الزامی است.", "error"); return; }
+    if (!confirm("با لغو این درخواست، GRAM به موجودی کاربر برمی‌گردد. ادامه می‌دهید؟")) return;
+  }
+  try {
+    await api(`/api/admin/withdrawals/${id}/status`, { method: "POST", body: JSON.stringify({ status: target, note }) });
+    showMsg("وضعیت به‌روزرسانی شد.", "success");
+    loadWithdrawals();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+/* ---------- USERS ---------- */
+let userSearchDebounce = null;
+function debouncedLoadUsers() {
+  clearTimeout(userSearchDebounce);
+  userSearchDebounce = setTimeout(loadUsers, 350);
+}
+
+async function loadUsers() {
+  const container = document.getElementById("usersList");
+  container.innerHTML = '<div class="empty">در حال بارگذاری...</div>';
+  const search = document.getElementById("userSearch")?.value.trim() || "";
+  const status = document.getElementById("userStatusFilter")?.value || "";
+  const sort = document.getElementById("userSortFilter")?.value || "";
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (status) params.set("status", status);
+  if (sort) params.set("sort", sort);
+
+  try {
+    const data = await api(`/api/admin/users${params.toString() ? "?" + params.toString() : ""}`);
+    const users = data.users || [];
+    if (users.length === 0) {
+      container.innerHTML = `<div class="empty">${search || status ? "با این فیلتر کاربری پیدا نشد." : "کاربری یافت نشد."}</div>`;
+      return;
+    }
+    container.innerHTML = `
+      <table>
+        <thead><tr><th>نام</th><th>پوینت</th><th>دعوت‌شده</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <tbody>
+          ${users.map(u => `
+            <tr>
+              <td>${escapeHtml(u.firstName || u.username || "—")}</td>
+              <td>${u.points}</td>
+              <td>${u.invitedCount}</td>
+              <td>${u.isBanned ? '<span class="badge rejected">مسدود</span>' : '<span class="badge approved">فعال</span>'}</td>
+              <td>
+                ${u.isBanned
+                  ? `<button class="success" onclick="userAction('${u._id}','unban')">رفع مسدودی</button>`
+                  : `<button class="danger" onclick="userAction('${u._id}','ban')">مسدود کردن</button>`
+                }
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  } catch (error) {
+    container.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function userAction(id, action) {
+  try {
+    await api(`/api/admin/users/${id}/${action}`, { method: "POST", body: JSON.stringify({}) });
+    loadUsers();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+/* ---------- BROADCAST ---------- */
+async function sendBroadcast() {
+  const text = document.getElementById("broadcastText").value.trim();
+  const fileInput = document.getElementById("broadcastImage");
+  const msgEl = document.getElementById("broadcastMsg");
+
+  if (!text) {
+    msgEl.textContent = "متن پیام الزامی است.";
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("text", text);
+  if (fileInput.files[0]) formData.append("image", fileInput.files[0]);
+
+  msgEl.textContent = "در حال ارسال...";
+  try {
+    const result = await apiUpload("/api/admin/broadcast", formData);
+    msgEl.textContent = result.message || "ارسال آغاز شد.";
+    document.getElementById("broadcastText").value = "";
+    fileInput.value = "";
+  } catch (error) {
+    msgEl.textContent = error.message;
+  }
+}
+
+/* ---------- SETTINGS ---------- */
+let currentSettingsCache = { rate: 0.0001, gramUsdPrice: 0 };
+let editingTaskId = null;
+
+function toggleSponsorFields() {
+  const box = document.getElementById("sponsorFields");
+  const on = document.getElementById("taskSponsored").checked;
+  box.classList.toggle("hidden", !on);
+  if (on) updateSponsorPreview();
+}
+
+// پیش‌نمایش زنده‌ی سود/زیان قبل از ذخیره (همان فرمول سرور: هزینه = پاداش × نرخ × قیمت GRAM)
+function updateSponsorPreview() {
+  const box = document.getElementById("sponsorPreview");
+  if (!box) return;
+  const reward = Number(document.getElementById("taskReward").value) || 0;
+  const price = Number(document.getElementById("sponsorPrice").value) || 0;
+  const budget = Number(document.getElementById("sponsorBudget").value) || 0;
+  const { rate, gramUsdPrice } = currentSettingsCache;
+
+  if (!price || !budget) { box.innerHTML = ""; return; }
+  const capacity = Math.floor(budget / price + 1e-9);
+  if (!rate || !gramUsdPrice) {
+    box.innerHTML = `ظرفیت این تسک: <b>${capacity}</b> عضو<br><span style="color:var(--danger)">⚠️ نرخ تبدیل یا قیمت دلاری GRAM در تنظیمات خالی است؛ سود/زیان قابل‌محاسبه نیست.</span>`;
+    return;
+  }
+  const costPerJoin = reward * rate * gramUsdPrice;
+  const profitPerJoin = price - costPerJoin;
+  const totalProfit = capacity * profitPerJoin;
+  const ok = profitPerJoin >= 0;
+  box.innerHTML =
+    `ظرفیت این تسک: <b>${capacity}</b> عضو &nbsp;|&nbsp; هزینه‌ی هر عضو (پاداش کاربر): <b>${costPerJoin.toFixed(4)}$</b><br>` +
+    (ok
+      ? `<span style="color:var(--success)">✓ سود هر عضو: ${profitPerJoin.toFixed(4)}$ — سود کل کمپین: ${totalProfit.toFixed(2)}$</span>`
+      : `<span style="color:var(--danger)">✕ ضرر هر عضو: ${Math.abs(profitPerJoin).toFixed(4)}$ — ضرر کل کمپین: ${Math.abs(totalProfit).toFixed(2)}$ (سرور اجازه‌ی ذخیره نمی‌دهد)</span>`);
+}
+
+function renderSponsorSummary(summary) {
+  const card = document.getElementById("sponsorSummaryCard");
+  if (!card) return;
+  if (!summary) { card.innerHTML = ""; return; }
+  const profit = summary.sponsoredProfitUsd || 0;
+  card.innerHTML = `
+    <b>💰 خلاصه‌ی درآمد تسک‌های اسپانسری (کل تاریخچه)</b>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px">
+      <div><span class="small">دریافتی از تبلیغ‌دهنده‌ها</span><br><b>${summary.sponsoredRevenueUsd.toFixed(2)}$</b></div>
+      <div><span class="small">هزینه‌ی پاداش این عضوها</span><br><b>${summary.sponsoredCostUsd.toFixed(2)}$</b></div>
+      <div><span class="small">سود خالص</span><br><b style="color:${profit >= 0 ? "var(--success)" : "var(--danger)"}">${profit >= 0 ? "+" : ""}${profit.toFixed(2)}$</b></div>
+      <div><span class="small">تعداد عضوِ تاییدشده</span><br><b>${summary.sponsoredJoins}</b></div>
+    </div>
+    <p class="small" style="margin-top:8px">هزینه‌ی کل همه‌ی تسک‌ها (اسپانسری + عادی): ${summary.allTasksCostUsd.toFixed(2)}$</p>
+  `;
+}
+
+let spinModel = {
+  segments: [{ type: "points", value: 20 }, { type: "points", value: 40 }, { type: "points", value: 60 }, { type: "points", value: 100 }, { type: "empty", value: 0 }, { type: "spin", value: 1 }],
+  freeSpinValue: 44,
+  defaultWeights: [30, 20, 8, 2, 30, 10]
+};
+
+function readSpinWeights() {
+  return [0, 1, 2, 3, 4, 5].map(i => Number(document.getElementById("setW" + i).value));
+}
+
+// پیش‌نمایش زنده: درصد هر خانه + میانگین جایزه‌ی هر چرخش نسبت به هزینه (همان فرمول سرور)
+function updateSpinPreview() {
+  const box = document.getElementById("spinPreview");
+  if (!box) return;
+  const weights = readSpinWeights();
+  const cost = Number(document.getElementById("setSpinCost").value) || 30;
+  const valid = weights.length === 6 && weights.every(w => Number.isInteger(w) && w >= 0 && w <= 1000);
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (!valid || total <= 0) {
+    box.innerHTML = '<span style="color:var(--danger)">هر ۶ عدد باید صحیح، بین ۰ تا ۱۰۰۰ و مجموعشان بیشتر از صفر باشد.</span>';
+    return;
+  }
+  const labels = ["۲۰ پوینت", "۴۰ پوینت", "۶۰ پوینت", "۱۰۰ پوینت", "پوچ", "شانس دوباره"];
+  const percents = weights.map(w => ((w / total) * 100).toFixed(1).replace(/\.0$/, ""));
+  let expected = 0;
+  spinModel.segments.forEach((seg, i) => {
+    const p = weights[i] / total;
+    if (seg.type === "points") expected += p * seg.value;
+    else if (seg.type === "spin") expected += p * spinModel.freeSpinValue;
+  });
+  const diff = expected - cost;
+  const ok = expected < cost;
+  box.innerHTML =
+    labels.map((l, i) => `${l}: <b>${percents[i]}٪</b>`).join(" &nbsp;|&nbsp; ") +
+    `<br>میانگین جایزه‌ی هر چرخش: <b>${expected.toFixed(1)}</b> پوینت — هزینه: <b>${cost}</b> پوینت<br>` +
+    (ok
+      ? `<span style="color:var(--success)">✓ به نفع سیستم: ${(-diff).toFixed(1)} پوینت در هر چرخش (${((1 - expected / cost) * 100).toFixed(0)}٪)</span>`
+      : `<span style="color:var(--danger)">✕ به ضرر شما: کاربران در هر چرخش ${diff.toFixed(1)} پوینت سود می‌کنند؛ سرور اجازه‌ی ذخیره نمی‌دهد.</span>`);
+}
+
+function resetSpinWeights() {
+  (spinModel.defaultWeights || [30, 20, 8, 2, 30, 10]).forEach((w, i) => { document.getElementById("setW" + i).value = w; });
+  updateSpinPreview();
+}
+
+async function loadTaskFormSettings() {
+  try {
+    const data = await api("/api/admin/settings");
+    currentSettingsCache = { rate: data.settings.rate || 0, gramUsdPrice: data.settings.gramUsdPrice || 0 };
+  } catch (error) { /* پیش‌نمایش بدون این مقدارها هم به‌صورت "نامشخص" کار می‌کند */ }
+}
+
+let reminderTimezones = [];
+const REMINDER_STATUS_FA = { ok: 'موفق ✅', error: 'خطا ❌', '': 'هنوز اجرا نشده' };
+
+function updateReminderPreview() {
+  const custom = document.getElementById("setReminderMessage").value.trim();
+  document.getElementById("reminderPreview").textContent =
+    custom || "🔔 Daily Check Reminder\n\nوقت انجام Daily Check امروز شماست.\nوارد حساب خود شوید و Daily Check امروز را انجام دهید.";
+}
+
+function updateReminderUtcHint() {
+  const tz = document.getElementById("setReminderTz").value;
+  const hour = Number(document.getElementById("setReminderLocalHour").value) || 0;
+  const box = document.getElementById("reminderUtcHint");
+  if (tz === "UTC") { box.textContent = ""; return; }
+  // فقط یک تخمین نمایشی برای ادمین؛ محاسبه‌ی دقیق و واقعی سمت سرور هنگام ذخیره انجام می‌شود
+  box.textContent = `این تقریباً معادل ساعت ${hour}:۰۰ در «${(reminderTimezones.find(z => z.id === tz) || {}).label || tz}» است.`;
+}
+
+async function sendReminderTest() {
+  const telegramId = document.getElementById("reminderTestId").value.trim();
+  const box = document.getElementById("reminderTestMsg");
+  if (!telegramId) { box.innerHTML = '<span style="color:var(--danger)">آیدی عددی تلگرام را وارد کنید.</span>'; return; }
+  box.textContent = "در حال ارسال...";
+  try {
+    await api("/api/admin/daily-reminder/test", { method: "POST", body: JSON.stringify({ telegramId }) });
+    box.innerHTML = '<span style="color:var(--success)">✅ ارسال شد — تلگرامت را چک کن.</span>';
+  } catch (error) {
+    box.innerHTML = `<span style="color:var(--danger)">${escapeHtml(error.message)}</span>`;
+  }
+}
+
+function renderReminderStatus(s) {
+  const box = document.getElementById("reminderStatusBox");
+  if (!s.dailyReminderLastRunAt) { box.textContent = "هنوز اجرا نشده."; return; }
+  const when = new Date(s.dailyReminderLastRunAt).toLocaleString("fa-IR");
+  const statusLabel = REMINDER_STATUS_FA[s.dailyReminderLastStatus] || s.dailyReminderLastStatus;
+  box.innerHTML = `آخرین اجرا: ${when}<br>وضعیت: ${statusLabel}<br>تعداد کاربرانی که پیام گرفتند: <b>${s.dailyReminderLastSentCount ?? 0}</b>` +
+    (s.dailyReminderLastError ? `<br><span style="color:var(--danger)">خطا: ${escapeHtml(s.dailyReminderLastError)}</span>` : "");
+}
+
+async function loadSettings() {
+  try {
+    const data = await api("/api/admin/settings");
+    const s = data.settings || {};
+    reminderTimezones = data.timezones || [];
+    document.getElementById("setReminderTz").innerHTML = reminderTimezones
+      .map(z => `<option value="${escapeHtml(z.id)}">${escapeHtml(z.label)}</option>`).join("");
+    document.getElementById("setRate").value = s.rate ?? "";
+    document.getElementById("setGramUsd").value = s.gramUsdPrice ?? 0;
+    document.getElementById("setSpinCost").value = s.spinCostPoints ?? 30;
+    document.getElementById("setReminderEnabled").checked = !!s.dailyReminderEnabled;
+    document.getElementById("setReminderTz").value = s.dailyReminderTimezone || "UTC";
+    document.getElementById("setReminderLocalHour").value = s.dailyReminderLocalHour ?? 15;
+    document.getElementById("setReminderAudience").value = s.dailyReminderAudience || "all";
+    document.getElementById("setReminderMessage").value = s.dailyReminderMessage || "";
+    updateReminderPreview();
+    updateReminderUtcHint();
+    renderReminderStatus(s);
+    spinModel = data.spinModel || spinModel;
+    (s.paidSpinWeights || spinModel.defaultWeights || []).forEach((w, i) => {
+      const el = document.getElementById("setW" + i);
+      if (el) el.value = w;
+    });
+    updateSpinPreview();
+    document.getElementById("setMinWithdraw").value = s.minWithdrawPoints ?? "";
+    document.getElementById("setDaily").value = s.dailyCheckInPoints ?? "";
+    document.getElementById("setStreakBonus").value = s.streakBonusPoints ?? "";
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+async function saveSettings() {
+  const body = {
+    rate: Number(document.getElementById("setRate").value),
+    gramUsdPrice: Number(document.getElementById("setGramUsd").value) || 0,
+    spinCostPoints: Number(document.getElementById("setSpinCost").value) || 30,
+    dailyReminderEnabled: document.getElementById("setReminderEnabled").checked,
+    dailyReminderTimezone: document.getElementById("setReminderTz").value,
+    dailyReminderLocalHour: Number(document.getElementById("setReminderLocalHour").value) || 0,
+    dailyReminderAudience: document.getElementById("setReminderAudience").value,
+    dailyReminderMessage: document.getElementById("setReminderMessage").value.trim(),
+    paidSpinWeights: [0, 1, 2, 3, 4, 5].map(i => Number(document.getElementById("setW" + i).value)),
+    minWithdrawPoints: Number(document.getElementById("setMinWithdraw").value),
+    dailyCheckInPoints: Number(document.getElementById("setDaily").value),
+    streakBonusPoints: Number(document.getElementById("setStreakBonus").value)
+  };
+  try {
+    const data = await api("/api/admin/settings", { method: "PUT", body: JSON.stringify(body) });
+    renderReminderStatus(data.settings || {});
+    showMsg("تنظیمات ذخیره شد.", "success");
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+
+}
+
+/* ---------- UTIL ---------- */
+function copyAddress(address, buttonEl) {
+  const finish = () => {
+    const original = buttonEl.textContent;
+    buttonEl.textContent = "کپی شد ✓";
+    setTimeout(() => { buttonEl.textContent = original; }, 1500);
+  };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(address).then(finish).catch(() => fallbackCopyAddress(address, finish));
+  } else {
+    fallbackCopyAddress(address, finish);
+  }
+}
+
+function fallbackCopyAddress(text, onDone) {
+  const temp = document.createElement("textarea");
+  temp.value = text;
+  temp.style.position = "fixed";
+  temp.style.opacity = "0";
+  document.body.appendChild(temp);
+  temp.select();
+  try { document.execCommand("copy"); onDone?.(); } catch {}
+  document.body.removeChild(temp);
+}
+
+
+/* ---------- REQUIRED CHANNELS (عضویت اجباری) ---------- */
+let editingChannelId = null;
+let channelsCache = [];
+
+function resetChannelForm() {
+  editingChannelId = null;
+  ["chName", "chUsername", "chChatId", "chUrl"].forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("chActive").value = "true";
+  document.getElementById("channelFormTitle").textContent = "افزودن کانال اجباری";
+  document.getElementById("chSaveBtn").textContent = "ذخیره";
+  document.getElementById("chCancelBtn").classList.add("hidden");
+}
+
+function connBadge(c) {
+  if (c.lastCheckOk === true) return '<span class="badge approved" title="ربات می‌تواند عضویت را بررسی کند">✓ اتصال سالم</span>';
+  if (c.lastCheckOk === false) return `<span class="badge rejected" title="${escapeHtml(c.lastCheckError || "")}">✕ مشکل اتصال</span>`;
+  return '<span class="badge pending">بررسی نشده</span>';
+}
+
+async function loadRequiredChannels() {
+  const box = document.getElementById("channelsList");
+  try {
+    const data = await api("/api/admin/required-channels");
+    channelsCache = data.channels || [];
+
+    const broken = channelsCache.filter(c => c.isActive && c.lastCheckOk === false);
+    document.getElementById("channelsWarn").innerHTML = broken.length
+      ? `<div class="card" style="border-color:rgba(239,68,68,.4)"><b style="color:var(--danger)">⚠️ ربات نمی‌تواند عضویت را در این کانال‌ها بررسی کند:</b>
+          <ul style="margin:8px 0 0;padding-inline-start:18px;font-size:12px">${broken.map(c => `<li><b>${escapeHtml(c.name)}</b> — ${escapeHtml(c.lastCheckError || "خطای نامشخص")}</li>`).join("")}</ul>
+          <p class="small" style="margin-top:8px">تا رفع مشکل، کاربران وارد برنامه نمی‌شوند (برای امنیت، هیچ کاربری بدون تایید واقعی تلگرام تایید نمی‌شود). معمولاً کافی است ربات را ادمین همان کانال کنید.</p></div>`
+      : "";
+
+    if (!channelsCache.length) {
+      box.innerHTML = '<div class="empty">هنوز کانالی ثبت نشده است — ورود به مینی‌اپ آزاد است.</div>';
+      return;
+    }
+
+    box.innerHTML = channelsCache.map(c => `
+      <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px;background:var(--surface2)">
+        <div class="flexBetween" style="align-items:flex-start">
+          <b style="font-size:14px">${escapeHtml(c.name)}</b>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            <span class="badge ${c.isActive ? "approved" : "rejected"}">${c.isActive ? "فعال" : "غیرفعال"}</span>
+            ${connBadge(c)}
+          </div>
+        </div>
+        <div class="small" style="margin-top:8px;display:grid;grid-template-columns:auto 1fr;gap:4px 10px">
+          <span>یوزرنیم</span><span style="direction:ltr;text-align:right">${c.username ? "@" + escapeHtml(c.username) : "—"}</span>
+          <span>آیدی کانال</span><span style="direction:ltr;text-align:right;font-family:monospace">${escapeHtml(c.chatId || "—")}</span>
+          <span>لینک</span><span style="direction:ltr;text-align:right;word-break:break-all"><a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" style="color:var(--primary)">${escapeHtml(c.url)}</a></span>
+          ${c.lastCheckOk === false ? `<span>خطا</span><span style="color:var(--danger);direction:ltr;text-align:right">${escapeHtml(c.lastCheckError || "")}</span>` : ""}
+        </div>
+        <div class="row" style="margin-top:10px;gap:6px">
+          <button class="secondary" onclick="editChannel('${c._id}')">ویرایش</button>
+          <button class="secondary" onclick="toggleChannel('${c._id}', ${!c.isActive})">${c.isActive ? "غیرفعال کردن" : "فعال کردن"}</button>
+          <button class="secondary" onclick="testChannel('${c._id}')">تست اتصال</button>
+          <button class="danger" onclick="deleteChannel('${c._id}')">حذف</button>
+        </div>
+      </div>`).join("");
+  } catch (error) {
+    box.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function saveRequiredChannel(force) {
+  const body = {
+    name: document.getElementById("chName").value.trim(),
+    username: document.getElementById("chUsername").value.trim(),
+    chatId: document.getElementById("chChatId").value.trim(),
+    url: document.getElementById("chUrl").value.trim(),
+    isActive: document.getElementById("chActive").value === "true"
+  };
+  if (force === true) body.force = true;
+
+  try {
+    const path = editingChannelId ? `/api/admin/required-channels/${editingChannelId}` : "/api/admin/required-channels";
+    const data = await api(path, { method: editingChannelId ? "PUT" : "POST", body: JSON.stringify(body) });
+    showMsg(data.warning ? "ذخیره شد، ولی: " + data.warning : "کانال ذخیره شد.", data.warning ? "error" : "success");
+    resetChannelForm();
+    loadRequiredChannels();
+  } catch (error) {
+    if (error.code === "CHANNEL_VALIDATION_FAILED" && force !== true) {
+      if (confirm(error.message + "\n\nبا این حال کانال ذخیره شود؟ (تا رفع مشکل، کاربران وارد برنامه نمی‌شوند)")) {
+        return saveRequiredChannel(true);
+      }
+      return;
+    }
+    showMsg(error.message, "error");
+  }
+}
+
+function editChannel(id) {
+  const c = channelsCache.find(x => x._id === id);
+  if (!c) return;
+  editingChannelId = id;
+  document.getElementById("chName").value = c.name || "";
+  document.getElementById("chUsername").value = c.username ? "@" + c.username : "";
+  document.getElementById("chChatId").value = c.chatId || "";
+  document.getElementById("chUrl").value = c.url || "";
+  document.getElementById("chActive").value = c.isActive ? "true" : "false";
+  document.getElementById("channelFormTitle").textContent = "ویرایش کانال: " + c.name;
+  document.getElementById("chSaveBtn").textContent = "ذخیره‌ی تغییرات";
+  document.getElementById("chCancelBtn").classList.remove("hidden");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function toggleChannel(id, isActive) {
+  try {
+    await api(`/api/admin/required-channels/${id}`, { method: "PUT", body: JSON.stringify({ isActive }) });
+    showMsg(isActive ? "کانال فعال شد." : "کانال غیرفعال شد.", "success");
+    loadRequiredChannels();
+  } catch (error) { showMsg(error.message, "error"); }
+}
+
+async function testChannel(id) {
+  try {
+    const data = await api(`/api/admin/required-channels/${id}/test`, { method: "POST", body: "{}" });
+    showMsg(data.message, data.ok ? "success" : "error");
+    loadRequiredChannels();
+  } catch (error) { showMsg(error.message, "error"); }
+}
+
+async function deleteChannel(id) {
+  const c = channelsCache.find(x => x._id === id);
+  if (!confirm(`کانال «${c ? c.name : ""}» حذف شود؟`)) return;
+  try {
+    await api(`/api/admin/required-channels/${id}`, { method: "DELETE" });
+    showMsg("کانال حذف شد.", "success");
+    if (editingChannelId === id) resetChannelForm();
+    loadRequiredChannels();
+  } catch (error) { showMsg(error.message, "error"); }
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+  }[ch]));
+}
+
+/* ---------- INIT ---------- */
+if (ADMIN_KEY) {
+  api("/api/admin/settings").then(() => {
+    document.getElementById("loginBox").classList.add("hidden");
+    document.getElementById("panel").classList.remove("hidden");
+    switchTab("stats");
+  }).catch(() => {
+    localStorage.removeItem("adminKey");
+  });
+}
+</script>
+</body>
+</html>

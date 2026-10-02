@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 360" preserveAspectRatio="none" fill="none">
+  <defs>
+    <linearGradient id="crystalGold" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFE39A" stop-opacity=".82"/>
+      <stop offset=".48" stop-color="#D99127" stop-opacity=".58"/>
+      <stop offset="1" stop-color="#6D4315" stop-opacity=".28"/>
+    </linearGradient>
+    <linearGradient id="crystalLight" x1="0" y1="0" x2=".85" y2="1">
+      <stop stop-color="#FFF0BE" stop-opacity=".72"/>
+      <stop offset="1" stop-color="#B87820" stop-opacity=".18"/>
+    </linearGradient>
+    <linearGradient id="caveRock" x1="0" y1="0" x2=".2" y2="1">
+      <stop stop-color="#4A3519" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#090D14" stop-opacity=".55"/>
+    </linearGradient>
+    <radialGradient id="warmGlow" cx=".5" cy="1" r=".65">
+      <stop stop-color="#EAA12E" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#EAA12E" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="465" cy="350" rx="425" ry="170" fill="url(#warmGlow)"/>
+  <path d="M0 286 82 224l74 49 86 87H0v-74Zm900-43-76-54-62 56-68 77 206 50V243ZM0 337l189-39 76 62H0v-23Zm900-6-165-33-91 62h256v-29Z" fill="url(#caveRock)"/>
+  <g stroke="#D99B3D" stroke-opacity=".28" stroke-width="2" stroke-linejoin="round">
+    <path d="m16 350 45-104 30 54 21-137 40 123 42 74H16Z" fill="url(#crystalGold)"/>
+    <path d="m91 300 20-137 28 93-37 44-11 0Z" fill="url(#crystalLight)" stroke-opacity=".4"/>
+    <path d="m111 163 21 122-31-25 10-97Z" fill="#6B4218" fill-opacity=".34" stroke-opacity=".22"/>
+    <path d="m176 357 31-79 24 46 18-105 38 113 17 25H176Z" fill="url(#crystalGold)"/>
+    <path d="m231 324 18-105 22 84-26 21h-14Z" fill="url(#crystalLight)" stroke-opacity=".34"/>
+    <path d="m775 359 22-126 32 79 25-163 30 117 16 93H775Z" fill="url(#crystalGold)"/>
+    <path d="m829 312 25-163 18 119-35 44h-8Z" fill="url(#crystalLight)" stroke-opacity=".4"/>
+    <path d="m854 149 14 119-31 44 17-163Z" fill="#6B4218" fill-opacity=".34" stroke-opacity=".22"/>
+    <path d="m681 359 27-94 26 45 20-122 32 112 10 59H681Z" fill="url(#crystalGold)"/>
+    <path d="m734 310 20-122 19 91-29 31h-10Z" fill="url(#crystalLight)" stroke-opacity=".32"/>
+  </g>
+  <g fill="#F2B64F" fill-opacity=".24">
+    <path d="m305 354 22-38 19 38h-41Zm273 0 18-29 17 29h-35ZM388 344l14-22 14 22h-28Z"/>
+  </g>
+</svg>

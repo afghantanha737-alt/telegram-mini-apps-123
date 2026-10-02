@@ -16,6 +16,21 @@
 const TONCENTER_API = 'https://toncenter.com/api/v3';
 const REQUEST_TIMEOUT_MS = 12000;
 
+function normalizeTonTxHash(value) {
+  const hash = String(value || '').trim();
+  if (/^[a-f\d]{64}$/i.test(hash)) return hash.toLowerCase();
+  // TON APIs may represent the same 32-byte hash as base64 or base64url.
+  if (/^[A-Za-z0-9+/_-]{40,60}={0,2}$/.test(hash)) {
+    return hash.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+  }
+  return hash;
+}
+
+function legacyTonTxHashMatcher(value) {
+  const hash = String(value || '').trim();
+  return /^[a-f\d]{64}$/i.test(hash) ? new RegExp(`^${hash}$`, 'i') : hash;
+}
+
 async function fetchJson(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -108,4 +123,4 @@ async function verifyTonTransaction({ txHash, expectedAddress, expectedAmount, t
   };
 }
 
-module.exports = { verifyTonTransaction };
+module.exports = { verifyTonTransaction, normalizeTonTxHash, legacyTonTxHashMatcher };

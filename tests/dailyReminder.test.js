@@ -1,7 +1,7 @@
 'use strict';
 /** node tests/dailyReminder.test.js — منطق زمان‌بندی یادآوری ورود روزانه و متن‌های چندزبانه‌ی ربات */
 const assert = require('assert');
-const { shouldRunNow, utcDayKey } = require('../utils/dailyReminder');
+const { shouldRunNow, utcDayKey, streakAtRiskMessageFor } = require('../utils/dailyReminder');
 const { botText } = require('../utils/botMessages');
 
 // ---- shouldRunNow
@@ -29,6 +29,7 @@ for (const lang of ['fa', 'ps', 'en']) {
   assert.ok(botText('withdrawalRejected', lang, 'too fast').includes('too fast'), `withdrawalRejected/${lang}`);
   assert.ok(botText('referralBonus', lang, 'Sara', 50, 200).includes('Sara'), `referralBonus/${lang}`);
   assert.ok(botText('dailyReminder', lang).length > 5, `dailyReminder/${lang}`);
+  assert.ok(botText('leaderboardReward', lang, 1, 500, '2026-09-28').includes('500'), `leaderboardReward/${lang}`);
 }
 console.log('PASS  botText: هر ۶ پیام در هر ۳ زبان موجود است و متغیرها را درست جا می‌گذارد');
 
@@ -36,5 +37,9 @@ console.log('PASS  botText: هر ۶ پیام در هر ۳ زبان موجود ا
 assert.strictEqual(botText('withdrawalRejected', 'xx', ''), botText('withdrawalRejected', 'fa', ''));
 assert.strictEqual(botText('withdrawalRejected', undefined, ''), botText('withdrawalRejected', 'fa', ''));
 console.log('PASS  botText: زبان نامعتبر/خالی به فارسی برمی‌گردد، نه کرش می‌کند');
+
+assert.ok(streakAtRiskMessageFor('fa').includes('استریک'));
+assert.ok(streakAtRiskMessageFor('en').includes('streak'));
+console.log('PASS  streakAtRiskMessageFor: پیام خطر استریک برای زبان‌ها');
 
 console.log('ALL PASS');

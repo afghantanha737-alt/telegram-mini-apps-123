@@ -5,14 +5,15 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "for f in tests/*.test.js; do node \"$f\" || exit 1; done",
+    "migrate:referral-v2": "node scripts/migrate-referral-v2.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "mongoose": "^8.5.0",
-    "dotenv": "^16.4.5",
-    "cors": "^2.8.5",
-    "node-telegram-bot-api": "^0.66.0",
     "multer": "^2.3.0"
   },
   "engines": {

@@ -3,8 +3,10 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const { startRequest } = require('./utils/metrics');
 
 const app = express();
+app.disable('x-powered-by');
 
 /* =========================================================
    CONFIG
@@ -25,6 +27,14 @@ if (!process.env.BOT_TOKEN) {
    SECURITY / MIDDLEWARE
 ========================================================= */
 app.set('trust proxy', 1);
+app.use(startRequest);
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
 
 const allowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
   .split(',')
@@ -35,7 +45,9 @@ app.use(
   cors({
     origin(origin, callback) {
       if (!origin) return callback(null, true);
-      if (allowedOrigins.length === 0) return callback(null, true);
+      if (allowedOrigins.length === 0) {
+        return callback(process.env.NODE_ENV === 'production' ? new Error('CORS origin not configured') : null, process.env.NODE_ENV !== 'production');
+      }
       if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error('CORS origin not allowed'));
     },
@@ -52,6 +64,8 @@ app.use(express.urlencoded({ extended: false, limit: '150kb' }));
 const rateBuckets = new Map();
 const RATE_WINDOW_MS = 60 * 1000;
 const RATE_MAX_REQUESTS = 120;
+const adminRateBuckets = new Map();
+const ADMIN_RATE_MAX_REQUESTS = 45;
 
 app.use('/api', (req, res, next) => {
   const key = req.ip || 'unknown';
@@ -71,10 +85,27 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// پنل ادمین عملیات مالی و مدیریتی دارد؛ محدودیت جداگانه جلوی brute-force کلید و فشار ناگهانی را می‌گیرد.
+app.use('/api/admin', (req, res, next) => {
+  const key = req.ip || 'unknown';
+  const now = Date.now();
+  const bucket = adminRateBuckets.get(key) || { count: 0, resetAt: now + RATE_WINDOW_MS };
+  if (now > bucket.resetAt) { bucket.count = 0; bucket.resetAt = now + RATE_WINDOW_MS; }
+  bucket.count += 1;
+  adminRateBuckets.set(key, bucket);
+  if (bucket.count > ADMIN_RATE_MAX_REQUESTS) {
+    return res.status(429).json({ success: false, message: 'تعداد درخواست‌های پنل زیاد است. یک دقیقه بعد دوباره تلاش کنید.' });
+  }
+  next();
+});
+
 setInterval(() => {
   const now = Date.now();
   for (const [key, bucket] of rateBuckets.entries()) {
     if (now > bucket.resetAt + RATE_WINDOW_MS) rateBuckets.delete(key);
+  }
+  for (const [key, bucket] of adminRateBuckets.entries()) {
+    if (now > bucket.resetAt + RATE_WINDOW_MS) adminRateBuckets.delete(key);
   }
 }, 5 * 60 * 1000);
 
@@ -104,9 +135,16 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     service: 'telegram-mini-app',
     mongodb: mongoStatus,
+    readiness: mongoState === 1 ? 'ready' : 'not_ready',
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString()
   });
+});
+
+app.get('/api/ready', (req, res) => {
+  const mongoState = mongoose.connection.readyState;
+  const ready = mongoState === 1 && Boolean(process.env.BOT_TOKEN);
+  res.status(ready ? 200 : 503).json({ success: ready, status: ready ? 'ready' : 'not_ready', mongodb: mongoState === 1 ? 'connected' : 'disconnected', botConfigured: Boolean(process.env.BOT_TOKEN), timestamp: new Date().toISOString() });
 });
 
 app.use('/api', (req, res) => {
@@ -149,7 +187,12 @@ let server;
 
 async function startServer() {
   try {
-    await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 10000 });
+    await mongoose.connect(MONGO_URI, {
+      serverSelectionTimeoutMS: 10000,
+      maxPoolSize: Number(process.env.MONGO_MAX_POOL_SIZE || 20),
+      minPoolSize: Number(process.env.MONGO_MIN_POOL_SIZE || 2),
+      heartbeatFrequencyMS: 10000
+    });
     console.log('✅ MongoDB connected');
 
     // پاک‌سازی ایندکس‌های قدیمی/ناسازگار که ممکن است از نسخه‌های قبلی
@@ -157,6 +200,7 @@ async function startServer() {
     // userId/taskId که در مدل فعلی وجود ندارند و باعث خطای duplicate
     // key کاذب می‌شوند).
     await cleanupStaleIndexes();
+    await repairLedgerSourceIdIndex();
 
     const runReferralSweep = require('./utils/referralSweep');
     runReferralSweep().catch(error => console.error('Initial referral sweep failed:', error));
@@ -171,7 +215,19 @@ async function startServer() {
       runDailyReminderSweep().catch(error => console.error('Daily reminder sweep failed:', error));
     }, 10 * 60 * 1000);
 
+    // پایان هفته و پرداخت جوایز هفتگی مستقل از بازشدن صفحه‌ی کاربر اجرا می‌شود.
+    // خود Settlement با Award و Ledger یکتا است؛ بنابراین restart یا اجرای هم‌زمان
+    // دو نمونه باعث پرداخت دوباره نمی‌شود.
+    const { settleClosedWeeks } = require('./utils/weeklyLeaderboardSettlement');
+    settleClosedWeeks().catch(error => console.error('Initial weekly settlement failed:', error));
+    setInterval(() => {
+      settleClosedWeeks().catch(error => console.error('Scheduled weekly settlement failed:', error));
+    }, 60 * 1000);
+
     server = app.listen(PORT, () => {
+      server.requestTimeout = 120000;
+      server.headersTimeout = 125000;
+      server.keepAliveTimeout = 5000;
       console.log(`🚀 Server running on port ${PORT}`);
     });
   } catch (error) {
@@ -185,13 +241,12 @@ async function cleanupStaleIndexes() {
     const collection = mongoose.connection.collection('taskcompletions');
     const indexes = await collection.indexes();
 
-    // نام درست ایندکس فعلی که مدل باید داشته باشد
-    const validIndexName = 'user_1_task_1';
+    // فقط نام‌های قدیمی و شناخته‌شده حذف می‌شوند؛ indexهای جدید مدل نباید
+    // در هر startup حذف و دوباره ساخته شوند.
+    const staleNames = new Set(['userId_1_taskId_1', 'taskId_1_userId_1']);
 
     for (const index of indexes) {
-      const isPrimaryKey = index.name === '_id_';
-      const isValid = index.name === validIndexName;
-      if (!isPrimaryKey && !isValid) {
+      if (staleNames.has(index.name)) {
         await collection.dropIndex(index.name);
         console.log(`🧹 Dropped stale index "${index.name}" from taskcompletions`);
       }
@@ -200,6 +255,25 @@ async function cleanupStaleIndexes() {
     // این عملیات صرفاً پاک‌سازی است؛ اگر کالکشن هنوز وجود ندارد یا خطای
     // بی‌ضرر دیگری رخ دهد، نباید جلوی بالا آمدن سرور را بگیرد.
     console.warn('Index cleanup skipped (non-fatal):', error.message);
+  }
+}
+
+async function repairLedgerSourceIdIndex() {
+  try {
+    const collection = mongoose.connection.collection('pointsledgers');
+    const indexes = await collection.indexes();
+    const sourceIndex = indexes.find(index => index.name === 'sourceId_1');
+    const explicitNullFilter = { sourceId: { $type: 'null' } };
+    const nullCount = await collection.countDocuments(explicitNullFilter);
+    if (sourceIndex && nullCount === 0) return;
+    if (sourceIndex) await collection.dropIndex('sourceId_1');
+    // نسخه قبلی sourceId را به‌صورت صریح null ذخیره می‌کرد؛ sparse unique
+    // مقدار missing را نادیده می‌گیرد اما null صریح را index می‌کند.
+    await collection.updateMany(explicitNullFilter, { $unset: { sourceId: '' } });
+    await collection.createIndex({ sourceId: 1 }, { unique: true, sparse: true, name: 'sourceId_1' });
+    console.log(`🧹 Repaired pointsledgers sourceId index; removed ${nullCount} null sourceIds`);
+  } catch (error) {
+    console.warn('Ledger sourceId index repair skipped (non-fatal):', error.message);
   }
 }
 

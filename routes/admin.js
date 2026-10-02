@@ -411,14 +411,19 @@ router.get('/task-submissions', async (req, res) => {
   }
   const filter = { proofMimeType: { $in: ['image/jpeg', 'image/png', 'image/webp'] } };
   if (requestedStatus !== 'all') filter.status = requestedStatus;
-  const submissions = await TaskCompletion.find(filter)
-    .select('user task reward status proofMimeType submittedAt reviewedAt reviewedBy adminNote createdAt')
-    .populate('user', 'telegramId firstName lastName username')
-    .populate('task', 'title reward verifyType')
-    .sort({ submittedAt: -1, createdAt: -1 })
-    .limit(200)
-    .lean();
-  res.json({ success: true, submissions });
+  const [submissions, pendingCount] = await Promise.all([
+    TaskCompletion.find(filter)
+      .select('user task reward status proofMimeType submittedAt reviewedAt reviewedBy adminNote createdAt')
+      .populate('user', 'telegramId firstName lastName username')
+      .populate('task', 'title reward verifyType')
+      .sort({ submittedAt: -1, createdAt: -1 })
+      .lean(),
+    TaskCompletion.countDocuments({
+      proofMimeType: { $in: ['image/jpeg', 'image/png', 'image/webp'] },
+      status: 'pending'
+    })
+  ]);
+  res.json({ success: true, submissions, pendingCount });
 });
 
 router.get('/task-submissions/:id/image', async (req, res) => {

@@ -10,6 +10,10 @@ class TelegramApiError extends Error {
   }
 }
 
+function buildTelegramWebhookPayload(url, options = {}) {
+  return { url, ...options };
+}
+
 class TelegramBotClient {
   constructor(token) {
     this.token = token;
@@ -59,13 +63,12 @@ class TelegramBotClient {
   }
 
   setWebHook(url, options = {}) {
-    const headers = {};
-    if (options.secret_token) headers['x-telegram-bot-api-secret-token'] = options.secret_token;
-    const payload = { url, ...options };
-    delete payload.secret_token;
-    return this.call('setWebhook', payload, { headers });
+    // Telegram expects secret_token as a setWebhook parameter, then sends it
+    // back to this server as X-Telegram-Bot-Api-Secret-Token on each update.
+    return this.call('setWebhook', buildTelegramWebhookPayload(url, options));
   }
 
+  getWebhookInfo() { return this.call('getWebhookInfo'); }
   getChat(chatId) { return this.call('getChat', { chat_id: chatId }); }
   getMe() { return this.call('getMe'); }
   getChatMember(chatId, userId) { return this.call('getChatMember', { chat_id: chatId, user_id: userId }); }
@@ -178,4 +181,4 @@ async function broadcastCopyToActiveUsers(User, fromChatId, messageId) {
   return sent;
 }
 
-module.exports = { bot, isChatMember, checkChatMembership, notifyUser, markTelegramBlocked, isTelegramDeliveryBlocked, broadcastToActiveUsers, broadcastCopyToActiveUsers };
+module.exports = { bot, buildTelegramWebhookPayload, isChatMember, checkChatMembership, notifyUser, markTelegramBlocked, isTelegramDeliveryBlocked, broadcastToActiveUsers, broadcastCopyToActiveUsers };

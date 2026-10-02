@@ -5,6 +5,7 @@ const fs = require('fs');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
 const TaskReactionState = require('../models/TaskReactionState');
+const { buildTelegramWebhookPayload } = require('../utils/bot');
 const {
   isValidTelegramChannelId,
   isValidTelegramChannelUrl,
@@ -31,6 +32,14 @@ assert.strictEqual(isSingleEmoji('👍'), true);
 assert.strictEqual(isSingleEmoji('❤️'), true);
 assert.strictEqual(isSingleEmoji('not-an-emoji'), false);
 assert.strictEqual(isSingleEmoji('👍🔥'), false);
+assert.deepStrictEqual(buildTelegramWebhookPayload('https://example.com/api/telegram/webhook', {
+  allowed_updates: ['channel_post', 'message_reaction'],
+  secret_token: 'test-secret'
+}), {
+  url: 'https://example.com/api/telegram/webhook',
+  allowed_updates: ['channel_post', 'message_reaction'],
+  secret_token: 'test-secret'
+});
 assert.strictEqual(validateLatestPostConfig({
   chatId: '-1001234567890',
   url: 'https://t.me/mychannel',
@@ -109,8 +118,11 @@ assert.ok(!reactionIndexes.some(([, options]) => options.expireAfterSeconds !== 
 
 const webhookSource = fs.readFileSync(require.resolve('../routes/telegramWebhook'), 'utf8');
 const taskRouteSource = fs.readFileSync(require.resolve('../routes/tasks'), 'utf8');
+const telegramWebhookSource = fs.readFileSync(require.resolve('../routes/telegramWebhook'), 'utf8');
 const serverSource = fs.readFileSync(require.resolve('../server'), 'utf8');
 const appSource = fs.readFileSync(require.resolve('../public/js/app.js'), 'utf8');
+const adminSource = fs.readFileSync(require.resolve('../routes/admin'), 'utf8');
+const adminHtmlSource = fs.readFileSync(require.resolve('../public/admin.html'), 'utf8');
 assert.ok(webhookSource.includes("'channel_post', 'message_reaction'"));
 assert.ok(webhookSource.includes('handleMessageReaction'));
 assert.ok(serverSource.includes("await require('./models/TaskReactionState').init()"));
@@ -118,6 +130,11 @@ assert.ok(taskRouteSource.includes("router.post('/:id/engagement/check'"));
 assert.ok(taskRouteSource.includes('withMongoTransaction'));
 assert.ok(taskRouteSource.includes('recordLedgerRequired'));
 assert.ok(taskRouteSource.includes('TASK_COOLDOWN_ACTIVE'));
+assert.ok(adminSource.includes("router.get('/tasks/:id/latest-post-diagnostics'"));
+assert.ok(adminSource.includes("['channel_post', 'message_reaction']"));
+assert.ok(adminHtmlSource.includes('diagnoseLatestPostTask'));
+assert.ok(telegramWebhookSource.includes("allowed_updates: ['message', 'callback_query', 'channel_post', 'message_reaction']"));
+assert.ok(telegramWebhookSource.includes('bot.getWebhookInfo()'));
 assert.ok(appSource.includes('function openLatestPostTask(url, taskId)'));
 assert.ok(appSource.includes('data-task-state="${waitingForCheck ? "WAITING_FOR_CHECK" : "AVAILABLE"}"'));
 assert.ok(appSource.includes('document.addEventListener("visibilitychange", refreshLatestPostTasksOnReturn)'));

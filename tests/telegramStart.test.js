@@ -1,0 +1,112 @@
+'use strict';
+
+const assert = require('assert');
+const { parseTelegramStart, buildMiniAppUrl, handleTelegramStart } = require('../utils/telegramStart');
+const {
+  recordWebhookUpdate,
+  recordStartWelcomeSent,
+  recordStartHandlerFailure,
+  recordWebhookSecretRejection,
+  getTelegramWebhookMetrics
+} = require('../utils/telegramWebhookMetrics');
+
+assert.deepStrictEqual(parseTelegramStart('/start'), { payload: null });
+assert.deepStrictEqual(parseTelegramStart('/start referral_123'), { payload: 'referral_123' });
+assert.deepStrictEqual(parseTelegramStart('/start@Gram_up_bot referral_123'), { payload: 'referral_123' });
+assert.strictEqual(parseTelegramStart('/start invalid payload extra'), null);
+assert.strictEqual(parseTelegramStart('/help'), null);
+assert.strictEqual(buildMiniAppUrl('https://gramup.example/app?lang=en', 'ref_123', true), 'https://gramup.example/app?lang=en&ref=ref_123');
+assert.strictEqual(buildMiniAppUrl('https://gramup.example/app', 'ref_123', false), 'https://gramup.example/app');
+assert.strictEqual(buildMiniAppUrl('', 'ref_123', true), '');
+
+function fixture(existingUser = null) {
+  const users = new Map();
+  if (existingUser) users.set(String(existingUser.telegramId), existingUser);
+  const sent = [];
+  const linked = [];
+  const User = {
+    findOne: async ({ telegramId }) => users.get(String(telegramId)) || null,
+    create: async values => {
+      const user = { _id: 'new-user-id', language: 'fa', ...values };
+      users.set(String(user.telegramId), user);
+      return user;
+    }
+  };
+  const bot = { sendMessage: async (...args) => { sent.push(args); return { message_id: 1 }; } };
+  const linkReferralByCode = async value => { linked.push(value); return { linked: true }; };
+  const dependencies = {
+    bot,
+    User,
+    appUrl: 'https://gramup.example/app?lang=fa',
+    generateReferralCode: id => `CODE${id}`,
+    linkReferralByCode,
+    botText: (key, language, name) => `${key}:${language}:${name}`,
+    logger: { error: () => {} }
+  };
+  return { users, sent, linked, User, dependencies };
+}
+
+(async () => {
+  const fresh = fixture();
+  const freshResult = await handleTelegramStart({
+    ...fresh.dependencies,
+    message: { text: '/start inviter_42', from: { id: 123, first_name: 'Ava' }, chat: { id: 123 } }
+  });
+  assert.deepStrictEqual(freshResult, { isNewUser: true, hadReferralPayload: true, welcomeSent: true, hasMiniAppButton: true });
+  assert.strictEqual(fresh.users.size, 1);
+  assert.strictEqual(fresh.linked.length, 1, 'a referral payload is processed for a newly-created account');
+  assert.deepStrictEqual(fresh.linked[0], { referredUserId: 'new-user-id', referralCode: 'inviter_42', source: 'signup' });
+  assert.strictEqual(fresh.sent.length, 1);
+  assert.strictEqual(fresh.sent[0][1], 'welcome:fa:Ava');
+  const freshButton = fresh.sent[0][2].reply_markup.inline_keyboard[0][0];
+  assert.strictEqual(freshButton.text, '🚀 Open GramUp');
+  assert.strictEqual(new URL(freshButton.web_app.url).searchParams.get('ref'), 'inviter_42');
+
+  const existingUser = { _id: 'existing-id', telegramId: '456', language: 'en', referredBy: 'original-referrer' };
+  const returning = fixture(existingUser);
+  const returningResult = await handleTelegramStart({
+    ...returning.dependencies,
+    message: { text: '/start different_referrer', from: { id: 456, first_name: 'Sam' }, chat: { id: 456 } }
+  });
+  assert.deepStrictEqual(returningResult, { isNewUser: false, hadReferralPayload: true, welcomeSent: true, hasMiniAppButton: true });
+  assert.strictEqual(returning.sent.length, 1, 'registered users receive a response to /start');
+  assert.strictEqual(returning.sent[0][1], 'welcome:en:Sam');
+  assert.strictEqual(returning.linked.length, 0, 'an existing referral relationship is never changed or rewarded again');
+  assert.strictEqual(returning.users.get('456').referredBy, 'original-referrer');
+  assert.strictEqual(new URL(returning.sent[0][2].reply_markup.inline_keyboard[0][0].web_app.url).searchParams.has('ref'), false);
+
+  const noAppUrl = fixture();
+  const noButtonResult = await handleTelegramStart({
+    ...noAppUrl.dependencies,
+    appUrl: '',
+    message: { text: '/start', from: { id: 789 }, chat: { id: 789 } }
+  });
+  assert.strictEqual(noButtonResult.welcomeSent, true, 'missing APP_URL must not suppress the Welcome message');
+  assert.deepStrictEqual(noAppUrl.sent[0][2], {});
+
+  const failedSend = fixture();
+  failedSend.dependencies.bot.sendMessage = async () => { throw new Error('Telegram sendMessage failed'); };
+  await assert.rejects(
+    handleTelegramStart({
+      ...failedSend.dependencies,
+      message: { text: '/start', from: { id: 321 }, chat: { id: 321 } }
+    }),
+    /sendMessage failed/
+  );
+
+  recordWebhookUpdate('start');
+  recordStartWelcomeSent();
+  recordStartHandlerFailure();
+  recordWebhookSecretRejection();
+  const metrics = getTelegramWebhookMetrics();
+  assert.strictEqual(metrics.startUpdatesReceived, 1);
+  assert.strictEqual(metrics.startWelcomeSent, 1);
+  assert.strictEqual(metrics.startHandlerFailures, 1);
+  assert.strictEqual(metrics.webhookSecretRejections, 1);
+  assert.strictEqual(metrics.updatesReceived, 1);
+
+  console.log('ALL PASS — Telegram /start welcome, referral preservation, retry contract and webhook diagnostics');
+})().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

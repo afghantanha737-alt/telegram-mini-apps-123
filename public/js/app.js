@@ -874,6 +874,7 @@ const LEDGER_TYPE_UI = {
   exchange_out: { icon: "⇄" },
   exchange_in: { icon: "⇄" },
   withdraw: { icon: "➤" },
+  deposit: { icon: "💎" },
   admin_adjust: { icon: "🛠️" }
 };
 
@@ -1838,14 +1839,156 @@ async function submitExchange() {
 }
 window.submitExchange = submitExchange;
 
-/* ---- Deposit: placeholder ---- */
+/* ---- TON Mainnet GRAM Jetton deposit ---- */
+let currentDeposit = null;
+let depositPanelLoading = false;
+let depositSubmissionBusy = false;
+
+function setDepositActionMessage(message, type = "normal") {
+  const box = $("#depositActionMessage");
+  if (!box) return;
+  box.textContent = message || "";
+  box.style.color = type === "success" ? "var(--success)" : type === "error" ? "var(--danger)" : "var(--text-soft)";
+}
+
+function renderDepositHistory(deposits) {
+  const container = $("#depositHistoryList");
+  if (!container) return;
+  const list = Array.isArray(deposits) ? deposits.slice(0, 5) : [];
+  if (!list.length) {
+    container.innerHTML = `<div class="small" style="opacity:.75">${escapeHTML(t("history_empty"))}</div>`;
+    return;
+  }
+  container.innerHTML = `
+    <div class="small" style="font-weight:700;margin-bottom:6px">${escapeHTML(t("deposit_history_title"))}</div>
+    ${list.map(item => {
+      const statusKey = item.status === "confirmed" ? "deposit_status_confirmed" : item.status === "rejected" ? "deposit_status_rejected" : "deposit_status_pending";
+      const amount = item.amount == null ? t("deposit_pending_amount") : `${formatNumber(item.amount, 9)} GRAM`;
+      return `<div style="padding:8px 0;border-top:1px solid var(--line);font-size:12px">
+        <div style="display:flex;justify-content:space-between;gap:8px"><b>${escapeHTML(amount)}</b><span>${escapeHTML(t(statusKey))}</span></div>
+        ${item.txHash ? `<div dir="ltr" style="text-align:start;opacity:.75;margin-top:3px">${escapeHTML(truncateMiddle(item.txHash, 8, 8))}</div>` : ""}
+        <div style="opacity:.65;margin-top:3px">${escapeHTML(timeAgo(item.createdAt))}</div>
+      </div>`;
+    }).join("")}`;
+}
+
+async function refreshDepositHistory() {
+  try {
+    const data = await api("/api/points/deposits");
+    renderDepositHistory(data?.deposits || []);
+    return Array.isArray(data?.deposits) ? data.deposits : [];
+  } catch {
+    renderDepositHistory([]);
+    return [];
+  }
+}
+
 function showDeposit() {
   const overlay = $("#depositOverlay");
+  const panel = $("#depositPanel");
+  const disabled = $("#depositDisabledMessage");
   const message = $("#depositMessage");
-  if (message) message.textContent = t("deposit_coming_soon");
   if (overlay) overlay.style.display = "flex";
+  if (panel) panel.style.display = "none";
+  if (disabled) disabled.style.display = "block";
+  if (message) message.textContent = t("deposit_coming_soon");
+  setDepositActionMessage("");
+  void loadDepositPanel();
 }
 window.showDeposit = showDeposit;
+
+async function loadDepositPanel() {
+  if (depositPanelLoading) return;
+  depositPanelLoading = true;
+  const panel = $("#depositPanel");
+  const disabled = $("#depositDisabledMessage");
+  const message = $("#depositMessage");
+  const button = $("#depositVerifyButton");
+  try {
+    const deposits = await refreshDepositHistory();
+    const pending = deposits.find(item => item.status === "pending");
+    const configData = await api("/api/points/deposit/config");
+    currentDeposit = pending || null;
+    if (!currentDeposit && configData?.enabled) {
+      const created = await api("/api/points/deposits", { method: "POST", body: {} });
+      currentDeposit = created?.deposit || null;
+    }
+
+    if (!currentDeposit) {
+      if (panel) panel.style.display = "none";
+      if (disabled) disabled.style.display = "block";
+      if (message) message.textContent = t("deposit_coming_soon");
+      return;
+    }
+
+    if (panel) panel.style.display = "block";
+    if (disabled) disabled.style.display = "none";
+    const address = $("#depositWalletAddress");
+    const reference = $("#depositReference");
+    const hash = $("#depositTxHash");
+    const minimum = $("#depositMinimumText");
+    if (address) address.value = currentDeposit.depositWalletAddress || configData?.depositWalletAddress || "";
+    if (reference) reference.value = currentDeposit.reference || "";
+    if (hash) hash.value = currentDeposit.txHash || currentDeposit.submittedTxHash || "";
+    if (minimum) minimum.textContent = t("deposit_minimum", { amount: formatNumber(currentDeposit.minimumDepositGram ?? configData?.minimumDepositGram ?? 0, 9) });
+    if (button) button.disabled = currentDeposit.status !== "pending";
+    renderDepositHistory(deposits);
+  } catch (error) {
+    if (panel) panel.style.display = "none";
+    if (disabled) disabled.style.display = "block";
+    if (message) message.textContent = translateServerMessage(error.code, error.message);
+  } finally {
+    depositPanelLoading = false;
+  }
+}
+
+async function submitGramDeposit() {
+  const button = $("#depositVerifyButton");
+  const input = $("#depositTxHash");
+  const txHash = String(input?.value || "").trim();
+  if (!currentDeposit?._id || currentDeposit.status !== "pending" || depositSubmissionBusy) return;
+  if (!/^(?:0x)?[a-f\d]{64}$/i.test(txHash)) {
+    setDepositActionMessage(t("deposit_invalid_hash_message"), "error");
+    return;
+  }
+  depositSubmissionBusy = true;
+  if (button) button.disabled = true;
+  setDepositActionMessage(t("history_loading"));
+  try {
+    const result = await api(`/api/points/deposits/${encodeURIComponent(currentDeposit._id)}/verify`, {
+      method: "POST",
+      body: { txHash }
+    });
+    currentDeposit = result.deposit || { ...currentDeposit, status: result.status, submittedTxHash: txHash };
+    if (result.status === "confirmed") {
+      const balance = Number(result.gramBalance);
+      if (Number.isFinite(balance)) state.gramBalance = balance;
+      setDepositActionMessage(t("deposit_confirmed_message", { amount: formatNumber(result.amount, 9) }), "success");
+      toast(t("deposit_confirmed_message", { amount: formatNumber(result.amount, 9) }), "success");
+      haptic("success");
+      if (button) button.disabled = true;
+      updateHeader();
+      if (state.activeTab === "wallet") renderWallet();
+      await refreshDepositHistory();
+    } else {
+      currentDeposit.submittedTxHash = txHash;
+      setDepositActionMessage(t("deposit_pending_message"), "normal");
+      haptic("warning");
+      if (button) button.disabled = false;
+      await refreshDepositHistory();
+    }
+  } catch (error) {
+    setDepositActionMessage(translateServerMessage(error.code, error.message), "error");
+    haptic("error");
+    const deposits = await refreshDepositHistory();
+    const refreshed = deposits.find(item => item._id === currentDeposit?._id);
+    if (refreshed) currentDeposit = refreshed;
+    if (button) button.disabled = currentDeposit?.status !== "pending";
+  } finally {
+    depositSubmissionBusy = false;
+  }
+}
+window.submitGramDeposit = submitGramDeposit;
 
 function hideDeposit() {
   const overlay = $("#depositOverlay");
@@ -2670,15 +2813,21 @@ function renderProfileLeaderboard() {
 
 function renderProfileHistory() {
   const rows = historyList.map(item => {
-    const isPositive = Number(item.amount) >= 0;
+    const isPendingDeposit = item.type === "deposit" && item.status === "pending";
+    const isPositive = item.type === "deposit" ? item.status === "confirmed" : Number(item.amount) >= 0;
     const unit = item.currency === "gram" ? "GRAM" : t("points_unit");
-    const amountText = `${isPositive ? "+" : ""}${item.currency === "gram" ? formatNumber(item.amount, 6) : formatPoints(item.amount)} ${unit}`;
+    const amountText = isPendingDeposit
+      ? t("deposit_pending_amount")
+      : `${isPositive ? "+" : ""}${item.currency === "gram" ? formatNumber(item.amount, 9) : formatPoints(item.amount)} ${unit}`;
     const icon = (LEDGER_TYPE_UI[item.type] || {}).icon || "🔸";
     const desc = item.description || t(`history_type_${item.type}`);
     const referralMeta = item.type === "referral_commission"
       ? `${t("history_referral_level", { n: item.referralLevel || "—" })} · ${Number(item.commissionRatePercent || 0)}%`
       : item.type === "referral_initial" ? t("history_referral_initial") : "";
     const transactionMeta = item.transactionId ? `${t("history_txid_label")} ${truncateMiddle(item.transactionId, 5, 5)}` : "";
+    const depositStatusMeta = item.type === "deposit"
+      ? t(item.status === "confirmed" ? "history_status_confirmed" : item.status === "rejected" ? "history_status_rejected" : "history_status_pending")
+      : "";
     const earningMeta = item.earningTransactionId ? `${t("history_source_earning")} ${truncateMiddle(item.earningTransactionId, 5, 5)}` : "";
     const referralUsersMeta = item.sourceUserId || item.recipientUserId
       ? `${t("history_source_user")} ${truncateMiddle(String(item.sourceUserId || "—"), 5, 5)} · ${t("history_recipient_user")} ${truncateMiddle(String(item.recipientUserId || "—"), 5, 5)}`
@@ -2689,9 +2838,9 @@ function renderProfileHistory() {
         <div class="ledgerIcon">${icon}</div>
         <div class="ledgerBody">
           <div class="ledgerDesc">${escapeHTML(desc)}</div>
-          <div class="historyMeta">${timeAgo(item.createdAt)}${referralMeta ? ` · ${escapeHTML(referralMeta)}` : ""}${transactionMeta ? ` · ${escapeHTML(transactionMeta)}` : ""}${earningMeta ? ` · ${escapeHTML(earningMeta)}` : ""}${referralUsersMeta ? ` · ${escapeHTML(referralUsersMeta)}` : ""}</div>
+          <div class="historyMeta">${timeAgo(item.createdAt)}${depositStatusMeta ? ` · ${escapeHTML(depositStatusMeta)}` : ""}${referralMeta ? ` · ${escapeHTML(referralMeta)}` : ""}${transactionMeta ? ` · ${escapeHTML(transactionMeta)}` : ""}${earningMeta ? ` · ${escapeHTML(earningMeta)}` : ""}${referralUsersMeta ? ` · ${escapeHTML(referralUsersMeta)}` : ""}</div>
         </div>
-        <div class="ledgerAmount ${isPositive ? "positive" : "negative"}">${amountText}</div>
+        <div class="ledgerAmount ${isPendingDeposit ? "" : isPositive ? "positive" : "negative"}">${amountText}</div>
       </div>`;
   }).join("");
 

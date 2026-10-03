@@ -494,8 +494,8 @@
           </div>
         </div>
         <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
-          <b>💎 GRAM Deposit — TON Mainnet</b>
-          <p class="small">قبل از فعال‌سازی، آدرس دریافت پروژه و Gram Jetton Master را از منبع معتبر پروژه وارد کنید. سیستم آدرس Master را روی TON Mainnet فقط‌خواندنی بررسی می‌کند. برای واریز، کاربر باید reference یکتای نمایش‌داده‌شده را در comment/forward payload تراکنش Gram قرار دهد. این برنامه seed یا private key نگهداری نمی‌کند.</p>
+          <b>💎 Native GRAM Deposit — TON Mainnet</b>
+          <p class="small">این Deposit فقط ارز بومی GRAM شبکه TON را می‌پذیرد و از Jetton یا Jetton Master استفاده نمی‌کند. آدرس عمومی کیف‌پول پروژه را از منبع مورداعتماد وارد کنید؛ هر کاربر باید Reference اختصاصی را در comment تراکنش Native GRAM بنویسد. این برنامه seed یا private key نگهداری نمی‌کند. Deposit به‌صورت پیش‌فرض خاموش است.</p>
           <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
             <input type="checkbox" id="setDepositEnabled" style="width:auto">
             <span>Deposit فعال باشد</span>
@@ -504,11 +504,9 @@
           <input id="setDepositNetwork" value="TON Mainnet" readonly>
           <label>آدرس عمومی دریافت GRAM (TON wallet owner)</label>
           <input id="setDepositWalletAddress" autocomplete="off" spellcheck="false" placeholder="آدرس معتبر TON">
-          <label>آدرس دقیق Gram Jetton Master</label>
-          <input id="setGramJettonMasterAddress" autocomplete="off" spellcheck="false" placeholder="از تنظیمات معتبر پروژه؛ آدرس را حدس نزنید">
           <label>Minimum Deposit (GRAM)</label>
           <input id="setMinimumDepositGram" type="number" min="0.000000001" step="0.000000001" value="1">
-          <p class="small" style="margin-bottom:0">Deposit به‌صورت پیش‌فرض خاموش است. برای روشن‌شدن، پیکربندی معتبر و Master قابل‌خواندن از TON Mainnet لازم است.</p>
+          <p class="small" style="margin-bottom:0">برای روشن‌کردن، آدرس معتبر TON Mainnet و حداقل مبلغ Native GRAM لازم است. برنامه هیچ کلید یا عبارت بازیابی کیف‌پول را نگهداری نمی‌کند.</p>
         </div>
         <button onclick="saveSettings()">ذخیره تنظیمات</button>
       </div>
@@ -1814,7 +1812,6 @@ async function loadSettings() {
     document.getElementById("setDepositEnabled").checked = !!s.depositEnabled;
     document.getElementById("setDepositNetwork").value = "TON Mainnet";
     document.getElementById("setDepositWalletAddress").value = s.depositWalletAddress || "";
-    document.getElementById("setGramJettonMasterAddress").value = s.gramJettonMasterAddress || "";
     document.getElementById("setMinimumDepositGram").value = s.minimumDepositGram ?? 1;
   } catch (error) {
     showMsg(error.message, "error");
@@ -1842,7 +1839,6 @@ async function saveSettings() {
     depositEnabled: document.getElementById("setDepositEnabled").checked,
     depositNetwork: "TON_MAINNET",
     depositWalletAddress: document.getElementById("setDepositWalletAddress").value.trim(),
-    gramJettonMasterAddress: document.getElementById("setGramJettonMasterAddress").value.trim(),
     minimumDepositGram: Number(document.getElementById("setMinimumDepositGram").value)
   };
   try {

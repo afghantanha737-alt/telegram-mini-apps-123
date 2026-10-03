@@ -232,7 +232,7 @@
   <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="depositTitle" style="text-align:center;max-height:92vh;overflow-y:auto">
     <div class="modalHeader">
       <div>
-        <span class="modalEyebrow">TON MAINNET · GRAM JETTON</span>
+        <span class="modalEyebrow">TON MAINNET · NATIVE GRAM</span>
         <h3 id="depositTitle" data-i18n="deposit_modal_title">واریز</h3>
       </div>
       <button class="closeBtn" type="button" onclick="hideDeposit()" data-i18n-aria="common_close" aria-label="بستن">×</button>
@@ -243,7 +243,7 @@
     </div>
     <div id="depositPanel" style="display:none;text-align:start">
       <div class="tbPill tbPillGreen" style="margin:0 auto 12px;display:table" data-i18n="deposit_network_ton_mainnet">TON Mainnet</div>
-      <p style="font-size:13px;color:var(--danger);font-weight:700" data-i18n="deposit_mainnet_warning">فقط GRAM Jetton روی TON Mainnet ارسال کنید. ارسال توکن اشتباه یا از شبکه دیگر ممکن است باعث از دست‌رفتن دارایی شود.</p>
+      <p style="font-size:13px;color:var(--danger);font-weight:700" data-i18n="deposit_mainnet_warning">فقط ارز بومی GRAM روی TON Mainnet ارسال کنید؛ Jetton پذیرفته نمی‌شود.</p>
       <label for="depositWalletAddress" data-i18n="deposit_address_label">آدرس دریافت</label>
       <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center">
         <input id="depositWalletAddress" type="text" readonly dir="ltr" style="margin:0;min-width:0;font-size:12px">
@@ -255,8 +255,8 @@
         <input id="depositReference" type="text" readonly dir="ltr" style="margin:0;min-width:0;font-size:12px">
         <button type="button" class="secondaryBtn" onclick="copyAddress(document.getElementById('depositReference').value,this)" data-i18n="deposit_copy">کپی</button>
       </div>
-      <p class="small" style="margin:8px 0 12px" data-i18n="deposit_reference_warning">این Reference را دقیقاً در comment/forward payload انتقال Jetton وارد کنید تا واریز به حساب شما منتسب شود.</p>
-      <label for="depositTxHash" data-i18n="deposit_tx_hash_label">Transaction Hash</label>
+      <p class="small" style="margin:8px 0 12px" data-i18n="deposit_reference_warning">این Reference را دقیقاً در comment تراکنش Native GRAM وارد کنید تا واریز به حساب شما منتسب شود. بدون comment صحیح، سیستم نمی‌تواند خودکار واریز را به حساب شما نسبت دهد.</p>
+      <label for="depositTxHash" data-i18n="deposit_tx_hash_label">Transaction ID / Tx Hash</label>
       <input id="depositTxHash" type="text" maxlength="66" autocomplete="off" spellcheck="false" dir="ltr" placeholder="64 hex characters">
       <button id="depositVerifyButton" type="button" class="primaryBtn" style="width:100%;margin-top:8px" onclick="submitGramDeposit()" data-i18n="deposit_check_button">بررسی تراکنش</button>
       <p id="depositActionMessage" role="status" aria-live="polite" class="small" style="min-height:20px"></p>

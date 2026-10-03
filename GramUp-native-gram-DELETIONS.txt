@@ -1,0 +1,7 @@
+پس از استخراج بسته روی پروژه GramUp، این فایل قدیمی را حذف کنید:
+
+utils/tonDepositVerify.js
+
+این verifier فقط برای Jetton بود و دیگر در مسیر فعال Deposit استفاده نمی‌شود. جایگزین native-only آن در مسیر زیر قرار دارد:
+
+utils/tonNativeDepositVerify.js

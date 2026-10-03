@@ -6,10 +6,9 @@ const depositSchema = new mongoose.Schema({
   reference: { type: String, required: true, unique: true },
   network: { type: String, enum: ['TON_MAINNET'], default: 'TON_MAINNET', required: true },
   token: { type: String, enum: ['GRAM'], default: 'GRAM', required: true },
+  assetType: { type: String, enum: ['native_gram'], default: 'native_gram', required: true },
   depositAddressSnapshot: { type: String, required: true },
-  jettonMasterSnapshot: { type: String, required: true },
   minimumDepositSnapshot: { type: Number, required: true, min: 0 },
-  decimalsSnapshot: { type: Number, required: true, min: 0, max: 30 },
   amount: { type: Number, default: null, min: 0 },
   amountRaw: { type: String, default: '' },
   submittedTxHash: { type: String, default: '' },
@@ -32,7 +31,6 @@ depositSchema.index({ txHashNormalized: 1 }, {
 depositSchema.set('toJSON', {
   transform(_doc, ret) {
     delete ret.txHashNormalized;
-    delete ret.jettonMasterSnapshot;
     return ret;
   }
 });

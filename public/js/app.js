@@ -1844,6 +1844,68 @@ let currentDeposit = null;
 let depositPanelLoading = false;
 let depositSubmissionBusy = false;
 
+async function copyDepositValue(targetId) {
+  const target = document.getElementById(targetId);
+  const value = target && "value" in target ? String(target.value) : String(target?.textContent || "");
+  if (!value.trim()) {
+    toast(t("deposit_copy_empty"), "error");
+    return;
+  }
+
+  let copied = false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      copied = true;
+    }
+  } catch {
+    // Telegram WebView and some mobile browsers may reject Clipboard API access.
+  }
+  if (!copied) copied = fallbackCopyDepositValue(value);
+
+  if (copied) {
+    haptic("success");
+    toast(t("deposit_copy_success"), "success");
+  } else {
+    haptic("error");
+    toast(t("deposit_copy_failed"), "error");
+  }
+}
+
+function fallbackCopyDepositValue(value) {
+  const temporary = document.createElement("textarea");
+  temporary.value = value;
+  temporary.readOnly = true;
+  temporary.setAttribute("aria-hidden", "true");
+  temporary.style.position = "fixed";
+  temporary.style.top = "0";
+  temporary.style.left = "0";
+  temporary.style.opacity = "0";
+  temporary.style.fontSize = "16px";
+  document.body.appendChild(temporary);
+  let copied = false;
+  try {
+    temporary.focus({ preventScroll: true });
+    temporary.select();
+    temporary.setSelectionRange(0, temporary.value.length);
+    copied = document.execCommand("copy") === true;
+  } catch {
+    copied = false;
+  } finally {
+    temporary.remove();
+  }
+  return copied;
+}
+
+function handleDepositCopyClick(event) {
+  const button = event.target?.closest?.("[data-copy-target]");
+  if (!button || !document.getElementById("depositOverlay")?.contains(button)) return;
+  event.preventDefault();
+  void copyDepositValue(button.dataset.copyTarget);
+}
+
+document.addEventListener("click", handleDepositCopyClick);
+
 function setDepositActionMessage(message, type = "normal") {
   const box = $("#depositActionMessage");
   if (!box) return;
@@ -1928,7 +1990,7 @@ async function loadDepositPanel() {
     const hash = $("#depositTxHash");
     const minimum = $("#depositMinimumText");
     if (address) address.value = currentDeposit.depositWalletAddress || configData?.depositWalletAddress || "";
-    if (reference) reference.value = currentDeposit.reference || "";
+    if (reference) reference.textContent = currentDeposit.reference || "";
     if (hash) hash.value = currentDeposit.txHash || currentDeposit.submittedTxHash || "";
     if (minimum) minimum.textContent = t("deposit_minimum", { amount: formatNumber(currentDeposit.minimumDepositGram ?? configData?.minimumDepositGram ?? 0, 9) });
     if (button) button.disabled = currentDeposit.status !== "pending";

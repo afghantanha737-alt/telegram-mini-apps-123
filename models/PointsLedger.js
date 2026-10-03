@@ -23,6 +23,7 @@ const pointsLedgerSchema = new mongoose.Schema(
         'exchange_out',    // کسر شده در تبدیل (پوینت->GRAM یا GRAM->پوینت)
         'exchange_in',     // اضافه شده در تبدیل
         'withdraw',        // کسر GRAM بابت درخواست برداشت
+        'deposit',         // واریز تاییدشده GRAM روی TON Mainnet
         'admin_adjust'     // اصلاح دستی توسط ادمین (مثلاً بازگشت وجه بعد از رد برداشت)
       ],
       required: true

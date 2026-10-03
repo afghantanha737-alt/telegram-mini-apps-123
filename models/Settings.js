@@ -24,6 +24,12 @@ const settingsSchema = new mongoose.Schema(
     dailyReminderLastError: { type: String, default: '' },
     weeklyLeaderboardEnabled: { type: Boolean, default: true },
     weeklyLeaderboardPrizes: { type: [Number], default: () => [500, 250, 100] },
+    // TON Mainnet Gram Jetton deposits stay disabled until an administrator supplies verified project addresses.
+    depositEnabled: { type: Boolean, default: false },
+    depositNetwork: { type: String, enum: ['TON_MAINNET'], default: 'TON_MAINNET' },
+    depositWalletAddress: { type: String, default: '' },
+    gramJettonMasterAddress: { type: String, default: '' },
+    minimumDepositGram: { type: Number, default: 1, min: 0 },
     // Fixed by the current referral policy; retained for backwards compatibility.
     referralInitialRewardPoints: { type: Number, default: DEFAULT_REFERRAL_INITIAL_REWARD_POINTS, min: 0, max: 1000000 },
     referralLevelRates: { type: [Number], default: () => [...DEFAULT_REFERRAL_LEVEL_RATES] }

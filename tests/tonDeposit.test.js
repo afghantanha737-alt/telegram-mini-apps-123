@@ -173,6 +173,8 @@ async function run() {
   const adminUi = fs.readFileSync(path.join(project, 'public/admin.html'), 'utf8');
   const miniAppUi = fs.readFileSync(path.join(project, 'public/index.html'), 'utf8');
   const app = fs.readFileSync(path.join(project, 'public/js/app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(project, 'public/css/style.css'), 'utf8');
+  const i18n = fs.readFileSync(path.join(project, 'public/js/i18n.js'), 'utf8');
   assert.ok(route.includes("router.post('/deposits/:id/verify'"));
   assert.ok(route.includes('await verifyNativeGramTransfer('));
   assert.ok(!route.includes('verifyGramJettonTransfer') && !route.includes('/jetton/transfers'));
@@ -191,6 +193,16 @@ async function run() {
   assert.ok(!adminUi.includes('setGramJettonMasterAddress'));
   assert.ok(miniAppUi.includes('NATIVE GRAM'));
   assert.ok(app.includes('submitGramDeposit'));
+  assert.ok(miniAppUi.includes('data-copy-target="depositWalletAddress"'));
+  assert.ok(miniAppUi.includes('data-copy-target="depositReference"'));
+  assert.ok(miniAppUi.includes('class="depositMemoCode"') && !miniAppUi.includes('copyAddress('));
+  assert.ok(app.includes('reference.textContent = currentDeposit.reference'));
+  assert.ok(app.includes('async function copyDepositValue(targetId)'));
+  assert.ok(app.includes('navigator.clipboard?.writeText)') && app.includes('await navigator.clipboard.writeText(value)'));
+  assert.ok(app.includes('document.execCommand("copy")'));
+  assert.ok(app.includes('document.addEventListener("click", handleDepositCopyClick)'));
+  assert.ok(styles.includes('.depositMemoCode') && styles.includes('border: 1px dashed'));
+  assert.ok(i18n.includes('deposit_memo_not_address') && i18n.includes('deposit_copy_success'));
   assert.ok(route.includes('transactionAt: linkedDeposit?.verifiedAt || item.createdAt'), 'history includes on-chain transfer time');
 
   console.log('Native GRAM Deposit verifier tests passed (mocked read-only provider; no live transfers).');

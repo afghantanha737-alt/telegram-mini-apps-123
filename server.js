@@ -200,6 +200,8 @@ async function startServer() {
     await require('./models/TaskReactionState').init();
     // Open→Check authorization is unique per user/task and must be indexed before serving.
     await require('./models/LatestPostEngagementState').init();
+    // Deposit invoices are unique per user and each TON tx hash may be credited only once.
+    await require('./models/Deposit').init();
 
     // پاک‌سازی ایندکس‌های قدیمی/ناسازگار که ممکن است از نسخه‌های قبلی
     // پروژه در دیتابیس باقی مانده باشند (مثلاً ایندکس روی فیلدهای

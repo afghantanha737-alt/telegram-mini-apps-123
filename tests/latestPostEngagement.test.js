@@ -5,6 +5,7 @@ const fs = require('fs');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
 const TaskReactionState = require('../models/TaskReactionState');
+const LatestPostEngagementState = require('../models/LatestPostEngagementState');
 const { buildTelegramWebhookPayload } = require('../utils/bot');
 const {
   isValidTelegramChannelId,
@@ -15,7 +16,11 @@ const {
   extractAddedReactionEmojis,
   isReactionSatisfied,
   isFreshRequiredReaction,
-  buildRecurringTaskSourceId
+  buildRecurringTaskSourceId,
+  LATEST_POST_COOLDOWN_HOURS,
+  isLatestPostCooldownActive,
+  isLatestPostOpenValid,
+  nextLatestPostAvailableAt
 } = require('../utils/latestPostEngagement');
 
 assert.strictEqual(isValidTelegramChannelId('-1001234567890'), true);
@@ -100,6 +105,16 @@ assert.strictEqual(isFreshRequiredReaction({ reactionState: { ...reactionState, 
 assert.strictEqual(buildRecurringTaskSourceId('task1', 'user1', 1), 'task:task1:user:user1:cycle:1');
 assert.notStrictEqual(buildRecurringTaskSourceId('task1', 'user1', 1), buildRecurringTaskSourceId('task1', 'user1', 2));
 assert.throws(() => buildRecurringTaskSourceId('task1', 'user1', 0), TypeError);
+assert.strictEqual(LATEST_POST_COOLDOWN_HOURS, 3);
+const completedAt = new Date('2026-10-03T10:15:00.000Z');
+const nextAt = nextLatestPostAvailableAt(completedAt);
+assert.strictEqual(nextAt.toISOString(), '2026-10-03T13:15:00.000Z');
+assert.strictEqual(isLatestPostCooldownActive(nextAt, completedAt), true);
+assert.strictEqual(isLatestPostCooldownActive(nextAt, nextAt), false);
+assert.strictEqual(isLatestPostOpenValid({ openedAt: completedAt, lastCompletedAt: null, now: completedAt }), true);
+assert.strictEqual(isLatestPostOpenValid({ openedAt: completedAt, lastCompletedAt: completedAt, now: nextAt }), false);
+assert.strictEqual(isLatestPostOpenValid({ openedAt: nextAt, lastCompletedAt: null, now: completedAt }), false);
+assert.strictEqual(isLatestPostOpenValid({ openedAt: null, lastCompletedAt: null, now: completedAt }), false);
 
 assert.ok(Task.schema.path('verifyType').enumValues.includes('latest_post'));
 assert.strictEqual(Task.schema.path('chatId').instance, 'String');
@@ -109,8 +124,11 @@ assert.ok(Task.schema.path('requiredReaction'));
 assert.ok(TaskCompletion.schema.path('nextAvailableAt'));
 assert.ok(TaskCompletion.schema.path('recurringClaimCount'));
 assert.ok(TaskCompletion.schema.path('lastReactionEventAt'));
+assert.ok(LatestPostEngagementState.schema.path('openedAt'));
 const completionIndexes = TaskCompletion.schema.indexes();
 assert.ok(completionIndexes.some(([keys, options]) => keys.user === 1 && keys.task === 1 && options.unique === true));
+const openStateIndexes = LatestPostEngagementState.schema.indexes();
+assert.ok(openStateIndexes.some(([keys, options]) => keys.user === 1 && keys.task === 1 && options.unique === true));
 const reactionIndexes = TaskReactionState.schema.indexes();
 assert.ok(reactionIndexes.some(([keys, options]) => keys.chatId === 1 && keys.messageId === 1 && keys.telegramUserId === 1 && options.unique === true));
 assert.ok(TaskReactionState.schema.path('lastAddedReactionEmojis'));
@@ -129,10 +147,24 @@ assert.ok(webhookSource.includes('handleTelegramStart'));
 assert.ok(webhookSource.includes('recordWebhookUpdate(updateType)'));
 assert.ok(webhookSource.includes('return res.sendStatus(500)'));
 assert.ok(serverSource.includes("await require('./models/TaskReactionState').init()"));
+assert.ok(serverSource.includes("await require('./models/LatestPostEngagementState').init()"));
 assert.ok(taskRouteSource.includes("router.post('/:id/engagement/check'"));
+assert.ok(taskRouteSource.includes("router.post('/:id/engagement/open'"));
 assert.ok(taskRouteSource.includes('withMongoTransaction'));
 assert.ok(taskRouteSource.includes('recordLedgerRequired'));
 assert.ok(taskRouteSource.includes('TASK_COOLDOWN_ACTIVE'));
+assert.ok(taskRouteSource.includes('latestPostStates'));
+const engagementCheckSource = taskRouteSource.slice(
+  taskRouteSource.indexOf("router.post('/:id/engagement/check'"),
+  taskRouteSource.indexOf("POST /api/tasks/:id/claim")
+);
+assert.ok(engagementCheckSource.includes('TASK_NOT_OPENED'));
+assert.ok(engagementCheckSource.includes('LatestPostEngagementState.findOneAndDelete'));
+assert.ok(engagementCheckSource.includes('nextLatestPostAvailableAt(transactionNow)'));
+assert.ok(!engagementCheckSource.includes('TaskReactionState'));
+assert.ok(!engagementCheckSource.includes('latestPostMessageId'));
+assert.ok(!engagementCheckSource.includes('requiredReaction'));
+assert.ok(!engagementCheckSource.includes('isFreshRequiredReaction'));
 assert.ok(adminSource.includes("router.get('/tasks/:id/latest-post-diagnostics'"));
 assert.ok(adminSource.includes("router.get('/telegram-status'"));
 assert.ok(adminSource.includes("router.post('/telegram-reconfigure'"));
@@ -143,7 +175,13 @@ assert.ok(adminHtmlSource.includes('reconfigureTelegramWebhook'));
 assert.ok(telegramWebhookSource.includes("allowed_updates: ['message', 'callback_query', 'channel_post', 'message_reaction']"));
 assert.ok(telegramWebhookSource.includes('bot.getWebhookInfo()'));
 assert.ok(appSource.includes('function openLatestPostTask(url, taskId)'));
-assert.ok(appSource.includes('data-task-state="${waitingForCheck ? "WAITING_FOR_CHECK" : "AVAILABLE"}"'));
+assert.ok(appSource.includes('/engagement/open'));
+assert.ok(appSource.includes('data-task-state="WAITING_FOR_CHECK"'));
+assert.ok(appSource.includes('else if (waitingForCheck)'));
+assert.ok(appSource.includes('latestPostStates'));
+assert.ok(appSource.includes('task_latest_post_completed'));
+assert.ok(appSource.includes('task_latest_post_open_hint'));
+assert.ok(!appSource.includes('task_latest_post_reaction_hint'));
 assert.ok(appSource.includes('document.addEventListener("visibilitychange", refreshLatestPostTasksOnReturn)'));
 assert.ok(!appSource.includes('else if (!Number.isSafeInteger(Number(task.latestPostMessageId))'));
 

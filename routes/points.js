@@ -13,11 +13,10 @@ const { idempotencyTransactionId } = require('../utils/idempotency');
 const {
   normalizeTonAddress,
   normalizeTonTxHash,
-  amountToUnits,
-  getJettonMasterInfo,
-  verifyGramJettonTransfer,
+  amountToNanoGram,
+  verifyNativeGramTransfer,
   createDepositReference
-} = require('../utils/tonDepositVerify');
+} = require('../utils/tonNativeDepositVerify');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
@@ -48,15 +47,12 @@ function truncateAddress(address) {
 
 function getDepositSettingsStatus(settings) {
   const depositWalletAddress = String(settings?.depositWalletAddress || '').trim();
-  const gramJettonMasterAddress = String(settings?.gramJettonMasterAddress || '').trim();
   const minimumDepositGram = Number(settings?.minimumDepositGram);
   const ready = settings?.depositEnabled === true
     && settings?.depositNetwork === 'TON_MAINNET'
     && normalizeTonAddress(depositWalletAddress)
-    && normalizeTonAddress(gramJettonMasterAddress)
-    && Number.isFinite(minimumDepositGram)
-    && minimumDepositGram > 0;
-  return { ready: Boolean(ready), depositWalletAddress, gramJettonMasterAddress, minimumDepositGram };
+    && amountToNanoGram(minimumDepositGram) != null;
+  return { ready: Boolean(ready), depositWalletAddress, minimumDepositGram };
 }
 
 // چرخ‌گردون: ۶ خانه
@@ -468,7 +464,7 @@ router.get('/withdrawals', auth, async (req, res) => {
   res.json({ success: true, withdrawals: list });
 });
 
-// TON Mainnet GRAM Jetton deposit configuration; the contract/master address is never accepted from the client.
+// Native GRAM deposits use one project-controlled TON Mainnet wallet and a unique invoice comment.
 router.get('/deposit/config', auth, async (req, res) => {
   const settings = await Settings.getGlobal();
   const config = getDepositSettingsStatus(settings);
@@ -500,10 +496,10 @@ function publicDepositRecord(deposit) {
 }
 
 router.get('/deposits', auth, async (req, res) => {
-  const deposits = await Deposit.find({ user: req.dbUser._id })
+  const deposits = await Deposit.find({ user: req.dbUser._id, assetType: 'native_gram' })
     .sort({ createdAt: -1 })
     .limit(30)
-    .select('reference network token depositAddressSnapshot minimumDepositSnapshot amount submittedTxHash txHash status createdAt verifiedAt creditedAt');
+    .select('reference network token assetType depositAddressSnapshot minimumDepositSnapshot amount submittedTxHash txHash status createdAt verifiedAt creditedAt');
   res.json({ success: true, deposits: deposits.map(publicDepositRecord) });
 });
 
@@ -514,18 +510,15 @@ router.post('/deposits', auth, async (req, res) => {
     return res.status(503).json({ success: false, code: 'DEPOSIT_DISABLED', message: 'واریز GRAM روی TON Mainnet در حال حاضر فعال نیست.' });
   }
 
-  const existing = await Deposit.findOne({ user: req.dbUser._id, status: 'pending' }).sort({ createdAt: -1 });
+  // Close any unverified invoice from the former Jetton-only implementation. It is
+  // never eligible for Native GRAM credit; changing status releases the legacy
+  // one-pending-invoice-per-user unique index without altering balances.
+  await Deposit.updateMany(
+    { user: req.dbUser._id, status: 'pending', assetType: { $ne: 'native_gram' } },
+    { $set: { status: 'rejected', verificationNote: 'legacy_jetton_deposit_disabled', verifiedAt: new Date() } }
+  );
+  const existing = await Deposit.findOne({ user: req.dbUser._id, assetType: 'native_gram', status: 'pending' }).sort({ createdAt: -1 });
   if (existing) return res.json({ success: true, deposit: publicDepositRecord(existing) });
-
-  let masterInfo;
-  try {
-    masterInfo = await getJettonMasterInfo(config.gramJettonMasterAddress);
-    if (masterInfo.symbol && masterInfo.symbol.toUpperCase() !== 'GRAM') {
-      return res.status(503).json({ success: false, code: 'INVALID_GRAM_MASTER', message: 'Gram Jetton Master تنظیم‌شده قابل تأیید نیست.' });
-    }
-  } catch {
-    return res.status(503).json({ success: false, code: 'TON_PROVIDER_UNAVAILABLE', message: 'اطلاعات Gram Jetton از TON Mainnet قابل دریافت نیست. بعداً دوباره تلاش کنید.' });
-  }
 
   let deposit;
   try {
@@ -534,15 +527,14 @@ router.post('/deposits', auth, async (req, res) => {
       reference: createDepositReference(),
       network: 'TON_MAINNET',
       token: 'GRAM',
+      assetType: 'native_gram',
       depositAddressSnapshot: config.depositWalletAddress,
-      jettonMasterSnapshot: config.gramJettonMasterAddress,
       minimumDepositSnapshot: config.minimumDepositGram,
-      decimalsSnapshot: masterInfo.decimals,
       status: 'pending'
     });
   } catch (error) {
     if (error?.code !== 11000) throw error;
-    deposit = await Deposit.findOne({ user: req.dbUser._id, status: 'pending' }).sort({ createdAt: -1 });
+    deposit = await Deposit.findOne({ user: req.dbUser._id, assetType: 'native_gram', status: 'pending' }).sort({ createdAt: -1 });
     if (!deposit) throw error;
     return res.json({ success: true, deposit: publicDepositRecord(deposit) });
   }
@@ -553,7 +545,7 @@ router.post('/deposits/:id/verify', auth, async (req, res) => {
   if (!/^[a-f\d]{24}$/i.test(String(req.params.id || ''))) {
     return res.status(404).json({ success: false, message: 'درخواست Deposit پیدا نشد.' });
   }
-  const deposit = await Deposit.findOne({ _id: req.params.id, user: req.dbUser._id });
+  const deposit = await Deposit.findOne({ _id: req.params.id, user: req.dbUser._id, assetType: 'native_gram' });
   if (!deposit) return res.status(404).json({ success: false, message: 'درخواست Deposit پیدا نشد.' });
   if (deposit.status === 'confirmed') {
     const user = await User.findById(req.dbUser._id).select('gramBalance');
@@ -565,17 +557,15 @@ router.post('/deposits/:id/verify', auth, async (req, res) => {
 
   const submittedHash = normalizeTonTxHash(req.body?.txHash);
   if (!submittedHash) {
-    return res.status(400).json({ success: false, code: 'INVALID_TON_TX_HASH', message: 'Transaction Hash باید ۶۴ رقم hexadecimal معتبر باشد.' });
+    return res.status(400).json({ success: false, code: 'INVALID_TON_TX_HASH', message: 'Transaction ID باید hash معتبر TON (۶۴ رقم hexadecimal یا Base64 معادل آن) باشد.' });
   }
 
   let verification;
   try {
-    verification = await verifyGramJettonTransfer({
+    verification = await verifyNativeGramTransfer({
       txHash: submittedHash,
       depositAddress: deposit.depositAddressSnapshot,
-      jettonMaster: deposit.jettonMasterSnapshot,
-      reference: deposit.reference,
-      decimals: deposit.decimalsSnapshot
+      reference: deposit.reference
     });
   } catch {
     return res.status(503).json({ success: false, code: 'TON_PROVIDER_UNAVAILABLE', message: 'TON Center در دسترس نیست؛ موجودی تغییر نکرده است. دوباره تلاش کنید.' });
@@ -597,14 +587,14 @@ router.post('/deposits/:id/verify', auth, async (req, res) => {
     return res.status(400).json({
       success: false,
       code: verification.code || 'DEPOSIT_VERIFICATION_FAILED',
-      message: 'تراکنش با آدرس، Gram Jetton، reference یا وضعیت موفق TON مطابقت ندارد؛ موجودی تغییر نکرد.'
+      message: 'تراکنش Native GRAM، آدرس دریافت، Reference یا وضعیت نهایی Mainnet مطابقت ندارد؛ موجودی تغییر نکرد.'
     });
   }
 
-  const minimumRaw = amountToUnits(deposit.minimumDepositSnapshot, deposit.decimalsSnapshot);
+  const minimumRaw = amountToNanoGram(deposit.minimumDepositSnapshot);
   const actualRaw = BigInt(verification.amountRaw);
   if (minimumRaw == null) {
-    return res.status(503).json({ success: false, code: 'INVALID_DEPOSIT_SETTINGS', message: 'تنظیم حداقل مبلغ Deposit با decimals توکن سازگار نیست؛ موجودی تغییر نکرد.' });
+    return res.status(503).json({ success: false, code: 'INVALID_DEPOSIT_SETTINGS', message: 'تنظیم حداقل Deposit با دقت ۹ رقم اعشار Native GRAM سازگار نیست؛ موجودی تغییر نکرد.' });
   }
 
   if (actualRaw < minimumRaw) {
@@ -613,7 +603,7 @@ router.post('/deposits/:id/verify', auth, async (req, res) => {
         { _id: deposit._id, user: req.dbUser._id, status: 'pending', txHashNormalized: { $exists: false } },
         { $set: {
           status: 'rejected', amount: verification.amount, amountRaw: verification.amountRaw,
-          submittedTxHash: submittedHash, txHash: submittedHash, txHashNormalized: submittedHash,
+          submittedTxHash: submittedHash, txHash: verification.txHash, txHashNormalized: verification.txHash,
           sourceAddress: verification.sourceAddress, verificationNote: 'below_minimum', verifiedAt: verification.confirmedAt
         } },
         { new: true }
@@ -634,8 +624,8 @@ router.post('/deposits/:id/verify', auth, async (req, res) => {
         { _id: deposit._id, user: req.dbUser._id, status: 'pending', txHashNormalized: { $exists: false } },
         { $set: {
           status: 'confirmed', amount: verification.amount, amountRaw: verification.amountRaw,
-          submittedTxHash: submittedHash, txHash: submittedHash, txHashNormalized: submittedHash,
-          sourceAddress: verification.sourceAddress, verificationNote: 'confirmed_by_toncenter_v3_mainnet',
+          submittedTxHash: submittedHash, txHash: verification.txHash, txHashNormalized: verification.txHash,
+          sourceAddress: verification.sourceAddress, verificationNote: 'confirmed_native_gram_by_toncenter_v3_mainnet',
           verifiedAt: verification.confirmedAt, creditedAt: now
         } },
         { new: true, session }
@@ -664,10 +654,10 @@ router.post('/deposits/:id/verify', auth, async (req, res) => {
         type: 'deposit',
         currency: 'gram',
         amount: verification.amount,
-        description: 'Deposit — GRAM on TON Mainnet',
+        description: 'Deposit — Native GRAM on TON Mainnet',
         balanceAfter: updatedUser.gramBalance,
-        sourceId: `deposit:${submittedHash}`,
-        transactionId: submittedHash,
+        sourceId: `deposit:${verification.txHash}`,
+        transactionId: verification.txHash,
         session
       });
       if (!ledgerResult.created) throw new Error('DEPOSIT_LEDGER_ALREADY_EXISTS');
@@ -707,7 +697,7 @@ router.post('/deposits/:id/verify', auth, async (req, res) => {
     amount: verification.amount,
     gramBalance: outcome?.gramBalance,
     deposit: publicDepositRecord(outcome.deposit),
-    message: 'Deposit در TON Mainnet تأیید شد و موجودی GRAM افزایش یافت.'
+    message: 'واریز Native GRAM در TON Mainnet تأیید شد و موجودی افزایش یافت.'
   });
 });
 
@@ -730,14 +720,22 @@ router.get('/history', auth, async (req, res) => {
     PointsLedger.find(filter).sort({ createdAt: -1 }).limit(limit + 1).lean(),
     Deposit.find({
       user: req.dbUser._id,
-      status: { $in: ['pending', 'rejected'] },
+      assetType: 'native_gram',
+      status: { $in: ['pending', 'rejected', 'confirmed'] },
       ...(filter.createdAt ? { createdAt: filter.createdAt } : {})
     }).sort({ createdAt: -1 }).limit(limit + 1)
-      .select('amount submittedTxHash txHash status createdAt verifiedAt creditedAt')
+      .select('assetType amount submittedTxHash txHash status createdAt verifiedAt creditedAt')
       .lean()
   ]);
-  const history = ledgerItems.map(item => item.type === 'deposit' ? { ...item, status: 'confirmed' } : item);
+  const depositByHash = new Map(depositItems.filter(item => item.status === 'confirmed' && item.txHash)
+    .map(item => [String(item.txHash).toLowerCase(), item]));
+  const history = ledgerItems.map(item => {
+    if (item.type !== 'deposit') return item;
+    const linkedDeposit = depositByHash.get(String(item.transactionId || '').toLowerCase());
+    return { ...item, status: 'confirmed', transactionAt: linkedDeposit?.verifiedAt || item.createdAt };
+  });
   for (const item of depositItems) {
+    if (item.status === 'confirmed') continue;
     history.push({
       _id: item._id,
       type: 'deposit',
@@ -747,6 +745,7 @@ router.get('/history', auth, async (req, res) => {
       status: item.status,
       description: '',
       createdAt: item.createdAt,
+      transactionAt: item.verifiedAt || item.createdAt,
       verifiedAt: item.verifiedAt,
       creditedAt: item.creditedAt
     });

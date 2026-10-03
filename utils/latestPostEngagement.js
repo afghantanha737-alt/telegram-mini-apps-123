@@ -1,6 +1,34 @@
 'use strict';
 
 const MAX_TELEGRAM_CHAT_ID = (1n << 52n) - 1n;
+const LATEST_POST_COOLDOWN_HOURS = 3;
+const LATEST_POST_COOLDOWN_MS = LATEST_POST_COOLDOWN_HOURS * 60 * 60 * 1000;
+
+function dateMilliseconds(value) {
+  if (value == null) return NaN;
+  const milliseconds = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isFinite(milliseconds) ? milliseconds : NaN;
+}
+
+function isLatestPostCooldownActive(nextAvailableAt, now = new Date()) {
+  const nextTime = dateMilliseconds(nextAvailableAt);
+  const nowTime = dateMilliseconds(now);
+  return Number.isFinite(nextTime) && Number.isFinite(nowTime) && nextTime > nowTime;
+}
+
+function isLatestPostOpenValid({ openedAt, lastCompletedAt, now = new Date() }) {
+  const openedTime = dateMilliseconds(openedAt);
+  const nowTime = dateMilliseconds(now);
+  if (!Number.isFinite(openedTime) || !Number.isFinite(nowTime) || openedTime > nowTime) return false;
+  const completedTime = dateMilliseconds(lastCompletedAt);
+  return !Number.isFinite(completedTime) || openedTime > completedTime;
+}
+
+function nextLatestPostAvailableAt(now = new Date()) {
+  const nowTime = dateMilliseconds(now);
+  if (!Number.isFinite(nowTime)) throw new TypeError('A valid completion time is required.');
+  return new Date(nowTime + LATEST_POST_COOLDOWN_MS);
+}
 
 function isValidTelegramChannelId(value) {
   const text = String(value ?? '').trim();
@@ -93,6 +121,10 @@ function buildRecurringTaskSourceId(taskId, userId, cycle) {
 }
 
 module.exports = {
+  LATEST_POST_COOLDOWN_HOURS,
+  isLatestPostCooldownActive,
+  isLatestPostOpenValid,
+  nextLatestPostAvailableAt,
   isValidTelegramChannelId,
   isValidTelegramChannelUrl,
   isSingleEmoji,

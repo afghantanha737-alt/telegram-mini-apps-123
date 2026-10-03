@@ -9,14 +9,20 @@ const { checkChatMembership } = require('../utils/bot');
 const { recordLedgerRequired } = require('../utils/ledger');
 const Task = require('../models/Task');
 const TaskCompletion = require('../models/TaskCompletion');
-const TaskReactionState = require('../models/TaskReactionState');
+const LatestPostEngagementState = require('../models/LatestPostEngagementState');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
 const { rewardCostUsd } = require('../utils/sponsor');
 const { withMongoTransaction } = require('../utils/mongoTransaction');
 const { evaluateReferralEligibility, REFERRAL_MIN_TASKS, REFERRAL_MIN_ACTIVE_DAYS, REFERRAL_WAIT_DAYS } = require('../utils/referralEligibility');
 const { SCREENSHOT_MIME_TYPES, isValidScreenshot } = require('../utils/screenshotValidation');
-const { isFreshRequiredReaction, buildRecurringTaskSourceId } = require('../utils/latestPostEngagement');
+const {
+  buildRecurringTaskSourceId,
+  LATEST_POST_COOLDOWN_HOURS,
+  isLatestPostCooldownActive,
+  isLatestPostOpenValid,
+  nextLatestPostAvailableAt
+} = require('../utils/latestPostEngagement');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
@@ -106,7 +112,18 @@ router.get('/', auth, async (req, res) => {
     })
       .select('-sponsorPriceUsd -sponsorBudgetUsd')
       .sort({ isSpecialOfDay: -1, isSponsored: -1, createdAt: -1 });
-    res.json({ success: true, tasks, completions, serverNow: Date.now() });
+    const latestPostTaskIds = tasks.filter(task => task.verifyType === 'latest_post').map(task => task._id);
+    const latestPostStates = latestPostTaskIds.length
+      ? await LatestPostEngagementState.find({ user: req.dbUser._id, task: { $in: latestPostTaskIds } })
+        .select('task openedAt').lean()
+      : [];
+    res.json({
+      success: true,
+      tasks,
+      completions,
+      latestPostStates: latestPostStates.map(item => ({ task: String(item.task), openedAt: item.openedAt })),
+      serverNow: Date.now()
+    });
   } catch (error) {
     console.error('GET /api/tasks failed:', error);
     res.status(500).json({ success: false, message: 'خطایی در بارگذاری تسک‌ها رخ داد.', code: 'SERVER_ERROR' });
@@ -194,29 +211,86 @@ router.post('/:id/submission', auth, parseScreenshot, async (req, res) => {
   }
 });
 
-/** POST /api/tasks/:id/engagement/check — checks the user's exact reaction on the tracked latest post. */
-router.post('/:id/engagement/check', auth, async (req, res) => {
+/** POST /api/tasks/:id/engagement/open — server-side Open→Check authorization. */
+router.post('/:id/engagement/open', auth, async (req, res) => {
   const user = req.dbUser;
   const now = new Date();
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ success: false, code: 'TASK_NOT_FOUND', message: 'Task پیدا نشد.' });
+    }
+    const task = await Task.findById(req.params.id);
+    if (!task || task.verifyType !== 'latest_post') {
+      return res.status(404).json({ success: false, code: 'TASK_NOT_FOUND', message: 'Latest Post Task پیدا نشد.' });
+    }
+    if (!task.isActive || (task.expiresAt && task.expiresAt <= now)) {
+      return res.status(409).json({ success: false, code: 'TASK_INACTIVE', message: 'این Task فعال نیست.' });
+    }
+    if (task.isSponsored || !task.url || !Number.isFinite(task.reward) || task.reward <= 0) {
+      return res.status(503).json({ success: false, code: 'TASK_SETUP_INCOMPLETE', message: 'تنظیمات این Task کامل نیست.' });
+    }
+
+    const completion = await TaskCompletion.findOne({ user: user._id, task: task._id })
+      .select('nextAvailableAt').lean();
+    if (isLatestPostCooldownActive(completion?.nextAvailableAt, now)) {
+      return res.status(429).json({
+        success: false,
+        code: 'TASK_COOLDOWN_ACTIVE',
+        message: 'این Task هنوز در Cooldown است.',
+        nextAvailableAt: completion.nextAvailableAt,
+        serverNow: now.getTime()
+      });
+    }
+
+    let openState;
+    try {
+      openState = await LatestPostEngagementState.findOneAndUpdate(
+        { user: user._id, task: task._id },
+        { $set: { openedAt: now } },
+        { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+      );
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      openState = await LatestPostEngagementState.findOneAndUpdate(
+        { user: user._id, task: task._id },
+        { $set: { openedAt: now } },
+        { new: true, runValidators: true }
+      );
+      if (!openState) throw error;
+    }
+
+    return res.json({
+      success: true,
+      status: 'WAITING_FOR_CHECK',
+      openedAt: openState.openedAt,
+      serverNow: now.getTime()
+    });
+  } catch (error) {
+    console.error(`POST /api/tasks/${req.params.id}/engagement/open failed:`, error);
+    return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: 'ثبت Open Task انجام نشد.' });
+  }
+});
+
+/** POST /api/tasks/:id/engagement/check — pays only after a server-recorded Open and outside cooldown. */
+router.post('/:id/engagement/check', auth, async (req, res) => {
+  const user = req.dbUser;
   const fail = (code, message, status = 409) => Object.assign(new Error(message), { code, status });
 
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
-      return res.status(404).json({ success: false, code: 'TASK_NOT_FOUND', message: 'تسک پیدا نشد.' });
+      return res.status(404).json({ success: false, code: 'TASK_NOT_FOUND', message: 'Task پیدا نشد.' });
     }
 
     const initialTask = await Task.findById(req.params.id);
+    const requestNow = new Date();
     if (!initialTask || initialTask.verifyType !== 'latest_post') {
       return res.status(404).json({ success: false, code: 'TASK_NOT_FOUND', message: 'Latest Post Task پیدا نشد.' });
     }
-    if (!initialTask.isActive || (initialTask.expiresAt && initialTask.expiresAt <= now)) {
+    if (!initialTask.isActive || (initialTask.expiresAt && initialTask.expiresAt <= requestNow)) {
       return res.status(409).json({ success: false, code: 'TASK_INACTIVE', message: 'این Task فعال نیست.' });
     }
-    if (initialTask.isSponsored || !initialTask.chatId || !initialTask.requiredReaction) {
+    if (initialTask.isSponsored || !Number.isFinite(initialTask.reward) || initialTask.reward <= 0) {
       return res.status(503).json({ success: false, code: 'TASK_SETUP_INCOMPLETE', message: 'تنظیمات این Task کامل نیست؛ پاداشی پرداخت نشد.' });
-    }
-    if (!Number.isSafeInteger(initialTask.latestPostMessageId) || initialTask.latestPostMessageId <= 0) {
-      return res.status(409).json({ success: false, code: 'LATEST_POST_NOT_TRACKED', message: 'هنوز پست تازه‌ای از کانال توسط webhook ثبت نشده است.' });
     }
 
     const settings = await Settings.getGlobal();
@@ -226,57 +300,37 @@ router.post('/:id/engagement/check', auth, async (req, res) => {
       if (!currentTask || currentTask.verifyType !== 'latest_post' || !currentTask.isActive || (currentTask.expiresAt && currentTask.expiresAt <= transactionNow)) {
         throw fail('TASK_INACTIVE', 'این Task فعال نیست.');
       }
-      if (currentTask.isSponsored || !currentTask.chatId || !currentTask.requiredReaction || !Number.isSafeInteger(currentTask.latestPostMessageId) || currentTask.latestPostMessageId <= 0 || !Number.isFinite(currentTask.reward) || currentTask.reward <= 0) {
-        throw fail('TASK_SETUP_INCOMPLETE', 'تنظیمات یا آخرین پست این Task آماده نیست.');
+      if (currentTask.isSponsored || !Number.isFinite(currentTask.reward) || currentTask.reward <= 0) {
+        throw fail('TASK_SETUP_INCOMPLETE', 'تنظیمات این Task کامل نیست.');
       }
 
       const completion = await TaskCompletion.findOne({ user: user._id, task: currentTask._id }).session(session);
-      if (completion?.nextAvailableAt && completion.nextAvailableAt > transactionNow) {
+      if (isLatestPostCooldownActive(completion?.nextAvailableAt, transactionNow)) {
         throw fail('TASK_COOLDOWN_ACTIVE', 'این Task هنوز در Cooldown است.', 429);
       }
 
-      const reactionState = await TaskReactionState.findOne({
-        chatId: String(currentTask.chatId),
-        messageId: currentTask.latestPostMessageId,
-        telegramUserId: String(user.telegramId)
-      }).session(session).lean();
-      if (!isFreshRequiredReaction({
-        reactionState,
-        requiredReaction: currentTask.requiredReaction,
-        latestPostDate: currentTask.latestPostDate,
-        nextAvailableAt: completion?.nextAvailableAt,
-        lastReactionEventAt: completion?.lastReactionEventAt
-      })) {
-        throw fail('REQUIRED_REACTION_MISSING', `واکنش ${currentTask.requiredReaction} باید روی آخرین پست ثبت یا پس از Cooldown دوباره اضافه شود.`, 400);
-      }
-      const lockedReactionState = await TaskReactionState.findOneAndUpdate(
-        { _id: reactionState._id, lastUpdateId: reactionState.lastUpdateId },
-        { $set: { lastVerifiedAt: transactionNow } },
-        { new: true, session }
-      );
-      if (!isFreshRequiredReaction({
-        reactionState: lockedReactionState,
-        requiredReaction: currentTask.requiredReaction,
-        latestPostDate: currentTask.latestPostDate,
-        nextAvailableAt: completion?.nextAvailableAt,
-        lastReactionEventAt: completion?.lastReactionEventAt
-      })) {
-        throw fail('REQUIRED_REACTION_MISSING', 'واکنش فعلی دیگر معتبر نیست؛ واکنش را دوباره ثبت و بررسی کنید.', 400);
+      const openState = await LatestPostEngagementState.findOne({ user: user._id, task: currentTask._id })
+        .session(session).lean();
+      const openedAt = openState?.openedAt || null;
+      if (!isLatestPostOpenValid({ openedAt, lastCompletedAt: completion?.lastCompletedAt, now: transactionNow })) {
+        throw fail('TASK_NOT_OPENED', 'ابتدا Open Task را بزنید، سپس Check را انتخاب کنید.');
       }
 
+      const consumedOpenState = await LatestPostEngagementState.findOneAndDelete({
+        _id: openState._id,
+        openedAt: openState.openedAt
+      }).session(session);
+      if (!consumedOpenState) throw fail('TASK_OPEN_CONFLICT', 'وضعیت Open هم‌زمان تغییر کرد؛ دوباره Task را باز کنید.');
+
       const recurringClaimCount = Number(completion?.recurringClaimCount || 0) + 1;
-      const cooldownHours = Number(currentTask.cooldownHours);
-      if (!Number.isInteger(cooldownHours) || cooldownHours < 1 || cooldownHours > 720) {
-        throw fail('TASK_SETUP_INCOMPLETE', 'مقدار Cooldown این Task معتبر نیست.', 503);
-      }
-      const nextAvailableAt = new Date(transactionNow.getTime() + cooldownHours * 60 * 60 * 1000);
+      const nextAvailableAt = nextLatestPostAvailableAt(transactionNow);
       const costUsd = rewardCostUsd(currentTask.reward, settings.rate, settings.gramUsdPrice);
       const updatedTask = await Task.findOneAndUpdate(
-        { _id: currentTask._id, verifyType: 'latest_post', isActive: true, latestPostMessageId: currentTask.latestPostMessageId },
+        { _id: currentTask._id, verifyType: 'latest_post', isActive: true },
         { $inc: { completedCount: 1 } },
         { new: true, session }
       );
-      if (!updatedTask) throw fail('LATEST_POST_CHANGED', 'آخرین پست هم‌زمان عوض شد؛ صفحه را تازه کنید و دوباره بررسی کنید.', 409);
+      if (!updatedTask) throw fail('TASK_INACTIVE', 'این Task دیگر فعال نیست.');
 
       if (completion) {
         const savedCompletion = await TaskCompletion.findOneAndUpdate(
@@ -287,12 +341,10 @@ router.post('/:id/engagement/check', auth, async (req, res) => {
               reward: currentTask.reward,
               lastCompletedAt: transactionNow,
               nextAvailableAt,
-              lastPostMessageId: currentTask.latestPostMessageId,
-              lastReactionEventAt: reactionState.lastEventAt,
               revenueUsd: 0,
               costUsd,
               reviewedAt: transactionNow,
-              reviewedBy: 'telegram-reaction'
+              reviewedBy: 'engagement-open-check'
             },
             $inc: { recurringClaimCount: 1 }
           },
@@ -308,12 +360,10 @@ router.post('/:id/engagement/check', auth, async (req, res) => {
           recurringClaimCount,
           lastCompletedAt: transactionNow,
           nextAvailableAt,
-          lastPostMessageId: currentTask.latestPostMessageId,
-          lastReactionEventAt: reactionState.lastEventAt,
           revenueUsd: 0,
           costUsd,
           reviewedAt: transactionNow,
-          reviewedBy: 'telegram-reaction'
+          reviewedBy: 'engagement-open-check'
         }).save({ session });
       }
 
@@ -354,6 +404,7 @@ router.post('/:id/engagement/check', auth, async (req, res) => {
       reward: payment.reward,
       status: 'approved',
       recurringClaimCount: payment.recurringClaimCount,
+      cooldownHours: LATEST_POST_COOLDOWN_HOURS,
       nextAvailableAt: payment.nextAvailableAt,
       serverNow: payment.serverNow
     });

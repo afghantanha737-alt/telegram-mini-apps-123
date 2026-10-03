@@ -77,6 +77,8 @@ const state = {
   initialized: false
 };
 window.state = state;
+const latestPostOpenedTaskIds = new Set();
+const latestPostOpeningTaskIds = new Set();
 
 /* ================= DOM HELPERS ================= */
 const $ = (selector) => document.querySelector(selector);
@@ -841,6 +843,10 @@ async function loadTasks({ force = false } = {}) {
     const data = await api("/api/tasks");
     state.tasks = Array.isArray(data?.tasks) ? data.tasks : [];
     state.completions = Array.isArray(data?.completions) ? data.completions : [];
+    latestPostOpenedTaskIds.clear();
+    (Array.isArray(data?.latestPostStates) ? data.latestPostStates : []).forEach(item => {
+      if (item?.task && item.openedAt) latestPostOpenedTaskIds.add(String(item.task));
+    });
     const serverNow = Number(data?.serverNow);
     state.tasksServerOffsetMs = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
     state.tasksLoadedAt = Date.now();
@@ -1059,8 +1065,6 @@ function renderHome() {
 /* ================= TASKS ================= */
 const TASK_ICONS = { channel: "📢", group: "👥", link: "🔗", custom: "🎁" };
 
-const latestPostOpenedTaskIds = new Set();
-
 function openTaskLinkOnly(url) {
   if (!url) return;
   if (tg?.openLink) tg.openLink(url);
@@ -1068,9 +1072,36 @@ function openTaskLinkOnly(url) {
 }
 window.openTaskLinkOnly = openTaskLinkOnly;
 
-function openLatestPostTask(url, taskId) {
-  if (taskId) latestPostOpenedTaskIds.add(String(taskId));
-  openTaskLinkOnly(url);
+async function openLatestPostTask(url, taskId) {
+  const id = String(taskId || "");
+  if (!id || !url || latestPostOpeningTaskIds.has(id)) return;
+
+  latestPostOpeningTaskIds.add(id);
+  const button = document.querySelector(`[data-latest-post-open="${id}"]`);
+  if (button) button.disabled = true;
+  const openRequest = api(`/api/tasks/${encodeURIComponent(id)}/engagement/open`, { method: "POST" });
+
+  // Open the Telegram link in the original user gesture so Telegram/WebView does not block it.
+  try { openTaskLinkOnly(url); } catch (error) { console.warn("Latest Post link could not be opened:", error); }
+
+  try {
+    const result = await openRequest;
+    latestPostOpenedTaskIds.add(id);
+    delete taskHints[id];
+    const serverNow = Number(result.serverNow);
+    if (Number.isFinite(serverNow)) state.tasksServerOffsetMs = serverNow - Date.now();
+    await loadTasks({ force: true });
+    if (state.activeTab === "tasks") renderTasks();
+  } catch (error) {
+    latestPostOpenedTaskIds.delete(id);
+    taskHints[id] = { type: "error", message: translateServerMessage(error.code, error.message) };
+    haptic("error");
+    toast(taskHints[id].message, error.code === "TASK_COOLDOWN_ACTIVE" ? "warning" : "error");
+    await loadTasks({ force: true });
+    if (state.activeTab === "tasks") renderTasks();
+  } finally {
+    latestPostOpeningTaskIds.delete(id);
+  }
 }
 window.openLatestPostTask = openLatestPostTask;
 
@@ -1222,24 +1253,26 @@ function startLatestPostCooldownCountdown() {
 
   const tick = () => {
     const now = Date.now() + state.tasksServerOffsetMs;
+    let refreshAfterCooldown = false;
     buttons.forEach(button => {
       const remaining = Date.parse(button.dataset.until || "") - now;
       if (remaining > 0) {
         button.textContent = t("task_latest_post_available_in", { time: formatCountdown(remaining) });
         return;
       }
-      button.disabled = false;
-      button.classList.remove("pending");
-      button.textContent = t("task_action_check");
-      const taskId = button.dataset.taskId;
+      button.disabled = true;
       button.dataset.taskState = "AVAILABLE";
-      latestPostOpenedTaskIds.delete(String(taskId));
-      button.setAttribute("data-latest-post-check", taskId);
-      button.removeAttribute("data-task-id");
-      button.removeAttribute("data-latest-post-cooldown");
-      button.removeAttribute("data-until");
-      button.onclick = () => verifyLatestPostTask(taskId);
+      button.textContent = t("task_action_open_task");
+      if (button.dataset.refreshed !== "true") {
+        button.dataset.refreshed = "true";
+        refreshAfterCooldown = true;
+      }
     });
+    if (refreshAfterCooldown) {
+      loadTasks({ force: true }).then(() => {
+        if (state.activeTab === "tasks") renderTasks();
+      });
+    }
     if (!document.querySelector("[data-latest-post-cooldown]")) {
       clearInterval(latestPostCooldownTimer);
       latestPostCooldownTimer = null;
@@ -1296,16 +1329,20 @@ function renderTasks() {
             : 0;
           const latestPostUrlArgument = escapeHTML(JSON.stringify(String(task.url || "")).replaceAll("<", "\\u003c"));
           const waitingForCheck = latestPostOpenedTaskIds.has(String(task._id)) && remaining <= 0;
-          const openButton = task.url
-            ? `<button class="taskAction" style="background:var(--surface-3);color:var(--text)" onclick="openLatestPostTask(${latestPostUrlArgument}, '${escapeHTML(task._id)}')">${t("task_action_open_task")}</button>`
+          const openButton = !waitingForCheck && remaining <= 0 && task.url
+            ? `<button class="taskAction" data-latest-post-open="${escapeHTML(task._id)}" style="background:var(--surface-3);color:var(--text)" onclick="openLatestPostTask(${latestPostUrlArgument}, '${escapeHTML(task._id)}')">${t("task_action_open_task")}</button>`
             : "";
-          let checkButton;
+          let actionButton = "";
+          let completedLabel = "";
           if (remaining > 0) {
-            checkButton = `<button class="taskAction pending" data-task-state="COOLDOWN" data-latest-post-cooldown data-task-id="${escapeHTML(task._id)}" data-until="${escapeHTML(nextAvailableAt.toISOString())}" disabled>${t("task_latest_post_available_in", { time: formatCountdown(remaining) })}</button>`;
+            completedLabel = `<div class="taskAction done" style="text-align:center;cursor:default">${t("task_latest_post_completed", { n: formatPoints(completion?.reward ?? task.reward) })}</div>`;
+            actionButton = `<button class="taskAction pending" data-task-state="COOLDOWN" data-latest-post-cooldown data-task-id="${escapeHTML(task._id)}" data-until="${escapeHTML(nextAvailableAt.toISOString())}" disabled>${t("task_latest_post_available_in", { time: formatCountdown(remaining) })}</button>`;
+          } else if (waitingForCheck) {
+            actionButton = `<button class="taskAction" data-task-state="WAITING_FOR_CHECK" data-latest-post-check="${escapeHTML(task._id)}" onclick="verifyLatestPostTask('${escapeHTML(task._id)}')">${t("task_action_check")}</button>`;
           } else {
-            checkButton = `<button class="taskAction" data-task-state="${waitingForCheck ? "WAITING_FOR_CHECK" : "AVAILABLE"}" data-latest-post-check="${escapeHTML(task._id)}" onclick="verifyLatestPostTask('${escapeHTML(task._id)}')">${t("task_action_check")}</button>`;
+            actionButton = openButton;
           }
-          actionHtml = `<div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">${openButton}${checkButton}</div>`;
+          actionHtml = `<div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">${completedLabel}${actionButton}</div>`;
         } else if (status === "approved") {
           actionHtml = `<button class="taskAction done" disabled>${t("task_btn_done")}</button>`;
         } else if (status === "pending") {
@@ -1337,7 +1374,7 @@ function renderTasks() {
           <div class="taskBody">
             <div class="taskTitle">${task.isSpecialOfDay ? `<span class="sponsoredTag">⭐ ${t("special_task_badge")}</span> ` : ""}${task.isSponsored ? `<span class="sponsoredTag">${t("task_sponsored_tag")}</span> ` : ""}${escapeHTML(task.title)}</div>
             ${task.description ? `<div class="taskDesc">${escapeHTML(task.description)}</div>` : ""}
-            ${task.verifyType === "latest_post" ? `<div class="taskDesc">${t("task_latest_post_reaction_hint", { emoji: escapeHTML(task.requiredReaction || "") })}</div>` : ""}
+            ${task.verifyType === "latest_post" ? `<div class="taskDesc">${t("task_latest_post_open_hint")}</div>` : ""}
             ${task.isSpecialOfDay && task.expiresAt ? `<div class="taskDesc" style="color:var(--warning)">⏳ ${t("special_task_deadline", { date: new Date(task.expiresAt).toLocaleString(state.language === "en" ? "en-US" : "fa-IR") })}</div>` : ""}
             <div class="taskReward">+${formatPoints(task.reward)} ${t("points_unit")}</div>
           </div>

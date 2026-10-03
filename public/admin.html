@@ -493,6 +493,23 @@
             <input id="setWeeklyPrize3" type="number" min="0" step="1" placeholder="رتبه ۳">
           </div>
         </div>
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
+          <b>💎 GRAM Deposit — TON Mainnet</b>
+          <p class="small">قبل از فعال‌سازی، آدرس دریافت پروژه و Gram Jetton Master را از منبع معتبر پروژه وارد کنید. سیستم آدرس Master را روی TON Mainnet فقط‌خواندنی بررسی می‌کند. برای واریز، کاربر باید reference یکتای نمایش‌داده‌شده را در comment/forward payload تراکنش Gram قرار دهد. این برنامه seed یا private key نگهداری نمی‌کند.</p>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+            <input type="checkbox" id="setDepositEnabled" style="width:auto">
+            <span>Deposit فعال باشد</span>
+          </label>
+          <label>Network</label>
+          <input id="setDepositNetwork" value="TON Mainnet" readonly>
+          <label>آدرس عمومی دریافت GRAM (TON wallet owner)</label>
+          <input id="setDepositWalletAddress" autocomplete="off" spellcheck="false" placeholder="آدرس معتبر TON">
+          <label>آدرس دقیق Gram Jetton Master</label>
+          <input id="setGramJettonMasterAddress" autocomplete="off" spellcheck="false" placeholder="از تنظیمات معتبر پروژه؛ آدرس را حدس نزنید">
+          <label>Minimum Deposit (GRAM)</label>
+          <input id="setMinimumDepositGram" type="number" min="0.000000001" step="0.000000001" value="1">
+          <p class="small" style="margin-bottom:0">Deposit به‌صورت پیش‌فرض خاموش است. برای روشن‌شدن، پیکربندی معتبر و Master قابل‌خواندن از TON Mainnet لازم است.</p>
+        </div>
         <button onclick="saveSettings()">ذخیره تنظیمات</button>
       </div>
     </div>
@@ -1794,6 +1811,11 @@ async function loadSettings() {
     renderReferralRates();
     document.getElementById("setWeeklyLeaderboardEnabled").checked = s.weeklyLeaderboardEnabled !== false;
     [0, 1, 2].forEach(i => { document.getElementById(`setWeeklyPrize${i + 1}`).value = s.weeklyLeaderboardPrizes?.[i] ?? [500, 250, 100][i]; });
+    document.getElementById("setDepositEnabled").checked = !!s.depositEnabled;
+    document.getElementById("setDepositNetwork").value = "TON Mainnet";
+    document.getElementById("setDepositWalletAddress").value = s.depositWalletAddress || "";
+    document.getElementById("setGramJettonMasterAddress").value = s.gramJettonMasterAddress || "";
+    document.getElementById("setMinimumDepositGram").value = s.minimumDepositGram ?? 1;
   } catch (error) {
     showMsg(error.message, "error");
   }
@@ -1816,7 +1838,12 @@ async function saveSettings() {
     weeklyLeaderboardEnabled: document.getElementById("setWeeklyLeaderboardEnabled").checked,
     weeklyLeaderboardPrizes: [1, 2, 3].map(i => Number(document.getElementById(`setWeeklyPrize${i}`).value) || 0),
     referralInitialRewardPoints: Number(document.getElementById("setReferralInitialReward").value),
-    referralLevelRates: [10, 5, 3, 1, 1, 1, 1, 1, 1, 1]
+    referralLevelRates: [10, 5, 3, 1, 1, 1, 1, 1, 1, 1],
+    depositEnabled: document.getElementById("setDepositEnabled").checked,
+    depositNetwork: "TON_MAINNET",
+    depositWalletAddress: document.getElementById("setDepositWalletAddress").value.trim(),
+    gramJettonMasterAddress: document.getElementById("setGramJettonMasterAddress").value.trim(),
+    minimumDepositGram: Number(document.getElementById("setMinimumDepositGram").value)
   };
   try {
     const data = await api("/api/admin/settings", { method: "PUT", body: JSON.stringify(body) });

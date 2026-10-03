@@ -1839,7 +1839,7 @@ async function submitExchange() {
 }
 window.submitExchange = submitExchange;
 
-/* ---- TON Mainnet GRAM Jetton deposit ---- */
+/* ---- TON Mainnet Native GRAM deposit ---- */
 let currentDeposit = null;
 let depositPanelLoading = false;
 let depositSubmissionBusy = false;
@@ -1867,7 +1867,7 @@ function renderDepositHistory(deposits) {
       return `<div style="padding:8px 0;border-top:1px solid var(--line);font-size:12px">
         <div style="display:flex;justify-content:space-between;gap:8px"><b>${escapeHTML(amount)}</b><span>${escapeHTML(t(statusKey))}</span></div>
         ${item.txHash ? `<div dir="ltr" style="text-align:start;opacity:.75;margin-top:3px">${escapeHTML(truncateMiddle(item.txHash, 8, 8))}</div>` : ""}
-        <div style="opacity:.65;margin-top:3px">${escapeHTML(timeAgo(item.createdAt))}</div>
+        <div style="opacity:.65;margin-top:3px">${escapeHTML(timeAgo(item.verifiedAt || item.createdAt))}</div>
       </div>`;
     }).join("")}`;
 }
@@ -1947,7 +1947,7 @@ async function submitGramDeposit() {
   const input = $("#depositTxHash");
   const txHash = String(input?.value || "").trim();
   if (!currentDeposit?._id || currentDeposit.status !== "pending" || depositSubmissionBusy) return;
-  if (!/^(?:0x)?[a-f\d]{64}$/i.test(txHash)) {
+  if (!/^(?:0x)?(?:[a-f\d]{64}|[a-z\d+/_-]{43,44}={0,2})$/i.test(txHash)) {
     setDepositActionMessage(t("deposit_invalid_hash_message"), "error");
     return;
   }
@@ -2838,7 +2838,7 @@ function renderProfileHistory() {
         <div class="ledgerIcon">${icon}</div>
         <div class="ledgerBody">
           <div class="ledgerDesc">${escapeHTML(desc)}</div>
-          <div class="historyMeta">${timeAgo(item.createdAt)}${depositStatusMeta ? ` · ${escapeHTML(depositStatusMeta)}` : ""}${referralMeta ? ` · ${escapeHTML(referralMeta)}` : ""}${transactionMeta ? ` · ${escapeHTML(transactionMeta)}` : ""}${earningMeta ? ` · ${escapeHTML(earningMeta)}` : ""}${referralUsersMeta ? ` · ${escapeHTML(referralUsersMeta)}` : ""}</div>
+          <div class="historyMeta">${timeAgo(item.transactionAt || item.verifiedAt || item.createdAt)}${depositStatusMeta ? ` · ${escapeHTML(depositStatusMeta)}` : ""}${referralMeta ? ` · ${escapeHTML(referralMeta)}` : ""}${transactionMeta ? ` · ${escapeHTML(transactionMeta)}` : ""}${earningMeta ? ` · ${escapeHTML(earningMeta)}` : ""}${referralUsersMeta ? ` · ${escapeHTML(referralUsersMeta)}` : ""}</div>
         </div>
         <div class="ledgerAmount ${isPendingDeposit ? "" : isPositive ? "positive" : "negative"}">${amountText}</div>
       </div>`;

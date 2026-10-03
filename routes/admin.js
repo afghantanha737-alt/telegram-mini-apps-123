@@ -9,6 +9,7 @@ const Task = require('../models/Task');
 const Withdrawal = require('../models/Withdrawal');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
+const { normalizeTonAddress, amountToUnits, getJettonMasterInfo } = require('../utils/tonDepositVerify');
 const { bot, notifyUser, markTelegramBlocked, isTelegramDeliveryBlocked, broadcastToActiveUsers } = require('../utils/bot');
 const { botText } = require('../utils/botMessages');
 const { verifyTonTransaction, normalizeTonTxHash, legacyTonTxHashMatcher } = require('../utils/tonVerify');
@@ -1717,8 +1718,66 @@ router.put('/settings', async (req, res) => {
       return res.status(400).json({ success: false, message: `نرخ‌های Referral نامعتبر است: ${error.message}` });
     }
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'depositEnabled')) {
+    changes.depositEnabled = body.depositEnabled === true || body.depositEnabled === 'true';
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'depositNetwork')) {
+    if (body.depositNetwork !== 'TON_MAINNET') {
+      return res.status(400).json({ success: false, message: 'شبکه Deposit فقط TON Mainnet است.' });
+    }
+    changes.depositNetwork = 'TON_MAINNET';
+  }
+  for (const key of ['depositWalletAddress', 'gramJettonMasterAddress']) {
+    if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+    const value = String(body[key] || '').trim();
+    if (value && !normalizeTonAddress(value)) {
+      return res.status(400).json({ success: false, message: `آدرس TON واردشده برای «${key}» معتبر نیست.` });
+    }
+    changes[key] = value;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'minimumDepositGram')) {
+    const minimum = Number(body.minimumDepositGram);
+    if (!Number.isFinite(minimum) || minimum <= 0 || minimum > 1000000000) {
+      return res.status(400).json({ success: false, message: 'حداقل Deposit باید بیشتر از صفر و حداکثر ۱٬۰۰۰٬۰۰۰٬۰۰۰ GRAM باشد.' });
+    }
+    changes.minimumDepositGram = minimum;
+  }
 
   const settings = await Settings.getGlobal();
+
+  const finalDepositEnabled = changes.depositEnabled !== undefined ? changes.depositEnabled : settings.depositEnabled;
+  const finalDepositWallet = changes.depositWalletAddress !== undefined ? changes.depositWalletAddress : settings.depositWalletAddress;
+  const finalGramMaster = changes.gramJettonMasterAddress !== undefined ? changes.gramJettonMasterAddress : settings.gramJettonMasterAddress;
+  const finalMinimumDeposit = changes.minimumDepositGram !== undefined ? changes.minimumDepositGram : settings.minimumDepositGram;
+  const finalDepositNetwork = changes.depositNetwork !== undefined ? changes.depositNetwork : (settings.depositNetwork || 'TON_MAINNET');
+  if (finalDepositEnabled) {
+    if (!normalizeTonAddress(finalDepositWallet) || !normalizeTonAddress(finalGramMaster)
+      || !Number.isFinite(Number(finalMinimumDeposit)) || Number(finalMinimumDeposit) <= 0
+      || finalDepositNetwork !== 'TON_MAINNET') {
+      return res.status(400).json({
+        success: false,
+        message: 'برای فعال‌سازی Deposit، آدرس دریافت پروژه، Gram Jetton Master تأییدشده و حداقل مبلغ معتبر را تنظیم کنید.'
+      });
+    }
+    const enablingDeposit = settings.depositEnabled !== true && finalDepositEnabled;
+    const masterChanged = changes.gramJettonMasterAddress !== undefined
+      && String(changes.gramJettonMasterAddress || '') !== String(settings.gramJettonMasterAddress || '');
+    const minimumChanged = changes.minimumDepositGram !== undefined
+      && Number(changes.minimumDepositGram) !== Number(settings.minimumDepositGram);
+    if (enablingDeposit || masterChanged || minimumChanged) {
+      try {
+        const masterInfo = await getJettonMasterInfo(finalGramMaster);
+        if (masterInfo.symbol && masterInfo.symbol.toUpperCase() !== 'GRAM') {
+          return res.status(400).json({ success: false, message: 'نماد Master در TON «GRAM» نیست؛ Deposit روشن نشد.' });
+        }
+        if (amountToUnits(finalMinimumDeposit, masterInfo.decimals) == null) {
+          return res.status(400).json({ success: false, message: 'حداقل مبلغ باید با decimals واقعی Gram Jetton سازگار باشد.' });
+        }
+      } catch {
+        return res.status(400).json({ success: false, message: 'Gram Jetton Master روی TON Mainnet یا decimals آن از طریق TON Center تأیید نشد؛ Deposit روشن نشد.' });
+      }
+    }
+  }
 
   // ساعت واقعی اجرا (UTC) از روی «ساعت محلی + منطقه‌ی زمانی» محاسبه می‌شود، نه مستقیم از ادمین
   if (changes.dailyReminderLocalHour !== undefined || changes.dailyReminderTimezone !== undefined) {

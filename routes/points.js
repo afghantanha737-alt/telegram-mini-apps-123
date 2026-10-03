@@ -8,7 +8,16 @@ const Settings = require('../models/Settings');
 const User = require('../models/User');
 const Withdrawal = require('../models/Withdrawal');
 const PointsLedger = require('../models/PointsLedger');
+const Deposit = require('../models/Deposit');
 const { idempotencyTransactionId } = require('../utils/idempotency');
+const {
+  normalizeTonAddress,
+  normalizeTonTxHash,
+  amountToUnits,
+  getJettonMasterInfo,
+  verifyGramJettonTransfer,
+  createDepositReference
+} = require('../utils/tonDepositVerify');
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
@@ -35,6 +44,19 @@ function truncateAddress(address) {
   const s = String(address || '');
   if (s.length <= 14) return s;
   return `${s.slice(0, 6)}…${s.slice(-6)}`;
+}
+
+function getDepositSettingsStatus(settings) {
+  const depositWalletAddress = String(settings?.depositWalletAddress || '').trim();
+  const gramJettonMasterAddress = String(settings?.gramJettonMasterAddress || '').trim();
+  const minimumDepositGram = Number(settings?.minimumDepositGram);
+  const ready = settings?.depositEnabled === true
+    && settings?.depositNetwork === 'TON_MAINNET'
+    && normalizeTonAddress(depositWalletAddress)
+    && normalizeTonAddress(gramJettonMasterAddress)
+    && Number.isFinite(minimumDepositGram)
+    && minimumDepositGram > 0;
+  return { ready: Boolean(ready), depositWalletAddress, gramJettonMasterAddress, minimumDepositGram };
 }
 
 // چرخ‌گردون: ۶ خانه
@@ -446,6 +468,249 @@ router.get('/withdrawals', auth, async (req, res) => {
   res.json({ success: true, withdrawals: list });
 });
 
+// TON Mainnet GRAM Jetton deposit configuration; the contract/master address is never accepted from the client.
+router.get('/deposit/config', auth, async (req, res) => {
+  const settings = await Settings.getGlobal();
+  const config = getDepositSettingsStatus(settings);
+  res.json({
+    success: true,
+    enabled: config.ready,
+    network: 'TON_MAINNET',
+    token: 'GRAM',
+    depositWalletAddress: config.ready ? config.depositWalletAddress : '',
+    minimumDepositGram: config.minimumDepositGram > 0 ? config.minimumDepositGram : null
+  });
+});
+
+function publicDepositRecord(deposit) {
+  return {
+    _id: String(deposit._id),
+    reference: deposit.reference,
+    network: deposit.network,
+    token: deposit.token,
+    depositWalletAddress: deposit.depositAddressSnapshot,
+    minimumDepositGram: deposit.minimumDepositSnapshot,
+    amount: deposit.amount,
+    txHash: deposit.txHash || deposit.submittedTxHash || '',
+    status: deposit.status,
+    createdAt: deposit.createdAt,
+    verifiedAt: deposit.verifiedAt,
+    creditedAt: deposit.creditedAt
+  };
+}
+
+router.get('/deposits', auth, async (req, res) => {
+  const deposits = await Deposit.find({ user: req.dbUser._id })
+    .sort({ createdAt: -1 })
+    .limit(30)
+    .select('reference network token depositAddressSnapshot minimumDepositSnapshot amount submittedTxHash txHash status createdAt verifiedAt creditedAt');
+  res.json({ success: true, deposits: deposits.map(publicDepositRecord) });
+});
+
+router.post('/deposits', auth, async (req, res) => {
+  const settings = await Settings.getGlobal();
+  const config = getDepositSettingsStatus(settings);
+  if (!config.ready) {
+    return res.status(503).json({ success: false, code: 'DEPOSIT_DISABLED', message: 'واریز GRAM روی TON Mainnet در حال حاضر فعال نیست.' });
+  }
+
+  const existing = await Deposit.findOne({ user: req.dbUser._id, status: 'pending' }).sort({ createdAt: -1 });
+  if (existing) return res.json({ success: true, deposit: publicDepositRecord(existing) });
+
+  let masterInfo;
+  try {
+    masterInfo = await getJettonMasterInfo(config.gramJettonMasterAddress);
+    if (masterInfo.symbol && masterInfo.symbol.toUpperCase() !== 'GRAM') {
+      return res.status(503).json({ success: false, code: 'INVALID_GRAM_MASTER', message: 'Gram Jetton Master تنظیم‌شده قابل تأیید نیست.' });
+    }
+  } catch {
+    return res.status(503).json({ success: false, code: 'TON_PROVIDER_UNAVAILABLE', message: 'اطلاعات Gram Jetton از TON Mainnet قابل دریافت نیست. بعداً دوباره تلاش کنید.' });
+  }
+
+  let deposit;
+  try {
+    deposit = await Deposit.create({
+      user: req.dbUser._id,
+      reference: createDepositReference(),
+      network: 'TON_MAINNET',
+      token: 'GRAM',
+      depositAddressSnapshot: config.depositWalletAddress,
+      jettonMasterSnapshot: config.gramJettonMasterAddress,
+      minimumDepositSnapshot: config.minimumDepositGram,
+      decimalsSnapshot: masterInfo.decimals,
+      status: 'pending'
+    });
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+    deposit = await Deposit.findOne({ user: req.dbUser._id, status: 'pending' }).sort({ createdAt: -1 });
+    if (!deposit) throw error;
+    return res.json({ success: true, deposit: publicDepositRecord(deposit) });
+  }
+  return res.status(201).json({ success: true, deposit: publicDepositRecord(deposit) });
+});
+
+router.post('/deposits/:id/verify', auth, async (req, res) => {
+  if (!/^[a-f\d]{24}$/i.test(String(req.params.id || ''))) {
+    return res.status(404).json({ success: false, message: 'درخواست Deposit پیدا نشد.' });
+  }
+  const deposit = await Deposit.findOne({ _id: req.params.id, user: req.dbUser._id });
+  if (!deposit) return res.status(404).json({ success: false, message: 'درخواست Deposit پیدا نشد.' });
+  if (deposit.status === 'confirmed') {
+    const user = await User.findById(req.dbUser._id).select('gramBalance');
+    return res.json({ success: true, alreadyConfirmed: true, status: 'confirmed', amount: deposit.amount, gramBalance: user?.gramBalance ?? 0, deposit: publicDepositRecord(deposit) });
+  }
+  if (deposit.status === 'rejected') {
+    return res.status(409).json({ success: false, code: 'DEPOSIT_REJECTED', status: 'rejected', deposit: publicDepositRecord(deposit), message: 'این واریز با حداقل مبلغ لازم مطابقت ندارد و اعتباری اضافه نشده است.' });
+  }
+
+  const submittedHash = normalizeTonTxHash(req.body?.txHash);
+  if (!submittedHash) {
+    return res.status(400).json({ success: false, code: 'INVALID_TON_TX_HASH', message: 'Transaction Hash باید ۶۴ رقم hexadecimal معتبر باشد.' });
+  }
+
+  let verification;
+  try {
+    verification = await verifyGramJettonTransfer({
+      txHash: submittedHash,
+      depositAddress: deposit.depositAddressSnapshot,
+      jettonMaster: deposit.jettonMasterSnapshot,
+      reference: deposit.reference,
+      decimals: deposit.decimalsSnapshot
+    });
+  } catch {
+    return res.status(503).json({ success: false, code: 'TON_PROVIDER_UNAVAILABLE', message: 'TON Center در دسترس نیست؛ موجودی تغییر نکرده است. دوباره تلاش کنید.' });
+  }
+
+  if (verification.status === 'pending') {
+    await Deposit.updateOne(
+      { _id: deposit._id, user: req.dbUser._id, status: 'pending' },
+      { $set: { submittedTxHash: submittedHash, verificationNote: verification.code || 'pending' } }
+    );
+    return res.status(202).json({
+      success: true,
+      status: 'pending',
+      code: verification.code,
+      message: 'تراکنش هنوز در TON Mainnet قابل تأیید نیست. چند لحظه بعد دوباره Check کنید؛ تا تأیید واقعی موجودی اضافه نمی‌شود.'
+    });
+  }
+  if (verification.status !== 'verified') {
+    return res.status(400).json({
+      success: false,
+      code: verification.code || 'DEPOSIT_VERIFICATION_FAILED',
+      message: 'تراکنش با آدرس، Gram Jetton، reference یا وضعیت موفق TON مطابقت ندارد؛ موجودی تغییر نکرد.'
+    });
+  }
+
+  const minimumRaw = amountToUnits(deposit.minimumDepositSnapshot, deposit.decimalsSnapshot);
+  const actualRaw = BigInt(verification.amountRaw);
+  if (minimumRaw == null) {
+    return res.status(503).json({ success: false, code: 'INVALID_DEPOSIT_SETTINGS', message: 'تنظیم حداقل مبلغ Deposit با decimals توکن سازگار نیست؛ موجودی تغییر نکرد.' });
+  }
+
+  if (actualRaw < minimumRaw) {
+    try {
+      const rejected = await Deposit.findOneAndUpdate(
+        { _id: deposit._id, user: req.dbUser._id, status: 'pending', txHashNormalized: { $exists: false } },
+        { $set: {
+          status: 'rejected', amount: verification.amount, amountRaw: verification.amountRaw,
+          submittedTxHash: submittedHash, txHash: submittedHash, txHashNormalized: submittedHash,
+          sourceAddress: verification.sourceAddress, verificationNote: 'below_minimum', verifiedAt: verification.confirmedAt
+        } },
+        { new: true }
+      );
+      if (!rejected) return res.status(409).json({ success: false, code: 'DEPOSIT_ALREADY_PROCESSED', message: 'این تراکنش قبلاً پردازش شده است.' });
+      return res.status(400).json({ success: false, code: 'DEPOSIT_BELOW_MINIMUM', status: 'rejected', deposit: publicDepositRecord(rejected), message: 'مبلغ تأییدشده از حداقل Deposit کمتر است؛ هیچ GRAM به موجودی اضافه نشد.' });
+    } catch (error) {
+      if (error?.code === 11000) return res.status(409).json({ success: false, code: 'DEPOSIT_TX_ALREADY_USED', message: 'این Transaction Hash قبلاً استفاده شده است.' });
+      throw error;
+    }
+  }
+
+  let outcome;
+  try {
+    await withMongoTransaction(async session => {
+      const now = new Date();
+      const claimed = await Deposit.findOneAndUpdate(
+        { _id: deposit._id, user: req.dbUser._id, status: 'pending', txHashNormalized: { $exists: false } },
+        { $set: {
+          status: 'confirmed', amount: verification.amount, amountRaw: verification.amountRaw,
+          submittedTxHash: submittedHash, txHash: submittedHash, txHashNormalized: submittedHash,
+          sourceAddress: verification.sourceAddress, verificationNote: 'confirmed_by_toncenter_v3_mainnet',
+          verifiedAt: verification.confirmedAt, creditedAt: now
+        } },
+        { new: true, session }
+      );
+
+      if (!claimed) {
+        const current = await Deposit.findById(deposit._id).session(session);
+        if (current?.status === 'confirmed') {
+          outcome = { alreadyConfirmed: true, deposit: current, gramBalance: null };
+          return;
+        }
+        const conflict = new Error('DEPOSIT_ALREADY_PROCESSED');
+        conflict.code = 'DEPOSIT_ALREADY_PROCESSED';
+        throw conflict;
+      }
+
+      const updatedUser = await User.findByIdAndUpdate(
+        req.dbUser._id,
+        { $inc: { gramBalance: verification.amount } },
+        { new: true, session }
+      );
+      if (!updatedUser) throw new Error('DEPOSIT_USER_NOT_FOUND');
+
+      const ledgerResult = await recordLedgerRequired({
+        user: updatedUser._id,
+        type: 'deposit',
+        currency: 'gram',
+        amount: verification.amount,
+        description: 'Deposit — GRAM on TON Mainnet',
+        balanceAfter: updatedUser.gramBalance,
+        sourceId: `deposit:${submittedHash}`,
+        transactionId: submittedHash,
+        session
+      });
+      if (!ledgerResult.created) throw new Error('DEPOSIT_LEDGER_ALREADY_EXISTS');
+      outcome = { alreadyConfirmed: false, deposit: claimed, gramBalance: updatedUser.gramBalance };
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ success: false, code: 'DEPOSIT_TX_ALREADY_USED', message: 'این Transaction Hash قبلاً برای یک Deposit استفاده شده است.' });
+    }
+    if (error?.code === 'DEPOSIT_ALREADY_PROCESSED') {
+      const current = await Deposit.findById(deposit._id);
+      if (current?.status === 'confirmed') {
+        const user = await User.findById(req.dbUser._id).select('gramBalance');
+        return res.json({ success: true, alreadyConfirmed: true, status: 'confirmed', amount: current.amount, gramBalance: user?.gramBalance ?? 0, deposit: publicDepositRecord(current) });
+      }
+      return res.status(409).json({ success: false, code: error.code, message: 'این درخواست قبلاً پردازش شده است.' });
+    }
+    throw error;
+  }
+
+  if (outcome?.alreadyConfirmed) {
+    const user = await User.findById(req.dbUser._id).select('gramBalance');
+    return res.json({
+      success: true,
+      alreadyConfirmed: true,
+      status: 'confirmed',
+      amount: outcome.deposit.amount,
+      gramBalance: user?.gramBalance ?? 0,
+      deposit: publicDepositRecord(outcome.deposit)
+    });
+  }
+
+  return res.json({
+    success: true,
+    alreadyConfirmed: Boolean(outcome?.alreadyConfirmed),
+    status: 'confirmed',
+    amount: verification.amount,
+    gramBalance: outcome?.gramBalance,
+    deposit: publicDepositRecord(outcome.deposit),
+    message: 'Deposit در TON Mainnet تأیید شد و موجودی GRAM افزایش یافت.'
+  });
+});
+
 /**
  * GET /api/points/history — تاریخچه‌ی شخصی کاربر: هر رویدادی که پوینت یا
  * GRAM او را تغییر داده (تسک، ورود روزانه، گردونه، پاداش رفرال، تبدیل، برداشت...).
@@ -461,12 +726,41 @@ router.get('/history', auth, async (req, res) => {
     filter.createdAt = { $lt: before };
   }
 
-  const items = await PointsLedger.find(filter).sort({ createdAt: -1 }).limit(limit);
+  const [ledgerItems, depositItems] = await Promise.all([
+    PointsLedger.find(filter).sort({ createdAt: -1 }).limit(limit + 1).lean(),
+    Deposit.find({
+      user: req.dbUser._id,
+      status: { $in: ['pending', 'rejected'] },
+      ...(filter.createdAt ? { createdAt: filter.createdAt } : {})
+    }).sort({ createdAt: -1 }).limit(limit + 1)
+      .select('amount submittedTxHash txHash status createdAt verifiedAt creditedAt')
+      .lean()
+  ]);
+  const history = ledgerItems.map(item => item.type === 'deposit' ? { ...item, status: 'confirmed' } : item);
+  for (const item of depositItems) {
+    history.push({
+      _id: item._id,
+      type: 'deposit',
+      currency: 'gram',
+      amount: item.amount,
+      transactionId: item.txHash || item.submittedTxHash || '',
+      status: item.status,
+      description: '',
+      createdAt: item.createdAt,
+      verifiedAt: item.verifiedAt,
+      creditedAt: item.creditedAt
+    });
+  }
+  history.sort((a, b) => {
+    const timeDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    return timeDiff || String(b._id).localeCompare(String(a._id));
+  });
+  const page = history.slice(0, limit);
 
   res.json({
     success: true,
-    history: items,
-    hasMore: items.length === limit
+    history: page,
+    hasMore: history.length > limit || ledgerItems.length > limit || depositItems.length > limit
   });
 });
 

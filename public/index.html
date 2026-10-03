@@ -244,17 +244,18 @@
     <div id="depositPanel" style="display:none;text-align:start">
       <div class="tbPill tbPillGreen" style="margin:0 auto 12px;display:table" data-i18n="deposit_network_ton_mainnet">TON Mainnet</div>
       <p style="font-size:13px;color:var(--danger);font-weight:700" data-i18n="deposit_mainnet_warning">فقط ارز بومی GRAM روی TON Mainnet ارسال کنید؛ Jetton پذیرفته نمی‌شود.</p>
-      <label for="depositWalletAddress" data-i18n="deposit_address_label">آدرس دریافت</label>
-      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center">
+      <label for="depositWalletAddress" data-i18n="deposit_address_label">آدرس دریافت GRAM</label>
+      <div class="depositCopyRow">
         <input id="depositWalletAddress" type="text" readonly dir="ltr" style="margin:0;min-width:0;font-size:12px">
-        <button type="button" class="secondaryBtn" onclick="copyAddress(document.getElementById('depositWalletAddress').value,this)" data-i18n="deposit_copy">کپی</button>
+        <button type="button" class="secondaryBtn" data-copy-target="depositWalletAddress" data-i18n="deposit_copy">کپی</button>
       </div>
       <p id="depositMinimumText" class="small" style="margin:8px 0 12px"></p>
-      <label for="depositReference" data-i18n="deposit_reference_label">شناسه یکتای Deposit</label>
-      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center">
-        <input id="depositReference" type="text" readonly dir="ltr" style="margin:0;min-width:0;font-size:12px">
-        <button type="button" class="secondaryBtn" onclick="copyAddress(document.getElementById('depositReference').value,this)" data-i18n="deposit_copy">کپی</button>
+      <div class="depositMemoLabel" data-i18n="deposit_reference_label">Memo Code</div>
+      <div class="depositCopyRow depositMemoRow">
+        <code id="depositReference" class="depositMemoCode" dir="ltr"></code>
+        <button type="button" class="secondaryBtn" data-copy-target="depositReference" data-i18n="deposit_copy">کپی</button>
       </div>
+      <p class="small depositMemoNotice" data-i18n="deposit_memo_not_address">این Memo Code آدرس کیف‌پول نیست؛ آن را به‌عنوان مقصد وارد نکنید.</p>
       <p class="small" style="margin:8px 0 12px" data-i18n="deposit_reference_warning">این Reference را دقیقاً در comment تراکنش Native GRAM وارد کنید تا واریز به حساب شما منتسب شود. بدون comment صحیح، سیستم نمی‌تواند خودکار واریز را به حساب شما نسبت دهد.</p>
       <label for="depositTxHash" data-i18n="deposit_tx_hash_label">Transaction ID / Tx Hash</label>
       <input id="depositTxHash" type="text" maxlength="66" autocomplete="off" spellcheck="false" dir="ltr" placeholder="64 hex characters">

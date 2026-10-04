@@ -389,7 +389,7 @@ function updateNavigation() {
   });
 }
 async function navigate(tab) {
-  const validTabs = ["home", "tasks", "daily", "wallet", "profile"];
+  const validTabs = ["home", "tasks", "daily", "spin", "vip", "wallet", "profile"];
   if (!validTabs.includes(tab)) tab = "home";
   clearInterval(countdownInterval);
   state.activeTab = tab;
@@ -1604,77 +1604,33 @@ window.doCheckIn = doCheckIn;
 function renderDaily() {
   const content = $("#content");
   const streakDays = Math.min(state.streak, 7) || 0;
-
   const dayCells = Array.from({ length: 7 }, (_, index) => {
     const dayNumber = index + 1;
     const isFilled = dayNumber <= streakDays;
     const isToday = state.canCheckIn && dayNumber === streakDays + 1;
-    return `
-      <div class="dayCell ${isFilled ? "filled" : ""} ${isToday ? "today" : ""}">
-        <span class="dayNum">${isFilled ? "✓" : dayNumber}</span>
-        <span>${t("day_label", { n: dayNumber })}</span>
-      </div>`;
+    return `<div class="dayCell ${isFilled ? "filled" : ""} ${isToday ? "today" : ""}"><span class="dayNum">${isFilled ? "✓" : dayNumber}</span><span>${t("day_label", { n: dayNumber })}</span></div>`;
   }).join("");
-
   content.innerHTML = `
     <div class="sectionHeader"><h2 class="sectionTitle">${t("daily_title")}</h2></div>
-
-    <div class="card" style="text-align:center">
-      <div class="cardHeader" style="justify-content:center">
-        <div class="cardTitle">${t("spin_title")}</div>
-      </div>
-      <div class="wheelOuter">
-        <div class="wheelRingDots">${buildWheelRingDots()}</div>
-        <div class="wheelPointer">▼</div>
-        <div class="wheelDisc" id="wheelDisc" style="background:${buildWheelGradient()}">
-          ${buildWheelLabels()}
-        </div>
-        <div class="wheelHub"><span>✦</span></div>
-      </div>
-      <p style="font-size:11px;margin:14px 0 4px">${t("spin_chances_label")}: <b id="spinChancesValue">${formatPoints(state.spinChances)}</b></p>
-      <button id="spinBtn" class="primaryBtn wheelSpinBtn" type="button" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">
-        🎡 ${t("spin_button")}
-      </button>
-      <button id="paidSpinBtn" class="secondaryBtn wheelPaidBtn" type="button" ${state.points < state.spinCostPoints ? "disabled" : ""} onclick="doSpin(true)">
-        🪙 ${t("spin_paid_button", { n: formatPoints(state.spinCostPoints) })}
-      </button>
-      <p class="wheelPaidHint">${t("spin_paid_hint", { n: formatPoints(state.spinCostPoints) })}</p>
-    </div>
-
-    <div class="streakBox">
-      <div class="streakFire">🔥</div>
-      <div>
-        <div class="streakValue">${formatPoints(state.streak)}</div>
-        <div class="streakLabel">${t("streak_label")}</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="cardHeader">
-        <div class="cardTitle">${t("daily_calendar_title")}</div>
-      </div>
-      <div class="dailyGrid">${dayCells}</div>
-      <button
-        id="checkinBtn"
-        class="primaryBtn"
-        type="button"
-        ${state.canCheckIn ? "" : "disabled"}
-        onclick="doCheckIn()"
-      >
-        ${state.canCheckIn ? t("checkin_button") : t("checkin_done_button")}
-      </button>
-      ${!state.canCheckIn ? `
-        <div style="text-align:center;margin-top:10px">
-          <div class="small" style="color:var(--text-muted);font-size:10px">${t("reset_countdown_label")}</div>
-          <div id="resetCountdown" style="font-size:20px;font-weight:900;margin-top:4px;letter-spacing:1px">00:00:00</div>
-        </div>` : ""
-      }
-    </div>
-  `;
-
+    <div class="streakBox"><div class="streakFire">🔥</div><div><div class="streakValue">${formatPoints(state.streak)}</div><div class="streakLabel">${t("streak_label")}</div></div></div>
+    <div class="card"><div class="cardHeader"><div class="cardTitle">${t("daily_calendar_title")}</div></div><div class="dailyGrid">${dayCells}</div>
+      <button id="checkinBtn" class="primaryBtn" type="button" ${state.canCheckIn ? "" : "disabled"} onclick="doCheckIn()">${state.canCheckIn ? t("checkin_button") : t("checkin_done_button")}</button>
+      ${!state.canCheckIn ? `<div style="text-align:center;margin-top:10px"><div class="small" style="color:var(--text-muted);font-size:10px">${t("reset_countdown_label")}</div><div id="resetCountdown" style="font-size:20px;font-weight:900;margin-top:4px;letter-spacing:1px">00:00:00</div></div>` : ""}
+    </div>`;
   startResetCountdown();
 }
-
+function renderSpin() {
+  const content = $("#content");
+  content.innerHTML = `
+    <div class="sectionHeader"><h2 class="sectionTitle">${t("spin_title")}</h2></div>
+    <div class="card" style="text-align:center"><div class="cardHeader" style="justify-content:center"><div class="cardTitle">${t("spin_title")}</div></div>
+      <div class="wheelOuter"><div class="wheelRingDots">${buildWheelRingDots()}</div><div class="wheelPointer">▼</div><div class="wheelDisc" id="wheelDisc" style="background:${buildWheelGradient()}">${buildWheelLabels()}</div><div class="wheelHub"><span>✦</span></div></div>
+      <p style="font-size:11px;margin:14px 0 4px">${t("spin_chances_label")}: <b id="spinChancesValue">${formatPoints(state.spinChances)}</b></p>
+      <button id="spinBtn" class="primaryBtn wheelSpinBtn" type="button" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">🎡 ${t("spin_button")}</button>
+      <button id="paidSpinBtn" class="secondaryBtn wheelPaidBtn" type="button" ${state.points < state.spinCostPoints ? "disabled" : ""} onclick="doSpin(true)">🪙 ${t("spin_paid_button", { n: formatPoints(state.spinCostPoints) })}</button>
+      <p class="wheelPaidHint">${t("spin_paid_hint", { n: formatPoints(state.spinCostPoints) })}</p>
+    </div>`;
+}
 /* ================= WALLET ================= */
 function showWithdraw() {
   if (state.gramBalance < state.minWithdrawGram) {
@@ -2986,7 +2942,7 @@ function stopVipCountdown() {
 }
 
 async function tickVipCountdowns() {
-  if (state.activeTab !== "profile" || profileView !== "vip") return;
+  if ((state.activeTab !== "profile" && state.activeTab !== "vip") || (state.activeTab === "profile" && profileView !== "vip")) return;
   let shouldRefresh = false;
   document.querySelectorAll("[data-vip-countdown]").forEach(element => {
     const target = Date.parse(element.dataset.vipCountdown || "");
@@ -3003,7 +2959,7 @@ async function tickVipCountdowns() {
   vipCountdownRefreshPending = true;
   const loaded = await loadVipPlans();
   vipCountdownRefreshPending = false;
-  if (loaded && state.activeTab === "profile" && profileView === "vip") {
+  if (loaded && ((state.activeTab === "profile" && profileView === "vip") || state.activeTab === "vip")) {
     const content = $("#content");
     if (content) content.innerHTML = renderProfileVip();
     startVipCountdown();
@@ -3012,7 +2968,7 @@ async function tickVipCountdowns() {
 
 function startVipCountdown() {
   stopVipCountdown();
-  if (state.activeTab !== "profile" || profileView !== "vip") return;
+  if ((state.activeTab !== "profile" && state.activeTab !== "vip") || (state.activeTab === "profile" && profileView !== "vip")) return;
   void tickVipCountdowns();
   vipCountdownTimer = setInterval(tickVipCountdowns, 1000);
 }
@@ -3028,12 +2984,12 @@ function renderProfileVip() {
     return `
       <div class="card" style="margin:10px 0">
         <div class="cardHeader"><div class="cardTitle">${t("vip_plan_title", { n: formatPoints(plan.planNumber) })}</div><span class="badge ${available ? "success" : "info"}">${t(statusKey)}</span></div>
-        ${plan.comingSoon ? "" : `
+        ${`
           <div class="cardSubtitle">${t("vip_price", { n: formatPoints(plan.pricePoints) })}</div>
           <div class="cardSubtitle">${t("vip_rate", { n: formatNumber(plan.monthlyRewardPercent, 2) })}</div>
           <div class="cardSubtitle">${t("vip_duration", { n: formatPoints(plan.durationDays) })}</div>
-          <div class="cardSubtitle">${t("vip_total_reward", { n: formatPoints(plan.totalRewardPoints) })}</div>
-          <div class="cardSubtitle">${t("vip_daily_average", { n: formatPoints(plan.dailyRewardAveragePoints) })}</div>`}
+          <div class="cardSubtitle">${t("vip_total_reward", { n: formatPoints(plan.totalRewardPoints || (Number(plan.pricePoints) * Number(plan.monthlyRewardPercent) / 100)) })}</div>
+          <div class="cardSubtitle">${t("vip_daily_average", { n: formatPoints(plan.dailyRewardAveragePoints || (Number(plan.pricePoints) * Number(plan.monthlyRewardPercent) / 100 / Number(plan.durationDays))) })}</div>`}
         <button type="button" class="${available ? "primary" : "secondary"}" ${available && canAfford && !vipPurchasingPlanNumbers.has(Number(plan.planNumber)) ? "" : "disabled"} onclick="purchaseVipPlan(${Number(plan.planNumber)})">${vipPurchasingPlanNumbers.has(Number(plan.planNumber)) ? t("vip_buying") : buttonLabel}</button>
         ${available && !canAfford ? `<div class="cardSubtitle">${t("vip_balance", { n: formatPoints(state.points) })}</div>` : ""}
       </div>`;
@@ -3071,7 +3027,7 @@ function renderProfileVip() {
 
   return `
     <div class="sectionHeader">
-      <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
+      <button class="sectionMore" type="button" onclick="${state.activeTab === "vip" ? "navigate('home')" : "setProfileView('menu')"}">${t("referral_back")}</button>
       <h2 class="sectionTitle">${t("vip_title")}</h2><span></span>
     </div>
     <div class="card"><div class="cardSubtitle">${t("vip_intro")}</div><div class="cardSubtitle" style="margin-top:8px">${t("vip_balance", { n: formatPoints(state.points) })}</div></div>
@@ -3084,7 +3040,7 @@ function renderProfileVip() {
 function retryVipPlans() {
   state.vipDataLoaded = false;
   state.vipError = "";
-  void renderProfile();
+  void (state.activeTab === "vip" ? renderVipTab() : renderProfile());
 }
 window.retryVipPlans = retryVipPlans;
 
@@ -3101,7 +3057,7 @@ async function purchaseVipPlan(planNumber) {
   if (vipPurchasingPlanNumbers.has(Number(plan.planNumber))) return;
   if (Number(state.points) < Number(plan.pricePoints)) return toast(t("vip_balance", { n: formatPoints(state.points) }), "error");
   vipPurchasingPlanNumbers.add(Number(plan.planNumber));
-  if (state.activeTab === "profile" && profileView === "vip") {
+  if ((state.activeTab === "profile" && profileView === "vip") || state.activeTab === "vip") {
     const content = $("#content");
     if (content) content.innerHTML = renderProfileVip();
   }
@@ -3126,7 +3082,7 @@ async function purchaseVipPlan(planNumber) {
     toast(translateServerMessage(error.code, error.message), "error");
   } finally {
     vipPurchasingPlanNumbers.delete(Number(plan.planNumber));
-    if (state.activeTab === "profile" && profileView === "vip") await renderProfile();
+    if ((state.activeTab === "profile" && profileView === "vip") || state.activeTab === "vip") await renderProfile();
   }
 }
 window.purchaseVipPlan = purchaseVipPlan;
@@ -3135,7 +3091,7 @@ async function claimVipReward(subscriptionId) {
   if (!subscriptionId || vipClaimingIds.has(subscriptionId)) return;
   vipClaimingIds.add(subscriptionId);
   const scope = `vip_claim_${subscriptionId}`;
-  if (state.activeTab === "profile" && profileView === "vip") {
+  if ((state.activeTab === "profile" && profileView === "vip") || state.activeTab === "vip") {
     const content = $("#content");
     if (content) content.innerHTML = renderProfileVip();
   }
@@ -3150,17 +3106,17 @@ async function claimVipReward(subscriptionId) {
     updateHeader();
     state.vipDataLoaded = false;
     await loadVipPlans();
-    if (state.activeTab === "profile" && profileView === "vip") await renderProfile();
+    if ((state.activeTab === "profile" && profileView === "vip") || state.activeTab === "vip") await renderProfile();
     toast(t("vip_claim_success", { n: formatPoints(result.rewardPoints) }), "success");
   } catch (error) {
     clearDefinitiveIdempotencyFailure(scope, error);
     toast(translateServerMessage(error.code, error.message), "error");
     state.vipDataLoaded = false;
     await loadVipPlans();
-    if (state.activeTab === "profile" && profileView === "vip") await renderProfile();
+    if ((state.activeTab === "profile" && profileView === "vip") || state.activeTab === "vip") await renderProfile();
   } finally {
     vipClaimingIds.delete(subscriptionId);
-    if (state.activeTab === "profile" && profileView === "vip") startVipCountdown();
+    if ((state.activeTab === "profile" && profileView === "vip") || state.activeTab === "vip") startVipCountdown();
   }
 }
 window.claimVipReward = claimVipReward;
@@ -3208,6 +3164,18 @@ async function renderProfile() {
   }
 }
 
+async function renderVipTab() {
+  profileView = "vip";
+  if (!state.vipDataLoaded && !state.vipLoading) {
+    $("#content").innerHTML = `<div class="loading" style="height:300px"></div>`;
+    await loadVipPlans();
+  }
+  $("#content").innerHTML = state.vipError
+    ? `<div class="card"><div class="emptyDesc">${escapeHTML(state.vipError)}</div><button type="button" class="secondary" onclick="retryVipPlans()">${t("vip_retry")}</button></div>`
+    : renderProfileVip();
+  startVipCountdown();
+}
+
 /* ================= TAB DISPATCH ================= */
 async function renderCurrentTab() {
   showLoading();
@@ -3223,6 +3191,12 @@ async function renderCurrentTab() {
     } else if (state.activeTab === "daily") {
       await loadUserData();
       renderDaily();
+    } else if (state.activeTab === "spin") {
+      await loadUserData();
+      renderSpin();
+    } else if (state.activeTab === "vip") {
+      await loadUserData();
+      await renderVipTab();
     } else if (state.activeTab === "wallet") {
       await loadUserData();
       renderWallet();

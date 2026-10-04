@@ -6,6 +6,10 @@ const AdminSession = require('../models/AdminSession');
 const { createAdminSession, getAdminSession, revokeAdminSession } = require('../utils/adminSession');
 const { createAdminSessionStore } = require('../utils/telegramAdmin');
 
+const tokenHashIndexes = AdminSession.schema.indexes().filter(([keys]) => keys.tokenHash === 1);
+assert.strictEqual(tokenHashIndexes.length, 1, 'tokenHash has one index declaration only');
+assert.strictEqual(tokenHashIndexes[0][1].unique, true, 'tokenHash remains unique');
+
 (async () => {
   const ipHashA = hashNetworkIdentifier('203.0.113.10');
   assert.strictEqual(ipHashA, hashNetworkIdentifier('203.0.113.10'));

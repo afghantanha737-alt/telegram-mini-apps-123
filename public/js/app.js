@@ -3041,7 +3041,7 @@ function renderProfileVip() {
     </div>
     <div class="vipHero vipHeroReference">
       <div class="vipHeroBrand"><img src="img/logo.svg" alt="Gramup"><div><strong>Gram<span>up</span></strong><small>${state.user?.id ? `ID ${escapeHTML(state.user.id)}` : t("vip_title")}</small></div></div>
-      <div class="vipHeroRows"><div><span>موجودی فعلی</span><b>${formatPoints(state.points)} Points</b></div><div><span>پاداش روزانه VIP</span><b>${formatPoints(subscriptions.reduce((sum, item) => sum + (Number(item.nextRewardPoints) || 0), 0))} Points</b></div></div>
+      <div class="vipHeroRows"><div><span>${t("vip_current_balance")}</span><b>${formatPoints(state.points)} Points</b></div><div><span>${t("vip_daily_reward_summary")}</span><b>${formatPoints(subscriptions.reduce((sum, item) => sum + (Number(item.nextRewardPoints) || 0), 0))} Points</b></div></div>
       <button type="button" class="vipHeroButton" onclick="document.querySelector('.vipPlanCard')?.scrollIntoView({behavior:'smooth',block:'start'})">${t("vip_buy")}</button>
     </div>
     ${subscriptions.length ? `<h3 class="sectionTitle" style="margin:16px 4px 8px">${t("vip_active_title")}</h3>${subscriptionCards}` : `<div class="card"><div class="emptyDesc">${t("vip_no_subscriptions")}</div></div>`}

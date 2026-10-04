@@ -21,6 +21,7 @@ const PointsLedger = require('../models/PointsLedger');
 const BalanceAudit = require('../models/BalanceAudit');
 const ReferralRelationship = require('../models/ReferralRelationship');
 const WeeklyLeaderboardAward = require('../models/WeeklyLeaderboardAward');
+const VipPlan = require('../models/VipPlan');
 const { isValidAdminKey } = require('../utils/adminKey');
 const RequiredChannel = require('../models/RequiredChannel');
 const { membership, validateChannelRef, normalizeChannelInput } = require('../utils/membership');
@@ -38,6 +39,7 @@ const { transitionWithdrawalWithRefund } = require('../utils/withdrawalFinance')
 const { normalizeReferralRates, DEFAULT_REFERRAL_LEVEL_RATES, DEFAULT_REFERRAL_INITIAL_REWARD_POINTS } = require('../utils/referralCore');
 const { validateLatestPostConfig } = require('../utils/latestPostEngagement');
 const { getTelegramWebhookMetrics } = require('../utils/telegramWebhookMetrics');
+const { calculateTotalRewardCents } = require('../utils/vipRewards');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
@@ -1288,7 +1290,7 @@ router.get('/users/:id/account', async (req, res) => {
   const user = await User.findById(req.params.id).select('-__v -signupIpHash -referralRiskFlags').lean();
   if (!user) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
   const [earned, gramTotal, withdrawals, referralCount, history, audits] = await Promise.all([
-    PointsLedger.aggregate([{ $match: { user: user._id, currency: 'points', amount: { $gt: 0 }, type: { $nin: ['exchange_in', 'admin_adjust'] } } }, { $group: { _id: null, total: { $sum: '$amount' } } }]),
+    PointsLedger.aggregate([{ $match: { user: user._id, currency: 'points', amount: { $gt: 0 }, type: { $nin: ['exchange_in', 'admin_adjust', 'vip_principal_return'] } } }, { $group: { _id: null, total: { $sum: '$amount' } } }]),
     PointsLedger.aggregate([{ $match: { user: user._id, currency: 'gram', amount: { $gt: 0 } } }, { $group: { _id: null, total: { $sum: '$amount' } } }]),
     Withdrawal.aggregate([{ $match: { user: user._id, status: 'paid' } }, { $group: { _id: null, total: { $sum: '$cryptoAmount' } } }]),
     User.countDocuments({ referredBy: user._id }),
@@ -1633,6 +1635,61 @@ router.post('/required-channels/:id/test', async (req, res) => {
 });
 
 /* -------------------- SETTINGS -------------------- */
+router.get('/vip/plans', async (req, res) => {
+  const plans = await VipPlan.find({}).sort({ planNumber: 1 }).lean();
+  res.json({ success: true, plans });
+});
+
+router.put('/vip/plans', async (req, res) => {
+  const input = req.body && req.body.plans;
+  if (!Array.isArray(input) || input.length !== 10) {
+    return res.status(400).json({ success: false, code: 'VIP_CATALOG_INVALID', message: 'باید تنظیمات هر ۱۰ پلن VIP ارسال شود.' });
+  }
+
+  const seen = new Set();
+  const plans = [];
+  for (const item of input) {
+    const planNumber = Number(item?.planNumber);
+    const pricePoints = Number(item?.pricePoints);
+    const monthlyRewardPercent = Number(item?.monthlyRewardPercent);
+    const durationDays = Number(item?.durationDays);
+    const enabled = item?.enabled === true;
+    const comingSoon = item?.comingSoon === true;
+    if (!Number.isInteger(planNumber) || planNumber < 1 || planNumber > 10 || seen.has(planNumber)
+      || !Number.isInteger(pricePoints) || pricePoints < 0 || pricePoints > 100000000
+      || !Number.isFinite(monthlyRewardPercent) || monthlyRewardPercent < 0 || monthlyRewardPercent > 100
+      || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > 3650
+      || (enabled && comingSoon)
+      || (enabled && (pricePoints < 1 || monthlyRewardPercent <= 0))) {
+      return res.status(400).json({ success: false, code: 'VIP_PLAN_INVALID', message: `مقادیر پلن شماره ${planNumber || '?'} معتبر نیست.` });
+    }
+    if (enabled) {
+      const totalRewardCents = calculateTotalRewardCents(pricePoints, monthlyRewardPercent, durationDays);
+      if (totalRewardCents == null || totalRewardCents < durationDays) {
+        return res.status(400).json({ success: false, code: 'VIP_REWARD_TOO_SMALL', message: `پاداش پلن ${planNumber} باید حداقل ۰٫۰۱ پوینت برای هر دریافت روزانه داشته باشد.` });
+      }
+    }
+    seen.add(planNumber);
+    plans.push({ planNumber, pricePoints, monthlyRewardPercent, durationDays, enabled, comingSoon });
+  }
+
+  await VipPlan.bulkWrite(plans.map(plan => ({
+    updateOne: {
+      filter: { planNumber: plan.planNumber },
+      update: { $set: plan },
+      upsert: true
+    }
+  })), { ordered: true });
+  const savedPlans = await VipPlan.find({}).sort({ planNumber: 1 }).lean();
+  res.json({ success: true, plans: savedPlans });
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'vip_plan_catalog_update',
+    targetType: 'vip_plan_catalog',
+    details: plans.map(plan => `${plan.planNumber}:${plan.enabled ? 'active' : plan.comingSoon ? 'soon' : 'off'}`).join(', ')
+  });
+});
+
 router.get('/settings', async (req, res) => {
   const settings = await Settings.getGlobal();
   res.json({

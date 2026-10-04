@@ -37,9 +37,21 @@ const settingsSchema = new mongoose.Schema(
 );
 
 settingsSchema.statics.getGlobal = async function getGlobal() {
-  let doc = await this.findOne({ key: 'global' });
-  if (!doc) doc = await this.create({ key: 'global' });
-  return doc;
+  // The unique key plus an atomic upsert prevents parallel first requests from
+  // racing into duplicate documents; if concurrent upserts still collide, read
+  // the winner instead of failing an otherwise safe request.
+  try {
+    return await this.findOneAndUpdate(
+      { key: 'global' },
+      { $setOnInsert: { key: 'global' } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+    const existing = await this.findOne({ key: 'global' });
+    if (existing) return existing;
+    throw error;
+  }
 };
 
 module.exports = mongoose.model('Settings', settingsSchema);

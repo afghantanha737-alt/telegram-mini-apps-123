@@ -30,7 +30,7 @@ vipPlanSchema.statics.ensureDefaults = async function ensureDefaults() {
   await this.bulkWrite(DEFAULT_VIP_PLANS.map(plan => ({
     updateOne: {
       filter: { planNumber: plan.planNumber },
-      update: { $set: plan },
+      update: { $setOnInsert: plan },
       upsert: true
     }
   })), { ordered: true });

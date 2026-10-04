@@ -4,8 +4,9 @@ const Withdrawal = require('../models/Withdrawal');
 const User = require('../models/User');
 const { recordLedgerRequired } = require('./ledger');
 const { withMongoTransaction } = require('./mongoTransaction');
+const { recordAdminLogRequired } = require('./adminLog');
 
-async function transitionWithdrawalWithRefund({ withdrawalId, targetStatus, reason = '', expectedStatus, allowedStatuses }) {
+async function transitionWithdrawalWithRefund({ withdrawalId, targetStatus, reason = '', expectedStatus, allowedStatuses, audit }) {
   return withMongoTransaction(async session => {
     const current = await Withdrawal.findById(withdrawalId).session(session);
     if (!current) {
@@ -61,6 +62,8 @@ async function transitionWithdrawalWithRefund({ withdrawalId, targetStatus, reas
       sourceId: `withdrawal-refund:${withdrawal._id}`,
       session
     });
+
+    if (audit) await recordAdminLogRequired({ ...audit, targetId: withdrawal._id }, session);
 
     return { withdrawal, refunded };
   });

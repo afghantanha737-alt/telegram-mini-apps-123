@@ -52,7 +52,8 @@ function createMiniAppReferralLink(botUsername, telegramId) {
   const bot = String(botUsername || '').trim().replace(/^@/, '');
   const id = String(telegramId || '').trim();
   if (!/^[A-Za-z0-9_]{5,32}$/.test(bot) || !/^\d{1,20}$/.test(id)) return '';
-  return `https://t.me/${bot}?startapp=${encodeURIComponent(id)}`;
+  const identifier = createSignedReferralIdentifier(id) || id;
+  return `https://t.me/${bot}?startapp=${encodeURIComponent(identifier)}`;
 }
 
 function referralIdentifierQuery(value, secret = process.env.REFERRAL_LINK_SECRET || process.env.BOT_TOKEN || '') {

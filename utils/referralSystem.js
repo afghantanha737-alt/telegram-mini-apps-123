@@ -209,8 +209,12 @@ async function distributeReferralCommissions(earningEntry, session) {
   if (!earningEntry.sourceId) throw new Error('Qualifying original earnings must have a stable sourceId for referral idempotency.');
 
   const { rates } = await getReferralSettings(session);
-  const origin = await sessionQuery(User.findById(earningEntry.user).select('_id referredBy isBanned accountReviewStatus referralRiskBlocked referralRiskScore'), session);
+  const origin = await sessionQuery(User.findById(earningEntry.user).select('_id referredBy isBanned accountReviewStatus referralRiskBlocked referralRiskScore createdAt'), session);
   if (!origin || !origin.referredBy) return [];
+  const TaskCompletion = require('../models/TaskCompletion');
+  const completions = await sessionQuery(TaskCompletion.find({ user: origin._id, status: 'approved' }).select('status createdAt'), session);
+  const { evaluateReferralEligibility } = require('./referralEligibility');
+  if (!evaluateReferralEligibility(origin, completions, new Date()).eligible) return [];
 
   const paid = [];
   const pathUsers = [origin];

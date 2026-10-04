@@ -11,7 +11,7 @@ const { evaluateReferralEligibility } = require('./referralEligibility');
  */
 async function runReferralSweep() {
   const invitedUsers = await User.find({ referredBy: { $ne: null } })
-    .select('_id referredBy createdAt referralRiskScore referralRiskBlocked referralEligibilityStatus referralEligibleAt referralInitialRewardEligible')
+    .select('_id referredBy createdAt updatedAt referralRiskScore referralRiskBlocked referralEligibilityStatus referralEligibleAt referralInitialRewardEligible')
     .lean();
   const ids = invitedUsers.map(user => user._id);
   const activity = ids.length === 0 ? [] : await TaskCompletion.aggregate([
@@ -38,7 +38,13 @@ async function runReferralSweep() {
     const eligibility = evaluateReferralEligibility(user, completions);
     inviteeOps.push({
       updateOne: {
-        filter: { _id: user._id },
+        filter: {
+          _id: user._id,
+          updatedAt: user.updatedAt,
+          referralRiskScore: user.referralRiskScore || 0,
+          referralRiskBlocked: Boolean(user.referralRiskBlocked),
+          referralEligibilityStatus: user.referralEligibilityStatus || null
+        },
         update: {
           $set: {
             referralEligibilityStatus: eligibility.status,
@@ -78,7 +84,7 @@ async function runReferralSweep() {
     { referredBy: { $ne: null } },
     { invitedCount: { $gt: 0 } },
     { activeInvitedCount: { $gt: 0 } }
-  ] }).select('_id invitedCount activeInvitedCount activeReferralIds').lean();
+  ] }).select('_id updatedAt invitedCount activeInvitedCount activeReferralIds').lean();
   const referrerOps = [];
 
   for (const referrer of referrers) {
@@ -93,7 +99,13 @@ async function runReferralSweep() {
     if (changed) {
       referrerOps.push({
         updateOne: {
-          filter: { _id: referrer._id },
+          filter: {
+            _id: referrer._id,
+            updatedAt: referrer.updatedAt,
+            invitedCount: referrer.invitedCount,
+            activeInvitedCount: referrer.activeInvitedCount,
+            activeReferralIds: referrer.activeReferralIds || []
+          },
           update: {
             $set: {
               invitedCount: actualInvitedCount,

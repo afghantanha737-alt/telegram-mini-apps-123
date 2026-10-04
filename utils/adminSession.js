@@ -1,37 +1,35 @@
 'use strict';
 const crypto = require('crypto');
-
-const sessions = new Map();
+const AdminSession = require('../models/AdminSession');
 const SESSION_TTL_MS = 30 * 60 * 1000;
+const hashToken = token => crypto.createHash('sha256').update(String(token)).digest('hex');
 
-function createAdminSession(actor = 'ادمین') {
+async function createAdminSession(actor = 'ادمین') {
   const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
   const adminId = `admin-session-${crypto.randomUUID()}`;
-  sessions.set(token, { adminId, actor: String(actor || 'ادمین').trim() || 'ادمین', expiresAt: Date.now() + SESSION_TTL_MS });
-  return { token, expiresAt: new Date(Date.now() + SESSION_TTL_MS) };
+  await AdminSession.create({ tokenHash: hashToken(token), adminId, actor: String(actor || 'ادمین').trim() || 'ادمین', expiresAt });
+  return { token, expiresAt };
 }
 
-function getAdminSession(token) {
+async function getAdminSession(token) {
   if (!token || typeof token !== 'string') return null;
-  const session = sessions.get(token);
-  if (!session) return null;
-  if (session.expiresAt <= Date.now()) {
-    sessions.delete(token);
-    return null;
-  }
-  session.expiresAt = Date.now() + SESSION_TTL_MS;
-  return session;
+  const now = new Date();
+  const session = await AdminSession.findOneAndUpdate(
+    { tokenHash: hashToken(token), expiresAt: { $gt: now } },
+    { $set: { expiresAt: new Date(now.getTime() + SESSION_TTL_MS) } },
+    { new: true }
+  ).select('adminId actor expiresAt').lean();
+  return session || null;
 }
 
-function revokeAdminSession(token) {
-  if (typeof token === 'string') sessions.delete(token);
+async function revokeAdminSession(token) {
+  if (typeof token === 'string' && token) await AdminSession.deleteOne({ tokenHash: hashToken(token) });
 }
 
-function cleanupAdminSessions() {
-  const now = Date.now();
-  for (const [token, session] of sessions.entries()) {
-    if (session.expiresAt <= now) sessions.delete(token);
-  }
+async function cleanupAdminSessions() {
+  const result = await AdminSession.deleteMany({ expiresAt: { $lte: new Date() } });
+  return result.deletedCount || 0;
 }
 
 module.exports = { createAdminSession, getAdminSession, revokeAdminSession, cleanupAdminSessions, SESSION_TTL_MS };

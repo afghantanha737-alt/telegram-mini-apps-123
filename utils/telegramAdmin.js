@@ -24,47 +24,42 @@ function isAdminTelegramId(telegramId, raw = process.env.ADMIN_TELEGRAM_IDS) {
 const BROADCAST_STATE_TTL_MS = 10 * 60 * 1000;
 
 /**
- * وضعیت موقت گفت‌وگوی ادمین با ربات (کدام ادمین منتظر چه چیزی است).
- * عمداً در حافظه نگه داشته می‌شود، نه دیتابیس: این فقط یک جریان چندمرحله‌ای کوتاه‌عمر
- * («پیام رو بفرست» → «تایید کن») است، نه داده‌ای که باید بین ری‌استارت سرور بماند؛
- * اگر سرور ری‌استارت شود، ادمین فقط دوباره از «ارسال پیام همگانی» شروع می‌کند.
+ * Conversation state is persisted in Mongo so every app instance sees the same workflow.
  */
-function createAdminSessionStore(now = () => Date.now()) {
-  const awaitingContent = new Map(); // telegramId -> expiresAt
-  const pendingConfirm = new Map(); // telegramId -> { fromChatId, messageId, expiresAt }
-
-  function prune(map) {
-    const t = now();
-    for (const [key, value] of map.entries()) {
-      const expiresAt = typeof value === 'number' ? value : value.expiresAt;
-      if (t > expiresAt) map.delete(key);
+function createAdminSessionStore(now = () => Date.now(), Model = require('../models/TelegramAdminConversation')) {
+  const expiry = () => new Date(now() + BROADCAST_STATE_TTL_MS);
+  async function upsertConversation(telegramId, update) {
+    const filter = { telegramId: String(telegramId) };
+    try {
+      return await Model.findOneAndUpdate(filter, update, { upsert: true, new: true, setDefaultsOnInsert: true });
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      return Model.findOneAndUpdate(filter, update, { new: true });
     }
   }
-
   return {
-    setAwaitingContent(telegramId) {
-      awaitingContent.set(String(telegramId), now() + BROADCAST_STATE_TTL_MS);
+    async setAwaitingContent(telegramId) {
+      await upsertConversation(telegramId, {
+        $set: { state: 'awaiting_content', fromChatId: null, messageId: null, expiresAt: expiry() }
+      }, { upsert: true, new: true, setDefaultsOnInsert: true });
     },
-    isAwaitingContent(telegramId) {
-      prune(awaitingContent);
-      return awaitingContent.has(String(telegramId));
+    async isAwaitingContent(telegramId) {
+      return Boolean(await Model.exists({ telegramId: String(telegramId), state: 'awaiting_content', expiresAt: { $gt: new Date(now()) } }));
     },
-    clearAwaitingContent(telegramId) {
-      awaitingContent.delete(String(telegramId));
+    async clearAwaitingContent(telegramId) {
+      await Model.deleteOne({ telegramId: String(telegramId), state: 'awaiting_content' });
     },
-    setPendingConfirm(telegramId, fromChatId, messageId) {
-      pendingConfirm.set(String(telegramId), { fromChatId, messageId, expiresAt: now() + BROADCAST_STATE_TTL_MS });
+    async setPendingConfirm(telegramId, fromChatId, messageId) {
+      await upsertConversation(telegramId, {
+        $set: { state: 'pending_confirm', fromChatId, messageId: Number(messageId), expiresAt: expiry() }
+      }, { upsert: true, new: true, setDefaultsOnInsert: true });
     },
-    takePendingConfirm(telegramId) {
-      prune(pendingConfirm);
-      const key = String(telegramId);
-      const value = pendingConfirm.get(key);
-      pendingConfirm.delete(key);
-      return value || null;
+    async takePendingConfirm(telegramId) {
+      return Model.findOneAndDelete({ telegramId: String(telegramId), state: 'pending_confirm', expiresAt: { $gt: new Date(now()) } })
+        .select('fromChatId messageId expiresAt').lean();
     },
-    hasPendingConfirm(telegramId) {
-      prune(pendingConfirm);
-      return pendingConfirm.has(String(telegramId));
+    async hasPendingConfirm(telegramId) {
+      return Boolean(await Model.exists({ telegramId: String(telegramId), state: 'pending_confirm', expiresAt: { $gt: new Date(now()) } }));
     }
   };
 }

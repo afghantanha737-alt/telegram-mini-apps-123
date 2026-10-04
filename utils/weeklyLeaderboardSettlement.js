@@ -38,11 +38,11 @@ async function getStandings(window, limit = MAX_PRIZE_RANKS) {
       }
     },
     { $group: { _id: '$user', points: { $sum: '$amount' } } },
-    { $sort: { points: -1, _id: 1 } },
-    { $limit: limit },
     { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
     { $unwind: '$user' },
-    { $match: { 'user.isBanned': false } }
+    { $match: { 'user.isBanned': false } },
+    { $sort: { points: -1, _id: 1 } },
+    { $limit: limit }
   ]);
 }
 

@@ -51,7 +51,7 @@ async function replayExisting({ userId, scope, key, requestHash }) {
   const existing = await IdempotencyOperation.findOne({ userId, scope, key }).lean();
   if (!existing) return null;
   if (existing.requestHash !== requestHash) throw keyReuseError();
-  if (existing.status !== 'completed' || !existing.responseBody) throw duplicateKeyError();
+  if (existing.status !== 'completed' || !existing.responseBody) return { processing: true };
   return { status: existing.responseStatus || 200, body: existing.responseBody, replayed: true };
 }
 
@@ -68,8 +68,12 @@ async function executeIdempotently({ userId, scope, key: rawKey, body, execute }
     throw error;
   }
   const requestHash = hashIdempotencyRequest(scope, body);
-  const previous = await replayExisting({ userId, scope, key, requestHash });
-  if (previous) return previous;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const previous = await replayExisting({ userId, scope, key, requestHash });
+    if (previous && !previous.processing) return previous;
+    if (!previous) break;
+    await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1)));
+  }
 
   try {
     const result = await withMongoTransaction(async session => {
@@ -100,8 +104,12 @@ async function executeIdempotently({ userId, scope, key: rawKey, body, execute }
     return result;
   } catch (error) {
     if (error.code === 'IDEMPOTENCY_DUPLICATE') {
-      const replay = await replayExisting({ userId, scope, key, requestHash });
-      if (replay) return replay;
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        const replay = await replayExisting({ userId, scope, key, requestHash });
+        if (replay && !replay.processing) return replay;
+        await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1)));
+      }
+      throw duplicateKeyError();
     }
     throw error;
   }

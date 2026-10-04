@@ -15,8 +15,13 @@ function verifyInitData(initData, botToken) {
   if (!initData || typeof initData !== 'string' || !botToken) return null;
 
   const params = new URLSearchParams(initData);
+  const parameterNames = [...params.keys()];
+  if (new Set(parameterNames).size !== parameterNames.length) return null;
   const hash = params.get('hash');
-  if (!hash) return null;
+  const authDateText = params.get('auth_date');
+  if (!hash || !/^[a-f0-9]{64}$/i.test(hash) || !/^\d{1,12}$/.test(authDateText || '')) return null;
+  const authDate = Number(authDateText);
+  if (!Number.isSafeInteger(authDate) || authDate <= 0) return null;
   params.delete('hash');
 
   const pairs = [];
@@ -33,13 +38,10 @@ function verifyInitData(initData, botToken) {
   const received = Buffer.from(hash, 'hex');
   if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) return null;
 
-  const authDate = Number(params.get('auth_date') || 0);
-  const maxAgeSeconds = Number(process.env.INIT_DATA_MAX_AGE || 86400);
-  if (maxAgeSeconds > 0 && authDate > 0) {
-    const nowSeconds = Math.floor(Date.now() / 1000);
-    const futureSkewSeconds = Math.min(300, Math.max(30, Number(process.env.INIT_DATA_FUTURE_SKEW || 120)));
-    if (nowSeconds - authDate > maxAgeSeconds || authDate - nowSeconds > futureSkewSeconds) return null;
-  }
+  const configuredMaxAge = Number(process.env.INIT_DATA_MAX_AGE || 86400);
+  const maxAgeSeconds = Number.isFinite(configuredMaxAge) && configuredMaxAge > 0 ? configuredMaxAge : 86400;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (nowSeconds - authDate > maxAgeSeconds || authDate > nowSeconds) return null;
 
   let user = null;
   try {
@@ -47,6 +49,7 @@ function verifyInitData(initData, botToken) {
   } catch {
     user = null;
   }
+  if (!user || typeof user !== 'object' || !Number.isSafeInteger(Number(user.id)) || Number(user.id) <= 0) return null;
 
   return {
     user,
@@ -130,7 +133,7 @@ async function getOrCreateUser(tgUser, startParam, requestIp = '') {
 function requireTelegramAuth(botToken) {
   return async function telegramAuthMiddleware(req, res, next) {
     try {
-      const initData = req.query.initData || (req.body && req.body.initData) || '';
+      const initData = req.get('X-Telegram-Init-Data') || ''; // Never place signed credentials in URLs or logs.
       const verified = verifyInitData(initData, botToken);
 
       if (!verified || !verified.user) {

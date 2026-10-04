@@ -3039,7 +3039,11 @@ function renderProfileVip() {
       <button class="sectionMore" type="button" onclick="${state.activeTab === "vip" ? "navigate('home')" : "setProfileView('menu')"}">${t("referral_back")}</button>
       <h2 class="sectionTitle">${t("vip_title")}</h2><span></span>
     </div>
-    <div class="vipHero"><div class="cardSubtitle">${t("vip_intro")}</div><div class="cardSubtitle" style="margin-top:8px">${t("vip_balance", { n: formatPoints(state.points) })}</div></div>
+    <div class="vipHero vipHeroReference">
+      <div class="vipHeroBrand"><img src="img/logo.svg" alt="Gramup"><div><strong>Gram<span>up</span></strong><small>${state.user?.id ? `ID ${escapeHTML(state.user.id)}` : t("vip_title")}</small></div></div>
+      <div class="vipHeroRows"><div><span>موجودی فعلی</span><b>${formatPoints(state.points)} Points</b></div><div><span>پاداش روزانه VIP</span><b>${formatPoints(subscriptions.reduce((sum, item) => sum + (Number(item.nextRewardPoints) || 0), 0))} Points</b></div></div>
+      <button type="button" class="vipHeroButton" onclick="document.querySelector('.vipPlanCard')?.scrollIntoView({behavior:'smooth',block:'start'})">${t("vip_buy")}</button>
+    </div>
     ${subscriptions.length ? `<h3 class="sectionTitle" style="margin:16px 4px 8px">${t("vip_active_title")}</h3>${subscriptionCards}` : `<div class="card"><div class="emptyDesc">${t("vip_no_subscriptions")}</div></div>`}
     <h3 class="sectionTitle" style="margin:18px 4px 8px">${t("vip_title")}</h3>
     ${planCards || `<div class="card"><div class="emptyDesc">${t("vip_empty_plans")}</div></div>`}

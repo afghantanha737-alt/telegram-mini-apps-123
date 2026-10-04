@@ -508,6 +508,13 @@
           <input id="setMinimumDepositGram" type="number" min="0.000000001" step="0.000000001" value="1">
           <p class="small" style="margin-bottom:0">برای روشن‌کردن، آدرس معتبر TON Mainnet و حداقل مبلغ Native GRAM لازم است. برنامه هیچ کلید یا عبارت بازیابی کیف‌پول را نگهداری نمی‌کند.</p>
         </div>
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
+          <b>💎 VIP Plans — قیمت و پاداش</b>
+          <p class="small">مبلغ خرید از موجودی Points کسر می‌شود. بازده ماهانه نسبت به قیمت پلن محاسبه و بین روزهای دوره تقسیم می‌شود؛ کاربر می‌تواند هر ۲۴ ساعت یک پاداش دریافت کند. اصل Points در پایان دوره به‌صورت خودکار برمی‌گردد. تغییر پلن فقط روی خریدهای بعدی اثر می‌گذارد.</p>
+          <div id="vipPlansAdminStatus" class="small" style="margin:8px 0"></div>
+          <div id="vipPlansAdminList"></div>
+          <button type="button" class="secondary" onclick="saveVipPlansAdmin()" style="margin-top:10px">ذخیره پلن‌های VIP</button>
+        </div>
         <button onclick="saveSettings()">ذخیره تنظیمات</button>
       </div>
     </div>
@@ -665,7 +672,7 @@ function switchTab(tab) {
   if (tab === "weekly") loadWeeklyAwards();
   if (tab === "audit") loadFinancialAudit();
   if (tab === "ops") loadOpsMetrics();
-  if (tab === "settings") loadSettings();
+  if (tab === "settings") { loadSettings(); loadVipPlansAdmin(); }
 }
 
 /* ---------- STATS (داشبورد آمار) ---------- */
@@ -1776,6 +1783,68 @@ function renderReferralRates() {
       <label style="flex:1;margin:0">Level ${index + 1} (%)</label>
       <input class="referral-rate-input" type="number" value="${value}" style="flex:2;margin:0" disabled>
     </div>`).join("");
+}
+
+async function loadVipPlansAdmin() {
+  const list = document.getElementById("vipPlansAdminList");
+  const status = document.getElementById("vipPlansAdminStatus");
+  if (!list || !status) return;
+  status.textContent = "در حال بارگذاری پلن‌ها...";
+  try {
+    const data = await api("/api/admin/vip/plans");
+    const plans = Array.isArray(data.plans) ? data.plans : [];
+    list.innerHTML = plans.map(plan => `
+      <div style="border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0;background:var(--surface)">
+        <b>پلن ${Number(plan.planNumber)}</b>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 10px">
+          <div><label>قیمت (Points)</label><input id="vipPlanPrice${Number(plan.planNumber)}" type="number" min="0" step="1" value="${Number(plan.pricePoints) || 0}"></div>
+          <div><label>بازده ماهانه (%)</label><input id="vipPlanRate${Number(plan.planNumber)}" type="number" min="0" max="100" step="0.01" value="${Number(plan.monthlyRewardPercent) || 0}"></div>
+          <div><label>مدت (روز)</label><input id="vipPlanDays${Number(plan.planNumber)}" type="number" min="1" max="3650" step="1" value="${Number(plan.durationDays) || 30}"></div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:28px"><input id="vipPlanEnabled${Number(plan.planNumber)}" type="checkbox" style="width:auto" ${plan.enabled ? "checked" : ""}> فعال برای خرید</label>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin:4px 0"><input id="vipPlanSoon${Number(plan.planNumber)}" type="checkbox" style="width:auto" ${plan.comingSoon ? "checked" : ""}> به‌زودی / فعلاً غیرقابل خرید</label>
+      </div>`).join("");
+    status.textContent = plans.length === 10 ? "تنظیمات هر ۱۰ پلن بارگذاری شد." : "Catalog باید شامل هر ۱۰ پلن باشد؛ مقادیر را ذخیره کنید تا ایجاد/تکمیل شود.";
+  } catch (error) {
+    status.textContent = `خطا در بارگذاری VIP Plans: ${error.message}`;
+    status.style.color = "var(--danger)";
+  }
+}
+
+async function saveVipPlansAdmin() {
+  const status = document.getElementById("vipPlansAdminStatus");
+  const plans = [];
+  for (let planNumber = 1; planNumber <= 10; planNumber += 1) {
+    const price = document.getElementById(`vipPlanPrice${planNumber}`);
+    const rate = document.getElementById(`vipPlanRate${planNumber}`);
+    const days = document.getElementById(`vipPlanDays${planNumber}`);
+    const enabled = document.getElementById(`vipPlanEnabled${planNumber}`);
+    const comingSoon = document.getElementById(`vipPlanSoon${planNumber}`);
+    if (!price || !rate || !days || !enabled || !comingSoon) {
+      status.textContent = "ابتدا تنظیمات همه پلن‌ها را بارگذاری کنید.";
+      status.style.color = "var(--danger)";
+      return;
+    }
+    plans.push({
+      planNumber,
+      pricePoints: Number(price.value),
+      monthlyRewardPercent: Number(rate.value),
+      durationDays: Number(days.value),
+      enabled: enabled.checked,
+      comingSoon: comingSoon.checked
+    });
+  }
+  status.textContent = "در حال ذخیره...";
+  status.style.color = "";
+  try {
+    await api("/api/admin/vip/plans", { method: "PUT", body: JSON.stringify({ plans }) });
+    status.textContent = "تنظیمات VIP Plans ذخیره شد.";
+    status.style.color = "var(--success)";
+    await loadVipPlansAdmin();
+  } catch (error) {
+    status.textContent = `ذخیره انجام نشد: ${error.message}`;
+    status.style.color = "var(--danger)";
+  }
 }
 
 async function loadSettings() {

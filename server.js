@@ -103,7 +103,7 @@ app.use('/api/admin', async (req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: '1h',
   setHeaders(res, filePath) {
-    if (path.basename(filePath) === 'index.html') {
+    if (['index.html', 'app.js'].includes(path.basename(filePath))) {
       res.setHeader('Cache-Control', 'no-store, max-age=0');
     }
   }

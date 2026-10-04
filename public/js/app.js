@@ -2971,18 +2971,26 @@ function renderProfileVip() {
     const statusKey = plan.comingSoon ? "vip_status_coming_soon" : available ? "vip_status_active" : "vip_status_inactive";
     const canAfford = Number(state.points) >= Number(plan.pricePoints);
     const buttonLabel = plan.comingSoon ? t("vip_status_coming_soon") : available ? (canAfford ? t("vip_buy") : t("vip_insufficient_points")) : t("vip_status_inactive");
+    const planNumber = Number(plan.planNumber);
+    const theme = planNumber === 1 ? "bronze" : planNumber === 2 ? "silver" : planNumber === 3 ? "gold" : "future";
     return `
-      <div class="card" style="margin:10px 0">
-        <div class="cardHeader"><div class="cardTitle">${t("vip_plan_title", { n: formatPoints(plan.planNumber) })}</div><span class="badge ${available ? "success" : "info"}">${t(statusKey)}</span></div>
+      <article class="vipPlanCard vipPlanCard--${theme}">
+        <div class="vipPlanGlow" aria-hidden="true"></div>
+        <div class="vipPlanTopline">
+          <div class="vipPlanTitleWrap"><span class="vipPlanMark" aria-hidden="true">${theme === "bronze" ? "◈" : theme === "silver" ? "✦" : theme === "gold" ? "♛" : "◇"}</span><div class="vipPlanTitle">${t("vip_plan_title", { n: formatPoints(plan.planNumber) })}</div></div>
+          <span class="badge ${available ? "success" : "info"}">${t(statusKey)}</span>
+        </div>
         ${`
-          <div class="cardSubtitle">${t("vip_price", { n: formatPoints(plan.pricePoints) })}</div>
-          <div class="cardSubtitle">${t("vip_rate", { n: formatNumber(plan.monthlyRewardPercent, 2) })}</div>
-          <div class="cardSubtitle">${t("vip_duration", { n: formatPoints(plan.durationDays) })}</div>
-          <div class="cardSubtitle">${t("vip_total_reward", { n: formatPoints(plan.totalRewardPoints || (Number(plan.pricePoints) * Number(plan.monthlyRewardPercent) / 100)) })}</div>
-          <div class="cardSubtitle">${t("vip_daily_average", { n: formatPoints(plan.dailyRewardAveragePoints || (Number(plan.pricePoints) * Number(plan.monthlyRewardPercent) / 100 / Number(plan.durationDays))) })}</div>`}
-        <button type="button" class="${available ? "primary" : "secondary"}" ${available && canAfford && !vipPurchasingPlanNumbers.has(Number(plan.planNumber)) ? "" : "disabled"} onclick="purchaseVipPlan(${Number(plan.planNumber)})">${vipPurchasingPlanNumbers.has(Number(plan.planNumber)) ? t("vip_buying") : buttonLabel}</button>
-        ${available && !canAfford ? `<div class="cardSubtitle">${t("vip_balance", { n: formatPoints(state.points) })}</div>` : ""}
-      </div>`;
+          <div class="vipPlanStats">
+            <div class="vipPlanStat"><span>${t("vip_price", { n: formatPoints(plan.pricePoints) })}</span><b>${formatPoints(plan.pricePoints)}</b></div>
+            <div class="vipPlanStat"><span>${t("vip_rate", { n: formatNumber(plan.monthlyRewardPercent, 2) })}</span><b>${formatNumber(plan.monthlyRewardPercent, 2)}%</b></div>
+            <div class="vipPlanStat"><span>${t("vip_duration", { n: formatPoints(plan.durationDays) })}</span><b>${formatPoints(plan.durationDays)}</b></div>
+          </div>
+          <div class="vipPlanReward"><span>${t("vip_total_reward", { n: formatPoints(plan.totalRewardPoints || (Number(plan.pricePoints) * Number(plan.monthlyRewardPercent) / 100)) })}</span><b>${formatPoints(plan.totalRewardPoints || (Number(plan.pricePoints) * Number(plan.monthlyRewardPercent) / 100))}</b></div>
+          <div class="vipPlanDaily">${t("vip_daily_average", { n: formatPoints(plan.dailyRewardAveragePoints || (Number(plan.pricePoints) * Number(plan.monthlyRewardPercent) / 100 / Number(plan.durationDays))) })}</div>`}
+        <button type="button" class="vipPlanButton ${available ? "vipPlanButton--primary" : "vipPlanButton--secondary"}" ${available && canAfford && !vipPurchasingPlanNumbers.has(Number(plan.planNumber)) ? "" : "disabled"} onclick="purchaseVipPlan(${Number(plan.planNumber)})">${vipPurchasingPlanNumbers.has(Number(plan.planNumber)) ? t("vip_buying") : buttonLabel}</button>
+        ${available && !canAfford ? `<div class="vipPlanBalance">${t("vip_balance", { n: formatPoints(state.points) })}</div>` : ""}
+      </article>`;
   }).join("");
 
   const subscriptionCards = subscriptions.map(subscription => {
@@ -3002,28 +3010,41 @@ function renderProfileVip() {
       claimMarkup = `${label}${claimTime > serverNow ? `<div class="cardSubtitle">${t("vip_claim_next", { time: `<span data-vip-countdown="${escapeHTML(subscription.nextClaimAt)}">${formatVipCountdown(claimTime - serverNow)}</span>` })}</div>` : ""}`;
     }
     return `
-      <div class="card" style="margin:10px 0">
-        <div class="cardHeader"><div class="cardTitle">${t("vip_plan_title", { n: formatPoints(subscription.planNumber) })}</div><span class="badge ${isActive ? "success" : "info"}">${statusText}</span></div>
-        <div class="cardSubtitle">${t("vip_days_progress", { done: formatPoints(subscription.daysCompleted), total: formatPoints(subscription.durationDays) })}</div>
-        <div class="cardSubtitle">${t("vip_days_remaining", { n: formatPoints(subscription.daysRemaining) })}</div>
-        <div class="cardSubtitle">${t("vip_claim_progress", { claimed: formatPoints(subscription.claimsCompleted), total: formatPoints(subscription.totalClaims) })}</div>
-        ${isActive ? `<div class="cardSubtitle">${t("vip_todays_reward", { n: nextReward })}</div>` : ""}
-        <div class="cardSubtitle">${t("vip_total_earned", { n: formatPoints(subscription.claimedRewardPoints) })}</div>
-        <div class="cardSubtitle">${t("vip_total_reward", { n: formatPoints(subscription.totalRewardPoints) })}</div>
-        ${isActive ? `<div class="cardSubtitle">${t("vip_principal_note", { n: formatPoints(subscription.pricePoints) })}</div>` : isCancelled ? "" : `<div class="cardSubtitle">${t("vip_status_completed")}</div>`}
+      <article class="vipSubscriptionCard">
+        <div class="vipPlanTopline"><div class="vipPlanTitleWrap"><span class="vipPlanMark" aria-hidden="true">◌</span><div class="vipPlanTitle">${t("vip_plan_title", { n: formatPoints(subscription.planNumber) })}</div></div><span class="badge ${isActive ? "success" : "info"}">${statusText}</span></div>
+        <div class="vipSubscriptionGrid">
+          <div>${t("vip_days_progress", { done: formatPoints(subscription.daysCompleted), total: formatPoints(subscription.durationDays) })}</div>
+          <div>${t("vip_days_remaining", { n: formatPoints(subscription.daysRemaining) })}</div>
+          <div>${t("vip_claim_progress", { claimed: formatPoints(subscription.claimsCompleted), total: formatPoints(subscription.totalClaims) })}</div>
+          ${isActive ? `<div>${t("vip_todays_reward", { n: nextReward })}</div>` : ""}
+          <div>${t("vip_total_earned", { n: formatPoints(subscription.claimedRewardPoints) })}</div>
+          <div>${t("vip_total_reward", { n: formatPoints(subscription.totalRewardPoints) })}</div>
+          ${isActive ? `<div>${t("vip_principal_note", { n: formatPoints(subscription.pricePoints) })}</div>` : isCancelled ? "" : `<div>${t("vip_status_completed")}</div>`}
+        </div>
         ${claimMarkup}
-      </div>`;
+      </article>`;
   }).join("");
 
   return `
+    <style>
+      .vipRedesign{--vip-ink:#f7f5ff;--vip-muted:#a8a5b8;--vip-line:rgba(255,255,255,.1);margin:0 -2px;padding:4px 0 24px;background:radial-gradient(circle at 86% 0%,rgba(124,58,237,.2),transparent 35%),linear-gradient(180deg,rgba(11,8,22,.24),transparent 70%);color:var(--vip-ink)}
+      .vipRedesign .sectionHeader{margin-bottom:14px}.vipRedesign .sectionTitle{letter-spacing:-.2px}.vipRedesign .sectionMore{color:#c4b5fd}
+      .vipHero{padding:18px;border:1px solid rgba(167,139,250,.2);border-radius:24px;background:linear-gradient(145deg,rgba(76,29,149,.28),rgba(16,13,29,.84));box-shadow:0 18px 42px rgba(30,16,70,.25);margin-bottom:18px}.vipHero .cardSubtitle{color:var(--vip-muted);line-height:1.8}
+      .vipPlanCard,.vipSubscriptionCard{position:relative;isolation:isolate;overflow:hidden;margin:12px 0;padding:17px;border:1px solid var(--vip-line);border-radius:24px;background:linear-gradient(145deg,rgba(255,255,255,.09),rgba(17,15,28,.9) 58%);box-shadow:0 15px 35px rgba(0,0,0,.22)}.vipPlanGlow{position:absolute;z-index:-1;width:160px;height:160px;right:-75px;top:-90px;border-radius:50%;filter:blur(3px);opacity:.7}.vipPlanCard--bronze{border-color:rgba(205,127,50,.38)}.vipPlanCard--bronze .vipPlanGlow{background:rgba(180,83,9,.35)}.vipPlanCard--silver{border-color:rgba(203,213,225,.35)}.vipPlanCard--silver .vipPlanGlow{background:rgba(148,163,184,.28)}.vipPlanCard--gold{border-color:rgba(250,204,21,.45);background:linear-gradient(145deg,rgba(120,72,12,.25),rgba(25,19,24,.92) 62%)}.vipPlanCard--gold .vipPlanGlow{background:rgba(234,179,8,.4)}.vipPlanCard--future{opacity:.9}
+      .vipPlanTopline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}.vipPlanTitleWrap{display:flex;align-items:center;gap:9px;min-width:0}.vipPlanMark{display:grid;place-items:center;width:34px;height:34px;flex:0 0 34px;border-radius:12px;color:#e9d5ff;background:rgba(139,92,246,.18);font-size:20px}.vipPlanCard--bronze .vipPlanMark{color:#fdba74;background:rgba(180,83,9,.2)}.vipPlanCard--silver .vipPlanMark{color:#e2e8f0;background:rgba(148,163,184,.2)}.vipPlanCard--gold .vipPlanMark{color:#fde68a;background:rgba(234,179,8,.2)}.vipPlanTitle{font-size:16px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vipPlanCard .badge,.vipSubscriptionCard .badge{flex:0 0 auto}
+      .vipPlanStats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px}.vipPlanStat{min-width:0;padding:10px 8px;border:1px solid rgba(255,255,255,.07);border-radius:15px;background:rgba(0,0,0,.16);text-align:center}.vipPlanStat span{display:block;min-height:28px;color:var(--vip-muted);font-size:9px;line-height:1.5}.vipPlanStat b{display:block;margin-top:3px;font-size:13px;color:#fff;direction:ltr}.vipPlanReward{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;border-radius:15px;background:rgba(139,92,246,.11);color:var(--vip-muted);font-size:10px}.vipPlanReward b{color:#ddd6fe;font-size:14px}.vipPlanDaily,.vipPlanBalance{margin-top:9px;color:var(--vip-muted);font-size:10px}.vipPlanButton{width:100%;min-height:44px;margin-top:14px;padding:11px 14px;border-radius:14px;font-size:12px;font-weight:900;transition:transform .18s ease,box-shadow .18s ease,opacity .18s ease}.vipPlanButton:active{transform:scale(.98)}.vipPlanButton--primary{color:#fff;background:linear-gradient(135deg,#a78bfa,#7c3aed);box-shadow:0 9px 22px rgba(124,58,237,.28)}.vipPlanButton--secondary{color:#c4b5fd;background:rgba(139,92,246,.1);border:1px solid rgba(167,139,250,.25)}.vipPlanButton:disabled{opacity:.48;box-shadow:none}.vipSubscriptionGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.vipSubscriptionGrid>div{padding:9px;border-radius:12px;background:rgba(0,0,0,.14);color:var(--vip-muted);font-size:10px;line-height:1.6}.vipSubscriptionCard button{width:100%;margin-top:12px}
+      @media (max-width:420px){.vipPlanCard,.vipSubscriptionCard{padding:14px;border-radius:20px}.vipPlanStats{gap:5px}.vipPlanStat{padding:8px 4px}.vipPlanStat span{font-size:8px}.vipPlanStat b{font-size:12px}.vipPlanTitle{font-size:14px}.vipPlanTopline{gap:6px}.vipSubscriptionGrid{gap:6px}}
+    </style>
+    <div class="vipRedesign">
     <div class="sectionHeader">
       <button class="sectionMore" type="button" onclick="${state.activeTab === "vip" ? "navigate('home')" : "setProfileView('menu')"}">${t("referral_back")}</button>
       <h2 class="sectionTitle">${t("vip_title")}</h2><span></span>
     </div>
-    <div class="card"><div class="cardSubtitle">${t("vip_intro")}</div><div class="cardSubtitle" style="margin-top:8px">${t("vip_balance", { n: formatPoints(state.points) })}</div></div>
+    <div class="vipHero"><div class="cardSubtitle">${t("vip_intro")}</div><div class="cardSubtitle" style="margin-top:8px">${t("vip_balance", { n: formatPoints(state.points) })}</div></div>
     ${subscriptions.length ? `<h3 class="sectionTitle" style="margin:16px 4px 8px">${t("vip_active_title")}</h3>${subscriptionCards}` : `<div class="card"><div class="emptyDesc">${t("vip_no_subscriptions")}</div></div>`}
     <h3 class="sectionTitle" style="margin:18px 4px 8px">${t("vip_title")}</h3>
     ${planCards || `<div class="card"><div class="emptyDesc">${t("vip_empty_plans")}</div></div>`}
+    </div>
   `;
 }
 

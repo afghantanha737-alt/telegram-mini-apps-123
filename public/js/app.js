@@ -72,6 +72,12 @@ const state = {
   weeklyMyPoints: 0,
   weeklyLeaderboardMeta: null,
   weeklyServerOffsetMs: 0,
+  vipPlans: [],
+  vipSubscriptions: [],
+  vipDataLoaded: false,
+  vipLoading: false,
+  vipError: "",
+  vipServerOffsetMs: 0,
   captchaA: 0,
   captchaB: 0,
   initialized: false
@@ -163,7 +169,8 @@ function escapeHTML(value) {
 
 /* ================= FORMATTERS ================= */
 function formatPoints(value) {
-  return new Intl.NumberFormat("en-US").format(Math.floor(Number(value) || 0));
+  const amount = Number(value) || 0;
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(Number(amount.toFixed(2)));
 }
 function formatNumber(value, decimals = 4) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: decimals }).format(Number(value) || 0);
@@ -875,6 +882,9 @@ const LEDGER_TYPE_UI = {
   exchange_in: { icon: "⇄" },
   withdraw: { icon: "➤" },
   deposit: { icon: "💎" },
+  vip_purchase: { icon: "💎" },
+  vip_daily_reward: { icon: "🎁" },
+  vip_principal_return: { icon: "↩️" },
   admin_adjust: { icon: "🛠️" }
 };
 
@@ -2378,6 +2388,7 @@ function setProfileView(view) {
   }
   profileView = view;
   if (view === "history") { historyList = []; historyHasMore = false; }
+  if (view === "vip") state.vipDataLoaded = false;
   if (view === "referral") {
     state.referralFilter = "all";
     void loadReferralData();
@@ -2436,6 +2447,11 @@ function renderProfileMenu() {
         <div class="profileItem" onclick="setProfileView('history')">
           <div class="profileIcon">🧾</div>
           <div class="profileText">${t("menu_history")}</div>
+          <div class="profileChevron">‹</div>
+        </div>
+        <div class="profileItem" onclick="setProfileView('vip')">
+          <div class="profileIcon">💎</div>
+          <div class="profileText">${t("menu_vip_plans")}</div>
           <div class="profileChevron">‹</div>
         </div>
         <div class="profileItem" onclick="setProfileView('about')">
@@ -2924,9 +2940,235 @@ function renderProfileHistory() {
   `;
 }
 
+async function loadVipPlans() {
+  if (state.vipLoading) return false;
+  state.vipLoading = true;
+  state.vipError = "";
+  try {
+    const data = await api("/api/points/vip/plans");
+    state.vipPlans = Array.isArray(data?.plans) ? data.plans : [];
+    state.vipSubscriptions = Array.isArray(data?.subscriptions) ? data.subscriptions : [];
+    if (data?.points != null) state.points = Number(data.points) || 0;
+    const serverNow = Date.parse(data?.serverNow || "");
+    state.vipServerOffsetMs = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
+    state.vipDataLoaded = true;
+    return true;
+  } catch (error) {
+    console.warn("VIP plans failed:", error);
+    state.vipError = translateServerMessage(error.code, error.message) || t("vip_error");
+    state.vipDataLoaded = false;
+    return false;
+  } finally {
+    state.vipLoading = false;
+  }
+}
+
+function formatVipCountdown(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return days > 0
+    ? `${days}d ${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+let vipCountdownTimer = null;
+let vipCountdownRefreshPending = false;
+const vipClaimingIds = new Set();
+const vipPurchasingPlanNumbers = new Set();
+
+function stopVipCountdown() {
+  if (vipCountdownTimer) clearInterval(vipCountdownTimer);
+  vipCountdownTimer = null;
+  vipCountdownRefreshPending = false;
+}
+
+async function tickVipCountdowns() {
+  if (state.activeTab !== "profile" || profileView !== "vip") return;
+  let shouldRefresh = false;
+  document.querySelectorAll("[data-vip-countdown]").forEach(element => {
+    const target = Date.parse(element.dataset.vipCountdown || "");
+    if (!Number.isFinite(target)) return;
+    const remaining = target - (Date.now() + Number(state.vipServerOffsetMs || 0));
+    if (remaining <= 0) {
+      element.textContent = "00:00:00";
+      shouldRefresh = true;
+    } else {
+      element.textContent = formatVipCountdown(remaining);
+    }
+  });
+  if (!shouldRefresh || vipCountdownRefreshPending) return;
+  vipCountdownRefreshPending = true;
+  const loaded = await loadVipPlans();
+  vipCountdownRefreshPending = false;
+  if (loaded && state.activeTab === "profile" && profileView === "vip") {
+    const content = $("#content");
+    if (content) content.innerHTML = renderProfileVip();
+    startVipCountdown();
+  }
+}
+
+function startVipCountdown() {
+  stopVipCountdown();
+  if (state.activeTab !== "profile" || profileView !== "vip") return;
+  void tickVipCountdowns();
+  vipCountdownTimer = setInterval(tickVipCountdowns, 1000);
+}
+
+function renderProfileVip() {
+  const plans = state.vipPlans || [];
+  const subscriptions = state.vipSubscriptions || [];
+  const planCards = plans.map(plan => {
+    const available = plan.enabled === true && plan.comingSoon !== true;
+    const statusKey = plan.comingSoon ? "vip_status_coming_soon" : available ? "vip_status_active" : "vip_status_inactive";
+    const canAfford = Number(state.points) >= Number(plan.pricePoints);
+    const buttonLabel = plan.comingSoon ? t("vip_status_coming_soon") : available ? (canAfford ? t("vip_buy") : t("vip_insufficient_points")) : t("vip_status_inactive");
+    return `
+      <div class="card" style="margin:10px 0">
+        <div class="cardHeader"><div class="cardTitle">${t("vip_plan_title", { n: formatPoints(plan.planNumber) })}</div><span class="badge ${available ? "success" : "info"}">${t(statusKey)}</span></div>
+        ${plan.comingSoon ? "" : `
+          <div class="cardSubtitle">${t("vip_price", { n: formatPoints(plan.pricePoints) })}</div>
+          <div class="cardSubtitle">${t("vip_rate", { n: formatNumber(plan.monthlyRewardPercent, 2) })}</div>
+          <div class="cardSubtitle">${t("vip_duration", { n: formatPoints(plan.durationDays) })}</div>
+          <div class="cardSubtitle">${t("vip_total_reward", { n: formatPoints(plan.totalRewardPoints) })}</div>
+          <div class="cardSubtitle">${t("vip_daily_average", { n: formatPoints(plan.dailyRewardAveragePoints) })}</div>`}
+        <button type="button" class="${available ? "primary" : "secondary"}" ${available && canAfford && !vipPurchasingPlanNumbers.has(Number(plan.planNumber)) ? "" : "disabled"} onclick="purchaseVipPlan(${Number(plan.planNumber)})">${vipPurchasingPlanNumbers.has(Number(plan.planNumber)) ? t("vip_buying") : buttonLabel}</button>
+        ${available && !canAfford ? `<div class="cardSubtitle">${t("vip_balance", { n: formatPoints(state.points) })}</div>` : ""}
+      </div>`;
+  }).join("");
+
+  const subscriptionCards = subscriptions.map(subscription => {
+    const isActive = subscription.status === "active";
+    const isCancelled = subscription.status === "cancelled";
+    const statusText = isActive ? t("vip_status_active") : isCancelled ? t("vip_status_cancelled") : t("vip_status_completed");
+    const nextReward = formatPoints(subscription.nextRewardPoints || 0);
+    let claimMarkup = "";
+    if (isActive && subscription.canClaim) {
+      const claiming = vipClaimingIds.has(subscription.id);
+      claimMarkup = `<button type="button" class="primary" ${claiming ? "disabled" : ""} onclick="claimVipReward('${escapeHTML(subscription.id)}')">${claiming ? t("vip_loading") : t("vip_claim_button", { n: nextReward })}</button>`;
+    } else if (isActive && subscription.nextClaimAt) {
+      const claimTime = Date.parse(subscription.nextClaimAt);
+      const serverNow = Date.now() + Number(state.vipServerOffsetMs || 0);
+      const hasClaimed = Number(subscription.claimsCompleted) > 0;
+      const label = hasClaimed ? `<div class="cardSubtitle">${t("vip_claimed_today")}</div>` : "";
+      claimMarkup = `${label}${claimTime > serverNow ? `<div class="cardSubtitle">${t("vip_claim_next", { time: `<span data-vip-countdown="${escapeHTML(subscription.nextClaimAt)}">${formatVipCountdown(claimTime - serverNow)}</span>` })}</div>` : ""}`;
+    }
+    return `
+      <div class="card" style="margin:10px 0">
+        <div class="cardHeader"><div class="cardTitle">${t("vip_plan_title", { n: formatPoints(subscription.planNumber) })}</div><span class="badge ${isActive ? "success" : "info"}">${statusText}</span></div>
+        <div class="cardSubtitle">${t("vip_days_progress", { done: formatPoints(subscription.daysCompleted), total: formatPoints(subscription.durationDays) })}</div>
+        <div class="cardSubtitle">${t("vip_days_remaining", { n: formatPoints(subscription.daysRemaining) })}</div>
+        <div class="cardSubtitle">${t("vip_claim_progress", { claimed: formatPoints(subscription.claimsCompleted), total: formatPoints(subscription.totalClaims) })}</div>
+        ${isActive ? `<div class="cardSubtitle">${t("vip_todays_reward", { n: nextReward })}</div>` : ""}
+        <div class="cardSubtitle">${t("vip_total_earned", { n: formatPoints(subscription.claimedRewardPoints) })}</div>
+        <div class="cardSubtitle">${t("vip_total_reward", { n: formatPoints(subscription.totalRewardPoints) })}</div>
+        ${isActive ? `<div class="cardSubtitle">${t("vip_principal_note", { n: formatPoints(subscription.pricePoints) })}</div>` : isCancelled ? "" : `<div class="cardSubtitle">${t("vip_status_completed")}</div>`}
+        ${claimMarkup}
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="sectionHeader">
+      <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
+      <h2 class="sectionTitle">${t("vip_title")}</h2><span></span>
+    </div>
+    <div class="card"><div class="cardSubtitle">${t("vip_intro")}</div><div class="cardSubtitle" style="margin-top:8px">${t("vip_balance", { n: formatPoints(state.points) })}</div></div>
+    ${subscriptions.length ? `<h3 class="sectionTitle" style="margin:16px 4px 8px">${t("vip_active_title")}</h3>${subscriptionCards}` : `<div class="card"><div class="emptyDesc">${t("vip_no_subscriptions")}</div></div>`}
+    <h3 class="sectionTitle" style="margin:18px 4px 8px">${t("vip_title")}</h3>
+    ${planCards || `<div class="card"><div class="emptyDesc">${t("vip_empty_plans")}</div></div>`}
+  `;
+}
+
+function retryVipPlans() {
+  state.vipDataLoaded = false;
+  state.vipError = "";
+  void renderProfile();
+}
+window.retryVipPlans = retryVipPlans;
+
+function confirmVipPurchase(message) {
+  if (tg && typeof tg.showConfirm === "function") {
+    return new Promise(resolve => tg.showConfirm(message, resolve));
+  }
+  return Promise.resolve(window.confirm(message));
+}
+
+async function purchaseVipPlan(planNumber) {
+  const plan = state.vipPlans.find(item => Number(item.planNumber) === Number(planNumber));
+  if (!plan || plan.enabled !== true || plan.comingSoon === true) return;
+  if (vipPurchasingPlanNumbers.has(Number(plan.planNumber))) return;
+  if (Number(state.points) < Number(plan.pricePoints)) return toast(t("vip_balance", { n: formatPoints(state.points) }), "error");
+  vipPurchasingPlanNumbers.add(Number(plan.planNumber));
+  if (state.activeTab === "profile" && profileView === "vip") {
+    const content = $("#content");
+    if (content) content.innerHTML = renderProfileVip();
+  }
+  const scope = `vip_purchase_${plan.planNumber}`;
+  try {
+    const confirmed = await confirmVipPurchase(t("vip_buy_confirm", { n: formatPoints(plan.planNumber), price: formatPoints(plan.pricePoints) }));
+    if (!confirmed) return;
+    const result = await api("/api/points/vip/purchase", {
+      method: "POST",
+      headers: { "Idempotency-Key": getPendingIdempotencyKey(scope) },
+      body: JSON.stringify({ planNumber: Number(plan.planNumber) })
+    });
+    clearPendingIdempotencyKey(scope);
+    state.points = Number(result.points) || state.points;
+    updateHeader();
+    state.vipDataLoaded = false;
+    await loadVipPlans();
+    await renderProfile();
+    toast(t("vip_buy_success"), "success");
+  } catch (error) {
+    clearDefinitiveIdempotencyFailure(scope, error);
+    toast(translateServerMessage(error.code, error.message), "error");
+  } finally {
+    vipPurchasingPlanNumbers.delete(Number(plan.planNumber));
+    if (state.activeTab === "profile" && profileView === "vip") await renderProfile();
+  }
+}
+window.purchaseVipPlan = purchaseVipPlan;
+
+async function claimVipReward(subscriptionId) {
+  if (!subscriptionId || vipClaimingIds.has(subscriptionId)) return;
+  vipClaimingIds.add(subscriptionId);
+  const scope = `vip_claim_${subscriptionId}`;
+  if (state.activeTab === "profile" && profileView === "vip") {
+    const content = $("#content");
+    if (content) content.innerHTML = renderProfileVip();
+  }
+  try {
+    const result = await api(`/api/points/vip/${encodeURIComponent(subscriptionId)}/claim`, {
+      method: "POST",
+      headers: { "Idempotency-Key": getPendingIdempotencyKey(scope) },
+      body: JSON.stringify({})
+    });
+    clearPendingIdempotencyKey(scope);
+    state.points = Number(result.points) || state.points;
+    updateHeader();
+    state.vipDataLoaded = false;
+    await loadVipPlans();
+    if (state.activeTab === "profile" && profileView === "vip") await renderProfile();
+    toast(t("vip_claim_success", { n: formatPoints(result.rewardPoints) }), "success");
+  } catch (error) {
+    clearDefinitiveIdempotencyFailure(scope, error);
+    toast(translateServerMessage(error.code, error.message), "error");
+    state.vipDataLoaded = false;
+    await loadVipPlans();
+    if (state.activeTab === "profile" && profileView === "vip") await renderProfile();
+  } finally {
+    vipClaimingIds.delete(subscriptionId);
+    if (state.activeTab === "profile" && profileView === "vip") startVipCountdown();
+  }
+}
+window.claimVipReward = claimVipReward;
+
 async function renderProfile() {
   const content = $("#content");
   if (profileView !== "leaderboard" || leaderboardMode !== "weekly") stopWeeklyCompetitionCountdown();
+  if (profileView !== "vip") stopVipCountdown();
   if (profileView === "leaderboard" && state.leaderboard.length === 0) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadLeaderboard();
@@ -2938,6 +3180,10 @@ async function renderProfile() {
   if (profileView === "history" && historyList.length === 0 && !historyLoading) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadHistory(true);
+  }
+  if (profileView === "vip" && !state.vipDataLoaded && !state.vipLoading) {
+    content.innerHTML = `<div class="loading" style="height:300px"></div>`;
+    await loadVipPlans();
   }
   if (profileView === "referral") {
     content.innerHTML = renderProfileReferral();
@@ -2952,6 +3198,11 @@ async function renderProfile() {
     content.innerHTML = renderProfileAbout();
   } else if (profileView === "history") {
     content.innerHTML = renderProfileHistory();
+  } else if (profileView === "vip") {
+    content.innerHTML = state.vipError
+      ? `<div class="card"><div class="emptyDesc">${escapeHTML(state.vipError)}</div><button type="button" class="secondary" onclick="retryVipPlans()">${t("vip_retry")}</button></div>`
+      : renderProfileVip();
+    startVipCountdown();
   } else {
     content.innerHTML = renderProfileMenu();
   }

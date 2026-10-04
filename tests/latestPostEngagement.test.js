@@ -126,13 +126,21 @@ assert.ok(TaskCompletion.schema.path('recurringClaimCount'));
 assert.ok(TaskCompletion.schema.path('lastReactionEventAt'));
 assert.ok(LatestPostEngagementState.schema.path('openedAt'));
 const completionIndexes = TaskCompletion.schema.indexes();
-assert.ok(completionIndexes.some(([keys, options]) => keys.user === 1 && keys.task === 1 && options.unique === true));
-const completionUniqueIndex = completionIndexes.find(([keys, options]) => keys.user === 1 && keys.task === 1 && options.unique === true);
-assert.deepStrictEqual(completionUniqueIndex[1].partialFilterExpression, {
-  user: { $type: 'objectId' },
-  task: { $type: 'objectId' }
-});
-assert.strictEqual(completionUniqueIndex[1].name, 'taskcompletion_user_task_unique_objectids');
+assert.ok(completionIndexes.some(([keys, options]) => keys.user === 1 && keys.task === 1 && options.unique !== true));
+assert.ok(!completionIndexes.some(([keys, options]) => keys.user === 1 && keys.task === 1 && options.unique === true));
+const completionUserId = new (require('mongoose').Types.ObjectId)('6ab7702bb861627b180e66cc');
+const completionTaskId = new (require('mongoose').Types.ObjectId)('6aa29c139856dd465546a60b');
+assert.strictEqual(
+  String(TaskCompletion.idForUserTask(completionUserId, completionTaskId)),
+  String(TaskCompletion.idForUserTask(completionUserId, completionTaskId)),
+  'the same logical user/task always maps to one database _id'
+);
+assert.notStrictEqual(
+  String(TaskCompletion.idForUserTask(completionUserId, completionTaskId)),
+  String(TaskCompletion.idForUserTask(completionTaskId, completionUserId)),
+  'different user/task pairs map to different database _ids'
+);
+assert.throws(() => TaskCompletion.idForUserTask('invalid', completionTaskId), /valid user and task ObjectIds/);
 const openStateIndexes = LatestPostEngagementState.schema.indexes();
 assert.ok(openStateIndexes.some(([keys, options]) => keys.user === 1 && keys.task === 1 && options.unique === true));
 const reactionIndexes = TaskReactionState.schema.indexes();

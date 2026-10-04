@@ -33,9 +33,19 @@ const taskCompletionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// ایندکس تکی روی user/task عمداً تعریف نشده: mongoose هر بار بالا آمدن آن‌ها را می‌ساخت و cleanupStaleIndexes در server.js
-// دوباره حذفشان می‌کرد (حلقه‌ی ساخت/حذف در هر دیپلوی). ایندکس ترکیبی زیر برای کوئری‌های برنامه کافی است.
-taskCompletionSchema.index({ user: 1, task: 1 }, { unique: true });
+// Legacy rows may lack user/task. Exclude those malformed historical rows from
+// uniqueness enforcement while preserving one completion per valid ObjectId pair.
+taskCompletionSchema.index(
+  { user: 1, task: 1 },
+  {
+    name: 'taskcompletion_user_task_unique_objectids',
+    unique: true,
+    partialFilterExpression: {
+      user: { $type: 'objectId' },
+      task: { $type: 'objectId' }
+    }
+  }
+);
 taskCompletionSchema.index({ user: 1, status: 1, createdAt: -1 });
 taskCompletionSchema.index({ task: 1, status: 1, createdAt: -1 });
 

@@ -1961,7 +1961,18 @@ html[data-theme="light"] .depositMemoCode {
 .bootLoadingBar span { display: block; width: 42%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), var(--primary-2)); animation: bootLoadingMove 1.2s ease-in-out infinite; }
 @keyframes bootLoadingMove { 0% { transform: translateX(-130%); } 100% { transform: translateX(300%); } }
 
-/* VIP reference visual polish */
+/* VIP reference visual specification: scoped metallic tiers and glass cards. */
+.vipRedesign { overflow-x: hidden; display: flex; flex-direction: column; padding-inline: 2px; background: radial-gradient(circle at 50% 0%, rgba(124,58,237,.14), transparent 42%); }
+.vipRedesign .vipPlanCard { border-radius: 25px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); gap: 20px; }
+.vipRedesign .vipPlanCard--bronze .badge { color: #fff7ed; background: linear-gradient(135deg, #8c6239, #e0a96d); border: 0; box-shadow: 0 4px 15px rgba(140,98,57,.3); }
+.vipRedesign .vipPlanCard--silver .badge { color: #172033; background: linear-gradient(135deg, #757f9a, #d7dde8); border: 0; box-shadow: 0 4px 15px rgba(215,221,232,.25); }
+.vipRedesign .vipPlanCard--gold .badge { color: #3b2705; background: linear-gradient(135deg, #bf953f, #fcf6ba 52%, #aa771c); border: 0; box-shadow: 0 4px 20px rgba(191,149,63,.4); }
+.vipRedesign .vipPlanCard--bronze .vipPlanButton--primary { background: linear-gradient(135deg, #8c6239, #e0a96d); box-shadow: 0 4px 15px rgba(140,98,57,.3); }
+.vipRedesign .vipPlanCard--silver .vipPlanButton--primary { color: #172033; background: linear-gradient(135deg, #757f9a, #d7dde8); box-shadow: 0 4px 15px rgba(215,221,232,.25); }
+.vipRedesign .vipPlanCard--gold .vipPlanButton--primary { color: #3b2705; background: linear-gradient(135deg, #bf953f, #fcf6ba 52%, #aa771c); box-shadow: 0 4px 20px rgba(191,149,63,.4); }
+.vipRedesign .vipPlanButton { border-radius: 16px; }
+.vipRedesign .vipPlanStat span, .vipRedesign .vipPlanDaily { color: rgba(255,255,255,.62); }
+.vipRedesign .vipPlanStat b, .vipRedesign .vipPlanReward b { font-weight: 900; }
 .vipHeroReference { padding: 18px 16px 16px; border-color: rgba(167,139,250,.28); background: linear-gradient(155deg, rgba(76,29,149,.42), rgba(15,12,27,.96) 72%); }
 .vipHeroBrand { display: flex; align-items: center; justify-content: flex-start; gap: 10px; direction: rtl; margin-bottom: 16px; }
 .vipHeroBrand img { width: 48px; height: 48px; border-radius: 14px; box-shadow: 0 7px 22px rgba(139,92,246,.34); }

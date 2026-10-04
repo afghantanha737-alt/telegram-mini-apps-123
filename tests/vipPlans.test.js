@@ -56,6 +56,7 @@ const indexHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
 const adminUi = fs.readFileSync(path.join(root, 'public/admin.html'), 'utf8');
 const translations = fs.readFileSync(path.join(root, 'public/js/i18n.js'), 'utf8');
 const vipPlanModel = fs.readFileSync(path.join(root, 'models/VipPlan.js'), 'utf8');
+const IdempotencyOperation = require('../models/IdempotencyOperation');
 
 assert.match(pointsRoute, /router\.get\('\/vip\/plans'/);
 assert.match(pointsRoute, /router\.post\('\/vip\/purchase'/);
@@ -73,6 +74,15 @@ assert.match(adminRoute, /input\.length !== 10/);
 assert.match(ledgerModel, /'vip_purchase'/);
 assert.match(ledgerModel, /'vip_daily_reward'/);
 assert.match(ledgerModel, /'vip_principal_return'/);
+for (const scope of ['vip_purchase', 'vip_daily_claim']) {
+  const operation = new IdempotencyOperation({
+    userId: '0123456789abcdef01234567',
+    scope,
+    key: 'vip-scope-test-123',
+    requestHash: 'a'.repeat(64)
+  });
+  assert.ifError(operation.validateSync(), `${scope} must be accepted by the idempotency schema`);
+}
 assert.match(server, /VipPlan\.ensureDefaults\(\)/);
 assert.match(server, /settleMaturedVipSubscriptions\(\)/);
 assert.match(app, /\/api\/points\/vip\/purchase/);

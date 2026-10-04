@@ -127,6 +127,12 @@ assert.ok(TaskCompletion.schema.path('lastReactionEventAt'));
 assert.ok(LatestPostEngagementState.schema.path('openedAt'));
 const completionIndexes = TaskCompletion.schema.indexes();
 assert.ok(completionIndexes.some(([keys, options]) => keys.user === 1 && keys.task === 1 && options.unique === true));
+const completionUniqueIndex = completionIndexes.find(([keys, options]) => keys.user === 1 && keys.task === 1 && options.unique === true);
+assert.deepStrictEqual(completionUniqueIndex[1].partialFilterExpression, {
+  user: { $type: 'objectId' },
+  task: { $type: 'objectId' }
+});
+assert.strictEqual(completionUniqueIndex[1].name, 'taskcompletion_user_task_unique_objectids');
 const openStateIndexes = LatestPostEngagementState.schema.indexes();
 assert.ok(openStateIndexes.some(([keys, options]) => keys.user === 1 && keys.task === 1 && options.unique === true));
 const reactionIndexes = TaskReactionState.schema.indexes();

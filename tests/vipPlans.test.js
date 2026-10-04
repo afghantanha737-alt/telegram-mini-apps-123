@@ -84,7 +84,7 @@ for (const scope of ['vip_purchase', 'vip_daily_claim']) {
   assert.ifError(operation.validateSync(), `${scope} must be accepted by the idempotency schema`);
 }
 assert.match(server, /VipPlan\.ensureDefaults\(\)/);
-assert.match(server, /settleMaturedVipSubscriptions\(\)/);
+assert.match(server, /runJob\('vip-principal-settlement'.*settleMaturedVipSubscriptions/s);
 assert.match(app, /\/api\/points\/vip\/purchase/);
 assert.match(app, /\/api\/points\/vip\/\$\{encodeURIComponent\(subscriptionId\)\}\/claim/);
 assert.match(app, /getPendingIdempotencyKey\(scope\)/);

@@ -11,6 +11,14 @@ process.env.TELEGRAM_WEBHOOK_SECRET = 'test_secret-123';
 const { bot } = require('../utils/bot');
 const User = require('../models/User');
 const referralSystem = require('../utils/referralSystem');
+const webhookDedup = require('../utils/webhookDedup');
+const claimedUpdates = new Set();
+webhookDedup.claimWebhookUpdate = async updateId => {
+  if (claimedUpdates.has(Number(updateId))) return { claimed: false, duplicate: true };
+  claimedUpdates.add(Number(updateId));
+  return { claimed: true };
+};
+webhookDedup.finishWebhookUpdate = async () => {};
 
 const users = new Map();
 const sentMessages = [];
@@ -89,7 +97,45 @@ app.use('/api/telegram', telegramRouter);
     });
     assert.strictEqual(failed.status, 500, 'Telegram should retry /start if the Welcome could not be sent');
 
-    console.log('ALL PASS — local Telegram webhook HTTP flow: secret → /start → Welcome/referral → 200; failure → retry');
+    const duplicateFailureRetry = await postUpdate({
+      update_id: 1004,
+      message: { message_id: 4, chat: { id: 333 }, from: { id: 333 }, text: '/start' }
+    });
+    assert.strictEqual(duplicateFailureRetry.status, 200, 'duplicate update_id is acknowledged without repeating side effects');
+    assert.strictEqual(sentMessages.length, 2, 'duplicate delivery cannot repeat a welcome side effect');
+
+    const invalidSecret = await postUpdate({
+      update_id: 1006,
+      message: { message_id: 6, chat: { id: 555 }, from: { id: 555 }, text: '/start' }
+    }, 'wrong-secret');
+    assert.strictEqual(invalidSecret.status, 401, 'configured webhook with an invalid secret is rejected');
+    assert.strictEqual(sentMessages.length, 2, 'invalid webhook secret cannot trigger side effects');
+
+    const beforeMissingSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    process.env.TELEGRAM_WEBHOOK_SECRET = '';
+    let missingSecretServer;
+    try {
+      delete require.cache[require.resolve('../routes/telegramWebhook')];
+      const noSecretApp = express();
+      noSecretApp.use(express.json());
+      noSecretApp.use('/api/telegram', require('../routes/telegramWebhook'));
+      missingSecretServer = await new Promise(resolve => {
+        const instance = noSecretApp.listen(0, '127.0.0.1', () => resolve(instance));
+      });
+      const noConfiguredSecret = await fetch(`http://127.0.0.1:${missingSecretServer.address().port}/api/telegram/webhook`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        update_id: 1007,
+        message: { message_id: 5, chat: { id: 444 }, from: { id: 444 }, text: '/start' }
+        })
+      });
+      assert.strictEqual(noConfiguredSecret.status, 503, 'missing production webhook secret fails closed');
+    } finally {
+      if (missingSecretServer) await new Promise(resolve => missingSecretServer.close(resolve));
+      process.env.TELEGRAM_WEBHOOK_SECRET = beforeMissingSecret;
+      delete require.cache[require.resolve('../routes/telegramWebhook')];
+    }
+
+    console.log('ALL PASS — webhook secret validation, /start side effects, durable-claim contract and duplicate delivery handling');
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

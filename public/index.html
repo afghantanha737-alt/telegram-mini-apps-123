@@ -23,6 +23,13 @@
 <!-- App CSS -->
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
 <link rel="stylesheet" href="css/style.css">
+
+<style id="bottom-nav-six-items-fix">
+  /* Keep the existing navigation styling while ensuring all six items fit in one row. */
+  .bottomNav {
+    grid-template-columns: repeat(6, 1fr );
+  }
+</style>
 </head>
 <body>
 
@@ -38,10 +45,12 @@
           <div id="userIdLine" class="brandId">ID</div>
         </div>
       </div>
+
       <button id="notificationBtn" class="headerIconBtn" type="button" onclick="navigate('daily')" aria-label="اعلان‌ها">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
         <span class="notificationDot" aria-hidden="true"></span>
       </button>
+
       <div id="avatar" class="avatar" data-i18n-aria="profile_picture_aria" aria-label="تصویر پروفایل">A</div>
     </div>
   </header>
@@ -55,22 +64,27 @@
       <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>
       <span class="tabLabel">خانه</span>
     </button>
+
     <button type="button" data-tab="tasks" data-i18n-aria="nav_tasks" aria-label="تسک‌ها">
       <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17.5" rx="2.5"/><path d="M9 3.5h6v3H9z"/><path d="m9 13 2 2 4-4"/></svg></span>
       <span class="tabLabel">تسک‌ها</span>
     </button>
+
     <button type="button" data-tab="daily" data-i18n-aria="nav_daily" aria-label="گردونه">
       <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17M3.5 12h17M6 6l12 12M18 6 6 18"/></svg></span>
       <span class="tabLabel">گردونه</span>
     </button>
+
     <button type="button" data-tab="vip" data-i18n-aria="nav_vip" aria-label="VIP">
       <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.7 5.5L21 9.4l-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9-5.6 2.9 1.1-6.2L3 9.4l6.3-.9L12 3z"/></svg></span>
       <span class="tabLabel">VIP</span>
     </button>
+
     <button type="button" data-tab="wallet" data-i18n-aria="nav_wallet" aria-label="کیف پول">
       <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19v4"/><path d="M4 7.5V17a2.5 2.5 0 0 0 2.5 2.5H20V9H6.5A2.5 2.5 0 0 1 4 7.5z"/><circle cx="16" cy="14" r="1.2"/></svg></span>
       <span class="tabLabel">کیف پول</span>
     </button>
+
     <button type="button" data-tab="profile" data-i18n-aria="nav_profile" aria-label="پروفایل">
       <span class="tabIcon" aria-hidden="true"><svg class="tabSvg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg></span>
       <span class="tabLabel">پروفایل</span>
@@ -78,8 +92,7 @@
   </nav>
 </div>
 
-<!-- TERMS & CONDITIONS MODAL -->
-<!-- ONBOARDING (راهنمای ورود اول) -->
+<!-- ONBOARDING -->
 <div id="onboardingOverlay" class="overlay" style="display:none">
   <div class="modalBox onboardingBox" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
     <button class="closeBtn onboardingSkip" type="button" onclick="skipOnboarding()" data-i18n-aria="ob_skip" aria-label="رد کردن">×</button>
@@ -112,6 +125,7 @@
   </div>
 </div>
 
+<!-- TERMS & CONDITIONS MODAL -->
 <div id="termsOverlay" class="overlay" style="display:none">
   <div class="modalBox termsBox" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
     <div class="modalHeader">
@@ -122,11 +136,16 @@
       <button class="closeBtn" type="button" onclick="hideTerms()" data-i18n-aria="common_close" aria-label="بستن">×</button>
     </div>
     <div id="termsBody" class="termsBody" data-i18n-html="terms_body">
-      <p><b>۱. پوینت و نرخ تبدیل</b><br>پوینت‌ها از طریق تسک‌ها، دعوت دوستان و پاداش روزانه به دست می‌آیند. نرخ تبدیل ممکن است توسط مدیریت تغییر کند.</p>
-      <p><b>۲. تسک‌ها</b><br>تسک‌ها باید واقعی و طبق دستورالعمل انجام شوند. تقلب یا اتوماسیون می‌تواند باعث محدودیت حساب شود.</p>
-      <p><b>۳. رفرال</b><br>سیستم رفرال برای جلوگیری از سوءاستفاده بررسی می‌شود و پاداش‌ها ممکن است مشروط به فعالیت واقعی دعوت‌شده باشند.</p>
-      <p><b>۴. برداشت</b><br>درخواست‌های برداشت به‌صورت دستی بررسی می‌شوند و ممکن است مدتی زمان ببرند.</p>
-      <p><b>۵. امنیت</b><br>در صورت شناسایی فعالیت غیرعادی، امکان بررسی یا محدودکردن حساب وجود دارد.</p>
+      <p><b>۱. پوینت و نرخ تبدیل</b>  
+پوینت‌ها از طریق تسک‌ها، دعوت دوستان و پاداش روزانه به دست می‌آیند. نرخ تبدیل ممکن است توسط مدیریت تغییر کند.</p>
+      <p><b>۲. تسک‌ها</b>  
+تسک‌ها باید واقعی و طبق دستورالعمل انجام شوند. تقلب یا اتوماسیون می‌تواند باعث محدودیت حساب شود.</p>
+      <p><b>۳. رفرال</b>  
+سیستم رفرال برای جلوگیری از سوءاستفاده بررسی می‌شود و پاداش‌ها ممکن است مشروط به فعالیت واقعی دعوت‌شده باشند.</p>
+      <p><b>۴. برداشت</b>  
+درخواست‌های برداشت به‌صورت دستی بررسی می‌شوند و ممکن است مدتی زمان ببرند.</p>
+      <p><b>۵. امنیت</b>  
+در صورت شناسایی فعالیت غیرعادی، امکان بررسی یا محدودکردن حساب وجود دارد.</p>
     </div>
   </div>
 </div>
@@ -141,11 +160,16 @@
       <button class="closeBtn" type="button" onclick="hidePrivacy()" data-i18n-aria="common_close" aria-label="بستن">×</button>
     </div>
     <div class="termsBody" data-i18n-html="privacy_body">
-      <p><b>۱. چه اطلاعاتی جمع‌آوری می‌شود</b><br>شناسه‌ی تلگرام، نام و یوزرنیم عمومی حساب تلگرام، آدرس کیف‌پولی که خودتان برای برداشت وارد می‌کنید، و داده‌های فعالیت داخل اپ (پوینت، تسک‌های انجام‌شده، ریفرال‌ها).</p>
-      <p><b>۲. چرا این اطلاعات جمع‌آوری می‌شود</b><br>صرفاً برای عملکرد خود اپ: محاسبه‌ی پوینت، بررسی و پرداخت درخواست‌های برداشت، جلوگیری از سوءاستفاده در سیستم ریفرال و تسک‌ها، بررسی عضویت شما در کانال‌های اجباری، و اطلاع‌رسانی وضعیت (تایید/رد برداشت، تسک جدید) از طریق خود ربات تلگرام.</p>
-      <p><b>۳. چه چیزی به اشتراک گذاشته نمی‌شود</b><br>نام، یوزرنیم یا هر اطلاعات شناسایی‌کننده‌ی دیگری از حسابتان به هیچ شخص ثالثی فروخته یا اجاره داده نمی‌شود. تاریخچه‌ی عمومی پرداخت‌ها فقط آدرس کیف‌پول (کوتاه‌شده) و هش تراکنش را نشان می‌دهد، بدون نام یا یوزرنیم.</p>
-      <p><b>۴. ذخیره‌سازی و امنیت</b><br>داده‌ها در یک پایگاه‌داده‌ی خصوصی نگهداری می‌شوند. درخواست‌های برداشت فقط پس از تایید یک ادمین انسانی و بررسی واقعی تراکنش روی زنجیره پردازش می‌شوند.</p>
-      <p><b>۵. حذف حساب</b><br>برای درخواست حذف اطلاعات حساب خود، از طریق ربات با پشتیبانی تماس بگیرید.</p>
+      <p><b>۱. چه اطلاعاتی جمع‌آوری می‌شود</b>  
+شناسه‌ی تلگرام، نام و یوزرنیم عمومی حساب تلگرام، آدرس کیف‌پولی که خودتان برای برداشت وارد می‌کنید، و داده‌های فعالیت داخل اپ (پوینت، تسک‌های انجام‌شده، ریفرال‌ها).</p>
+      <p><b>۲. چرا این اطلاعات جمع‌آوری می‌شود</b>  
+صرفاً برای عملکرد خود اپ: محاسبه‌ی پوینت، بررسی و پرداخت درخواست‌های برداشت، جلوگیری از سوءاستفاده در سیستم ریفرال و تسک‌ها، بررسی عضویت شما در کانال‌های اجباری، و اطلاع‌رسانی وضعیت (تایید/رد برداشت، تسک جدید) از طریق خود ربات تلگرام.</p>
+      <p><b>۳. چه چیزی به اشتراک گذاشته نمی‌شود</b>  
+نام، یوزرنیم یا هر اطلاعات شناسایی‌کننده‌ی دیگری از حسابتان به هیچ شخص ثالثی فروخته یا اجاره داده نمی‌شود. تاریخچه‌ی عمومی پرداخت‌ها فقط آدرس کیف‌پول (کوتاه‌شده) و هش تراکنش را نشان می‌دهد، بدون نام یا یوزرنیم.</p>
+      <p><b>۴. ذخیره‌سازی و امنیت</b>  
+داده‌ها در یک پایگاه‌داده‌ی خصوصی نگهداری می‌شوند. درخواست‌های برداشت فقط پس از تایید یک ادمین انسانی و بررسی واقعی تراکنش روی زنجیره پردازش می‌شوند.</p>
+      <p><b>۵. حذف حساب</b>  
+برای درخواست حذف اطلاعات حساب خود، از طریق ربات با پشتیبانی تماس بگیرید.</p>
     </div>
   </div>
 </div>
@@ -241,32 +265,41 @@
       </div>
       <button class="closeBtn" type="button" onclick="hideDeposit()" data-i18n-aria="common_close" aria-label="بستن">×</button>
     </div>
+
     <div id="depositDisabledMessage" class="emptyState" style="padding:18px 0">
       <div class="captchaIcon" aria-hidden="true">⏳</div>
       <p id="depositMessage" style="font-size:13px;color:var(--text-soft)" data-i18n="deposit_coming_soon">واریز GRAM در حال حاضر فعال نیست.</p>
     </div>
+
     <div id="depositPanel" style="display:none;text-align:start">
       <div class="tbPill tbPillGreen" style="margin:0 auto 12px;display:table" data-i18n="deposit_network_ton_mainnet">TON Mainnet</div>
       <p style="font-size:13px;color:var(--danger);font-weight:700" data-i18n="deposit_mainnet_warning">فقط ارز بومی GRAM روی TON Mainnet ارسال کنید؛ Jetton پذیرفته نمی‌شود.</p>
       <label for="depositWalletAddress" data-i18n="deposit_address_label">آدرس دریافت GRAM</label>
+
       <div class="depositCopyRow">
         <input id="depositWalletAddress" type="text" readonly dir="ltr" style="margin:0;min-width:0;font-size:12px">
         <button type="button" class="secondaryBtn" data-copy-target="depositWalletAddress" data-i18n="deposit_copy">کپی</button>
       </div>
+
       <p id="depositMinimumText" class="small" style="margin:8px 0 12px"></p>
       <div class="depositMemoLabel" data-i18n="deposit_reference_label">Memo Code</div>
+
       <div class="depositCopyRow depositMemoRow">
         <code id="depositReference" class="depositMemoCode" dir="ltr"></code>
         <button type="button" class="secondaryBtn" data-copy-target="depositReference" data-i18n="deposit_copy">کپی</button>
       </div>
+
       <p class="small depositMemoNotice" data-i18n="deposit_memo_not_address">این Memo Code آدرس کیف‌پول نیست؛ آن را به‌عنوان مقصد وارد نکنید.</p>
       <p class="small" style="margin:8px 0 12px" data-i18n="deposit_reference_warning">این Reference را دقیقاً در comment تراکنش Native GRAM وارد کنید تا واریز به حساب شما منتسب شود. بدون comment صحیح، سیستم نمی‌تواند خودکار واریز را به حساب شما نسبت دهد.</p>
+
       <label for="depositTxHash" data-i18n="deposit_tx_hash_label">Transaction ID / Tx Hash</label>
       <input id="depositTxHash" type="text" maxlength="66" autocomplete="off" spellcheck="false" dir="ltr" placeholder="64 hex characters">
+
       <button id="depositVerifyButton" type="button" class="primaryBtn" style="width:100%;margin-top:8px" onclick="submitGramDeposit()" data-i18n="deposit_check_button">بررسی تراکنش</button>
       <p id="depositActionMessage" role="status" aria-live="polite" class="small" style="min-height:20px"></p>
       <div id="depositHistoryList" style="margin-top:10px"></div>
     </div>
+
     <button type="button" class="secondaryBtn" onclick="hideDeposit()" data-i18n="deposit_ok">باشه</button>
   </div>
 </div>

@@ -135,6 +135,13 @@ html[data-theme="light"] #appHeader {
   margin: 0 auto; padding: 18px 15px calc(var(--nav-height) + 30px + env(safe-area-inset-bottom));
   animation: pageEnter .35s var(--ease);
 }
+.bootLoading { min-height: 330px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--text-soft); text-align: center; }
+.bootLoadingMark { width: 58px; height: 58px; display: grid; place-items: center; border: 2px solid var(--primary-2); border-radius: 18px; color: var(--primary-2); font-size: 30px; font-weight: 900; box-shadow: 0 0 24px rgba(167,139,250,.25); }
+.bootLoadingTitle { color: var(--text); font-size: 17px; font-weight: 900; }
+.bootLoadingText { font-size: 11px; }
+.bootLoadingBar { width: 118px; height: 4px; overflow: hidden; margin-top: 5px; border-radius: 999px; background: var(--surface-3); }
+.bootLoadingBar span { display: block; width: 42%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), var(--primary-2)); animation: bootLoadingMove 1.2s ease-in-out infinite; }
+@keyframes bootLoadingMove { 0% { transform: translateX(-130%); } 100% { transform: translateX(300%); } }
 @keyframes pageEnter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 /* BOTTOM NAV */

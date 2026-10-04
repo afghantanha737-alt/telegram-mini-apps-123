@@ -112,7 +112,14 @@ setInterval(() => {
 /* =========================================================
    STATIC FRONTEND
 ========================================================= */
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '1h',
+  setHeaders(res, filePath) {
+    if (path.basename(filePath) === 'index.html') {
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+    }
+  }
+}));
 
 /* =========================================================
    API ROUTES

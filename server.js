@@ -202,6 +202,11 @@ async function startServer() {
     await require('./models/LatestPostEngagementState').init();
     // Deposit invoices are unique per user and each TON tx hash may be credited only once.
     await require('./models/Deposit').init();
+    // VIP plan/subscription indexes must exist before purchases or daily claims are served.
+    const VipPlan = require('./models/VipPlan');
+    await VipPlan.init();
+    await require('./models/VipSubscription').init();
+    await VipPlan.ensureDefaults();
 
     // پاک‌سازی ایندکس‌های قدیمی/ناسازگار که ممکن است از نسخه‌های قبلی
     // پروژه در دیتابیس باقی مانده باشند (مثلاً ایندکس روی فیلدهای
@@ -230,6 +235,13 @@ async function startServer() {
     settleClosedWeeks().catch(error => console.error('Initial weekly settlement failed:', error));
     setInterval(() => {
       settleClosedWeeks().catch(error => console.error('Scheduled weekly settlement failed:', error));
+    }, 60 * 1000);
+
+    // Principal return is idempotent and transactionally coupled to the existing Points ledger.
+    const { settleMaturedVipSubscriptions } = require('./utils/vipSettlement');
+    settleMaturedVipSubscriptions().catch(error => console.error('Initial VIP principal settlement failed:', error));
+    setInterval(() => {
+      settleMaturedVipSubscriptions().catch(error => console.error('Scheduled VIP principal settlement failed:', error));
     }, 60 * 1000);
 
     server = app.listen(PORT, () => {

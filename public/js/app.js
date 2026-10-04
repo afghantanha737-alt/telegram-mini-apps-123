@@ -245,10 +245,9 @@ async function api(url, options = {}) {
   const initData = getInitData();
   const finalUrl = `${url}${separator}initData=${encodeURIComponent(initData)}`;
 
-  // اگر سرور بیش از حد کند شد (مثلاً سرویس رایگان تازه بیدار شده)،
-  // درخواست بعد از ۲۰ ثانیه خودش قطع می‌شود تا دکمه هیچ‌وقت برای همیشه گیر نکند.
+  // اگر سرور بیش از حد کند شد، درخواست قطع می‌شود تا صفحه برای همیشه خالی نماند.
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 40000);
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
   config.signal = controller.signal;
 
   let response;
@@ -3236,6 +3235,8 @@ async function boot() {
 
   setupNavigation();
   updateNavigation();
+  // قبل از احراز هویت و بررسی عضویت نیز باید کاربر وضعیت قابل‌مشاهده داشته باشد.
+  showLoading();
 
   const telegramUser = getTelegramUser();
   if (telegramUser) state.user = telegramUser;

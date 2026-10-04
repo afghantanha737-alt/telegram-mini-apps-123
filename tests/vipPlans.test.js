@@ -16,8 +16,15 @@ function sum(values) { return values.reduce((total, value) => total + value, 0);
 
 const plans = [
   { planNumber: 1, price: 1000, monthlyRate: 5, days: 30, expectedTotal: 5000 },
-  { planNumber: 2, price: 2000, monthlyRate: 8, days: 30, expectedTotal: 16000 },
-  { planNumber: 3, price: 3000, monthlyRate: 10, days: 30, expectedTotal: 30000 }
+  { planNumber: 2, price: 2000, monthlyRate: 6, days: 30, expectedTotal: 12000 },
+  { planNumber: 3, price: 3000, monthlyRate: 7, days: 30, expectedTotal: 21000 },
+  { planNumber: 4, price: 5000, monthlyRate: 8, days: 30, expectedTotal: 40000 },
+  { planNumber: 5, price: 10000, monthlyRate: 9, days: 30, expectedTotal: 90000 },
+  { planNumber: 6, price: 20000, monthlyRate: 10, days: 30, expectedTotal: 200000 },
+  { planNumber: 7, price: 35000, monthlyRate: 11, days: 30, expectedTotal: 385000 },
+  { planNumber: 8, price: 50000, monthlyRate: 12, days: 30, expectedTotal: 600000 },
+  { planNumber: 9, price: 75000, monthlyRate: 13, days: 30, expectedTotal: 975000 },
+  { planNumber: 10, price: 100000, monthlyRate: 15, days: 30, expectedTotal: 1500000 }
 ];
 for (const plan of plans) {
   const totalCents = calculateTotalRewardCents(plan.price, plan.monthlyRate, plan.days);
@@ -45,6 +52,7 @@ const ledgerModel = fs.readFileSync(path.join(root, 'models/PointsLedger.js'), '
 const referralCore = fs.readFileSync(path.join(root, 'utils/referralCore.js'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'public/js/app.js'), 'utf8');
+const indexHtml = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
 const adminUi = fs.readFileSync(path.join(root, 'public/admin.html'), 'utf8');
 const translations = fs.readFileSync(path.join(root, 'public/js/i18n.js'), 'utf8');
 const vipPlanModel = fs.readFileSync(path.join(root, 'models/VipPlan.js'), 'utf8');
@@ -72,8 +80,13 @@ assert.match(app, /\/api\/points\/vip\/\$\{encodeURIComponent\(subscriptionId\)\
 assert.match(app, /getPendingIdempotencyKey\(scope\)/);
 assert.match(app, /vip_insufficient_points/);
 assert.match(app, /setProfileView\('vip'\)/);
-assert.match(vipPlanModel, /Array\.from\(\{ length: 7 \}/, 'catalog seed must create exactly ten numbered plans');
+assert.match(vipPlanModel, /planNumber: 10, pricePoints: 100000, monthlyRewardPercent: 15/, 'catalog seed must include VIP 10');
 assert.match(vipPlanModel, /planNumber: 1, pricePoints: 1000, monthlyRewardPercent: 5/);
+assert.match(indexHtml, /data-tab="vip"/);
+assert.strictEqual((indexHtml.match(/data-tab="(?:home|daily|spin|vip|wallet)"/g) || []).length, 5);
+assert.match(app, /validTabs = \["home", "tasks", "daily", "spin", "vip", "wallet", "profile"\]/);
+assert.match(translations, /nav_spin:/);
+assert.match(translations, /nav_vip:/);
 assert.match(adminUi, /\/api\/admin\/vip\/plans/);
 assert.match(referralCore, /ELIGIBLE_ORIGINAL_EARN_TYPES = Object\.freeze\(\['task', 'checkin', 'spin', 'leaderboard_reward'\]\)/);
 for (const key of ['menu_vip_plans', 'vip_title', 'vip_buy_confirm', 'vip_claim_button', 'history_type_vip_purchase', 'history_type_vip_daily_reward', 'history_type_vip_principal_return']) {

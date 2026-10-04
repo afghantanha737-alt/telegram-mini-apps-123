@@ -1111,6 +1111,18 @@ function renderHome() {
 /* ================= TASKS ================= */
 const TASK_ICONS = { channel: "📢", group: "👥", link: "🔗", custom: "🎁" };
 
+function safeTaskHttpUrl(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text.length > 2048) return "";
+  try {
+    const url = new URL(text);
+    if (!["https:", "http:"].includes(url.protocol) || !url.hostname || url.username || url.password) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
 function openTaskLinkOnly(url) {
   if (!url) return;
   if (tg?.openLink) tg.openLink(url);

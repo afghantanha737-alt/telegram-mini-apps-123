@@ -14,7 +14,8 @@ const { bot, notifyUser, markTelegramBlocked, isTelegramDeliveryBlocked, broadca
 const { botText } = require('../utils/botMessages');
 const { verifyTonTransaction, normalizeTonTxHash, legacyTonTxHashMatcher } = require('../utils/tonVerify');
 const { recordLedgerRequired } = require('../utils/ledger');
-const { recordAdminLog } = require('../utils/adminLog');
+const { recordAdminLog, recordAdminLogRequired } = require('../utils/adminLog');
+const { normalizeTaskUrl } = require('../utils/taskUrl');
 const AdminLog = require('../models/AdminLog');
 const TaskCompletion = require('../models/TaskCompletion');
 const PointsLedger = require('../models/PointsLedger');
@@ -60,18 +61,21 @@ const upload = multer({
   limits: { fileSize: 8 * 1024 * 1024 }
 });
 
-function requireAdmin(req, res, next) {
-  const session = getAdminSession(req.headers['x-admin-session']);
-  // x-admin-key برای سازگاری با نسخه‌های قدیمی نگه داشته شده، اما پنل جدید
-  // بعد از login فقط session کوتاه‌مدت می‌فرستد و کلید اصلی را تکرار نمی‌کند.
-  const legacyKey = req.headers['x-admin-key'];
-  const legacyAllowed = process.env.ALLOW_LEGACY_ADMIN_KEY === 'true';
-  if (!session && (!legacyAllowed || !isValidAdminKey(typeof legacyKey === 'string' ? legacyKey : ''))) {
-    return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
+async function requireAdmin(req, res, next) {
+  try {
+    const session = await getAdminSession(req.headers['x-admin-session']);
+    const legacyKey = req.headers['x-admin-key'];
+    const legacyAllowed = process.env.ALLOW_LEGACY_ADMIN_KEY === 'true';
+    if (!session && (!legacyAllowed || !isValidAdminKey(typeof legacyKey === 'string' ? legacyKey : ''))) {
+      return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
+    }
+    req.adminActor = session?.actor || String(req.headers['x-admin-name'] || '').trim() || 'ادمین';
+    req.adminId = session?.adminId || 'legacy-admin-key';
+    next();
+  } catch (error) {
+    console.error('Admin session lookup failed:', error.message || error);
+    return res.status(503).json({ success: false, message: 'Admin authentication is temporarily unavailable.' });
   }
-  req.adminActor = session?.actor || String(req.headers['x-admin-name'] || '').trim() || 'ادمین';
-  req.adminId = session?.adminId || 'legacy-admin-key';
-  next();
 }
 
 // کلید اصلی فقط یک‌بار در لحظه ورود ارسال می‌شود و بعد از آن session کوتاه‌مدت استفاده می‌شود.
@@ -79,13 +83,13 @@ router.post('/login', async (req, res) => {
   const key = String(req.body?.key || '');
   if (!isValidAdminKey(key)) return res.status(403).json({ success: false, message: 'کلید ادمین نادرست است.' });
   const actor = String(req.body?.name || '').trim() || 'ادمین';
-  const session = createAdminSession(actor);
+  const session = await createAdminSession(actor);
   res.json({ success: true, sessionToken: session.token, expiresAt: session.expiresAt, ttlMs: SESSION_TTL_MS });
 });
 
 router.use(requireAdmin);
-router.post('/logout', (req, res) => {
-  revokeAdminSession(req.headers['x-admin-session']);
+router.post('/logout', async (req, res) => {
+  await revokeAdminSession(req.headers['x-admin-session']);
   res.json({ success: true });
 });
 router.get('/telegram-status', async (req, res) => {
@@ -368,6 +372,8 @@ router.get('/tasks', async (req, res) => {
 router.post('/tasks', async (req, res) => {
   const { title, description, type, verifyType, url, reward, chatId, requiredReaction, cooldownHours, maxCompletions, force, isSpecialOfDay, isActive } = req.body || {};
   const taskTitle = String(title || '').trim();
+  const taskUrl = normalizeTaskUrl(url);
+  if (taskUrl === null) return res.status(400).json({ success: false, code: 'INVALID_TASK_URL', message: 'پیوند تسک باید یک آدرس معتبر HTTP یا HTTPS باشد.' });
   const taskVerifyType = String(verifyType || 'telegram');
   const taskReward = Number(reward === undefined && taskVerifyType === 'latest_post' ? 2 : reward);
   const taskType = String(type || (taskVerifyType === 'manual' || taskVerifyType === 'latest_post' ? 'custom' : 'link'));
@@ -430,7 +436,7 @@ router.post('/tasks', async (req, res) => {
     description: String(description || '').trim(),
     type: taskType,
     verifyType: taskVerifyType,
-    url: String(url || '').trim(),
+    url: taskUrl,
     reward: taskReward,
     chatId: ['telegram', 'latest_post'].includes(taskVerifyType) ? String(chatId).trim() : '',
     requiredReaction: taskVerifyType === 'latest_post' ? String(requiredReaction).trim() : '',
@@ -470,6 +476,10 @@ router.put('/tasks/:id', async (req, res) => {
   const update = {};
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(body, key)) update[key] = body[key];
+  }
+  if (Object.prototype.hasOwnProperty.call(update, 'url')) {
+    update.url = normalizeTaskUrl(update.url);
+    if (update.url === null) return res.status(400).json({ success: false, code: 'INVALID_TASK_URL', message: 'پیوند تسک باید یک آدرس معتبر HTTP یا HTTPS باشد.' });
   }
 
   if (['verifyType', 'chatId', 'url', 'requiredReaction', 'cooldownHours'].some(key => key in update)) {
@@ -1086,23 +1096,24 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
   // (جلوگیری از تایید/رد هم‌زمان با شرط status فعلی)
   let paid;
   try {
-    paid = await Withdrawal.findOneAndUpdate(
-      { _id: withdrawal._id, status: { $in: ['pending', 'approved', 'processing'] } },
-      {
-        $set: {
-          status: 'paid',
-          txHash,
-          txHashNormalized,
-          verified: !verification.requiresManualAmountCheck,
-          verificationNote: verification.reason,
-          fromAddress: verification.fromAddress || '',
-          paidAt: new Date(),
-          adminNote: (req.body && req.body.note) || withdrawal.adminNote
+    paid = await withMongoTransaction(async session => {
+      const now = new Date();
+      const updated = await Withdrawal.findOneAndUpdate(
+        { _id: withdrawal._id, status: { $in: ['pending', 'approved', 'processing'] } },
+        {
+          $set: {
+            status: 'paid', txHash, txHashNormalized,
+            verified: !verification.requiresManualAmountCheck,
+            verificationNote: verification.reason, fromAddress: verification.fromAddress || '',
+            paidAt: now, adminNote: (req.body && req.body.note) || withdrawal.adminNote
+          },
+          $push: { statusHistory: { status: 'paid', at: now, note: (req.body && req.body.note) || '' } }
         },
-        $push: { statusHistory: { status: 'paid', at: new Date(), note: (req.body && req.body.note) || '' } }
-      },
-      { new: true }
-    );
+        { new: true, session }
+      );
+      if (updated) await recordAdminLogRequired({ actor: req.adminActor, action: 'withdrawal_approve', targetType: 'withdrawal', targetId: updated._id, details: `${updated.cryptoAmount} ${updated.token} — TxID: ${txHash}` }, session);
+      return updated;
+    });
   } catch (error) {
     if (error?.code === 11000) {
       return res.status(409).json({ success: false, message: 'این TxID قبلاً برای برداشت دیگری ثبت شده است.', code: 'DUPLICATE_TX' });
@@ -1115,14 +1126,6 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
   withdrawal = paid;
 
   res.json({ success: true, withdrawal });
-
-  recordAdminLog({
-    actor: req.adminActor,
-    action: 'withdrawal_approve',
-    targetType: 'withdrawal',
-    targetId: withdrawal._id,
-    details: `${withdrawal.cryptoAmount} ${withdrawal.token} — TxID: ${txHash}`
-  });
 
   // اطلاع‌رسانی به خود کاربر که پرداختش انجام شد
   const payeeUser = await User.findById(withdrawal.user, 'telegramId language');
@@ -1151,7 +1154,8 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
       targetStatus: 'rejected',
       reason,
       expectedStatus: existing.status,
-      allowedStatuses: ['pending', 'approved', 'processing']
+      allowedStatuses: ['pending', 'approved', 'processing'],
+      audit: { actor: req.adminActor, action: 'withdrawal_reject', targetType: 'withdrawal', details: `دلیل: ${reason}` }
     }));
   } catch (error) {
     const status = error.code === 'WITHDRAWAL_NOT_FOUND' ? 404 : error.code === 'WITHDRAWAL_CONFLICT' ? 409 : 400;
@@ -1159,14 +1163,6 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
   }
 
   res.json({ success: true, withdrawal });
-
-  recordAdminLog({
-    actor: req.adminActor,
-    action: 'withdrawal_reject',
-    targetType: 'withdrawal',
-    targetId: withdrawal._id,
-    details: `دلیل: ${reason}`
-  });
 
   // اطلاع‌رسانی رد شدن درخواست به کاربر (GRAM قبلاً در بالا برگردانده شده)
   const requesterUser = await User.findById(withdrawal.user, 'telegramId language');
@@ -1208,7 +1204,8 @@ router.post('/withdrawals/:id/status', async (req, res) => {
         targetStatus,
         reason,
         expectedStatus: existing.status,
-        allowedStatuses: [existing.status]
+        allowedStatuses: [existing.status],
+        audit: { actor: req.adminActor, action: `withdrawal_status_${targetStatus}`, targetType: 'withdrawal', details: reason ? `دلیل: ${reason}` : '' }
       }));
     } catch (error) {
       const status = error.code === 'WITHDRAWAL_NOT_FOUND' ? 404 : error.code === 'WITHDRAWAL_CONFLICT' ? 409 : 400;
@@ -1216,25 +1213,21 @@ router.post('/withdrawals/:id/status', async (req, res) => {
     }
   } else {
     // تغییر وضعیت غیرمالی همچنان با شرط وضعیت قبلی atomic است.
-    withdrawal = await Withdrawal.findOneAndUpdate(
-      { _id: existing._id, status: existing.status },
-      { $set: { status: targetStatus }, $push: { statusHistory: { status: targetStatus, at: new Date(), note: reason } } },
-      { new: true }
-    );
+    withdrawal = await withMongoTransaction(async session => {
+      const updated = await Withdrawal.findOneAndUpdate(
+        { _id: existing._id, status: existing.status },
+        { $set: { status: targetStatus }, $push: { statusHistory: { status: targetStatus, at: new Date(), note: reason } } },
+        { new: true, session }
+      );
+      if (updated) await recordAdminLogRequired({ actor: req.adminActor, action: `withdrawal_status_${targetStatus}`, targetType: 'withdrawal', targetId: updated._id, details: reason ? `دلیل: ${reason}` : '' }, session);
+      return updated;
+    });
     if (!withdrawal) {
       return res.status(400).json({ success: false, message: 'وضعیت این درخواست هم‌زمان توسط جای دیگری تغییر کرده؛ صفحه را رفرش کنید.' });
     }
   }
 
   res.json({ success: true, withdrawal: { ...withdrawal.toObject(), timeline: synthesizeHistory(withdrawal) } });
-
-  recordAdminLog({
-    actor: req.adminActor,
-    action: `withdrawal_status_${targetStatus}`,
-    targetType: 'withdrawal',
-    targetId: withdrawal._id,
-    details: reason ? `دلیل: ${reason}` : ''
-  });
 
   const amountLabel = `${withdrawal.cryptoAmount} ${withdrawal.token}`;
   const notifiedUser = await User.findById(withdrawal.user, 'telegramId language');
@@ -1363,11 +1356,11 @@ router.post('/users/:id/balance', async (req, res) => {
       transactionId
     });
     await audit.save({ session });
+    await recordAdminLogRequired({ actor: req.adminActor, action: `balance_${action}`, targetType: 'user', targetId: updated._id, details: `${currency}; ${cleanReason}; actionId=${actionId}` }, session);
     return { updated, audit, duplicate: false };
   });
   if (outcome.missing) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
   if (outcome.insufficient) return res.status(409).json({ success: false, message: 'کسر موجودی باعث منفی‌شدن موجودی می‌شود.' });
-  if (!outcome.duplicate) recordAdminLog({ actor: req.adminActor, action: `balance_${action}`, targetType: 'user', targetId: req.params.id, details: `${currency}; ${cleanReason}; actionId=${actionId}` });
   res.json({ success: true, duplicate: outcome.duplicate, user: outcome.updated || null, audit: outcome.audit });
 });
 
@@ -1410,9 +1403,11 @@ router.post('/users/bulk-balance', async (req, res) => {
       await audit.save({ session });
       results.push({ userId: id, duplicate: false, before, change, after });
     }
+    if (results.some(result => !result.duplicate)) {
+      await recordAdminLogRequired({ actor: req.adminActor, action: `bulk_balance_${action}`, targetType: 'user_batch', targetId: batchId, details: `${userIds.length} users; ${currency}; ${cleanReason}` }, session);
+    }
     return results;
   });
-  recordAdminLog({ actor: req.adminActor, action: `bulk_balance_${action}`, targetType: 'user_batch', targetId: batchId, details: `${userIds.length} users; ${currency}; ${cleanReason}` });
   res.json({ success: true, batchId, results: outcome });
 });
 
@@ -1436,10 +1431,10 @@ router.post('/users/:id/review-status', async (req, res) => {
       userId: user._id, action: 'account_status', currency: 'account', statusBefore: before, statusAfter: status, reason
     });
     await audit.save({ session });
+    await recordAdminLogRequired({ actor: req.adminActor, action: 'user_review_status', targetType: 'user', targetId: user._id, details: `${before} -> ${status}; ${reason}` }, session);
     return { duplicate: false, user, audit };
   });
   if (outcome.missing) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
-  if (!outcome.duplicate) recordAdminLog({ actor: req.adminActor, action: 'user_review_status', targetType: 'user', targetId: req.params.id, details: `${outcome.audit.statusBefore} -> ${status}; ${reason}` });
   res.json({ success: true, duplicate: outcome.duplicate, user: outcome.user || null, audit: outcome.audit });
 });
 

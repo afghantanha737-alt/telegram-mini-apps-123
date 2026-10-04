@@ -11,6 +11,7 @@ const TaskReactionState = require('../models/TaskReactionState');
 const Withdrawal = require('../models/Withdrawal');
 const { generateReferralCode } = require('../utils/telegramAuth');
 const { isAdminTelegramId, createAdminSessionStore } = require('../utils/telegramAdmin');
+const { claimWebhookUpdate, finishWebhookUpdate } = require('../utils/webhookDedup');
 const { linkReferralByCode } = require('../utils/referralSystem');
 const { extractReactionEmojis, extractAddedReactionEmojis } = require('../utils/latestPostEngagement');
 const { parseTelegramStart, handleTelegramStart } = require('../utils/telegramStart');
@@ -22,7 +23,7 @@ const {
   recordWebhookSecretRejection
 } = require('../utils/telegramWebhookMetrics');
 
-// وضعیت موقت گفت‌وگوی «/admin» (در حافظه؛ توضیح کامل در utils/telegramAdmin.js)
+// گفت‌وگوی مدیریتی کوتاه‌عمر در MongoDB ذخیره می‌شود تا بین نمونه‌ها مشترک باشد.
 const adminSessions = createAdminSessionStore();
 
 const ADMIN_MENU_KEYBOARD = {
@@ -76,7 +77,7 @@ async function handleAdminPending(chatId) {
 }
 
 async function handleAdminBroadcastPrompt(telegramId, chatId) {
-  adminSessions.setAwaitingContent(telegramId);
+  await adminSessions.setAwaitingContent(telegramId);
   await bot.sendMessage(
     chatId,
     `📢 پیامی که می‌خواهی برای همه‌ی کاربران فعال ارسال شود را بفرست (متن، عکس، یا حتی یک پست از کانالت را فوروارد کن).\n\nبرای انصراف: /cancel`
@@ -84,8 +85,8 @@ async function handleAdminBroadcastPrompt(telegramId, chatId) {
 }
 
 async function handleBroadcastContent(telegramId, chatId, message) {
-  adminSessions.clearAwaitingContent(telegramId);
-  adminSessions.setPendingConfirm(telegramId, chatId, message.message_id);
+  await adminSessions.clearAwaitingContent(telegramId);
+  await adminSessions.setPendingConfirm(telegramId, chatId, message.message_id);
   await bot.copyMessage(chatId, chatId, message.message_id); // پیش‌نمایش دقیقاً همان چیزی که کاربران می‌بینند
   await bot.sendMessage(chatId, '⬆️ این پیام برای همه‌ی کاربران فعال ارسال شود؟', {
     reply_markup: {
@@ -98,7 +99,7 @@ async function handleBroadcastContent(telegramId, chatId, message) {
 }
 
 async function handleBroadcastConfirm(telegramId, chatId) {
-  const pending = adminSessions.takePendingConfirm(telegramId);
+  const pending = await adminSessions.takePendingConfirm(telegramId);
   if (!pending) {
     await bot.sendMessage(chatId, 'چیزی برای ارسال در انتظار نیست. از «📢 ارسال پیام همگانی» دوباره شروع کن.');
     return;
@@ -122,7 +123,7 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'admin_broadcast') return handleAdminBroadcastPrompt(telegramId, chatId);
   if (data === 'admin_broadcast_confirm') return handleBroadcastConfirm(telegramId, chatId);
   if (data === 'admin_broadcast_cancel') {
-    adminSessions.takePendingConfirm(telegramId);
+    await adminSessions.takePendingConfirm(telegramId);
     return bot.sendMessage(chatId, 'لغو شد.');
   }
 }
@@ -207,40 +208,49 @@ async function handleMessageReaction(update) {
   }
 }
 
-// POST /api/telegram/webhook — دریافت آپدیت از تلگرام
+// POST /api/telegram/webhook — secret verification fails closed, then update_id is durably claimed.
 router.post('/webhook', async (req, res) => {
-  if (WEBHOOK_SECRET) {
-    const headerSecret = req.headers['x-telegram-bot-api-secret-token'];
-    if (headerSecret !== WEBHOOK_SECRET) {
-      recordWebhookSecretRejection();
-      return res.sendStatus(401);
-    }
+  const configuredSecret = String(WEBHOOK_SECRET || '');
+  if (!/^[A-Za-z0-9_-]{1,256}$/.test(configuredSecret)) {
+    recordWebhookSecretRejection();
+    return res.status(503).json({ success: false, code: 'WEBHOOK_SECRET_UNAVAILABLE' });
+  }
+  const suppliedSecret = req.get('X-Telegram-Bot-Api-Secret-Token') || '';
+  const expectedBuffer = Buffer.from(configuredSecret, 'utf8');
+  const suppliedBuffer = Buffer.from(String(suppliedSecret), 'utf8');
+  if (expectedBuffer.length !== suppliedBuffer.length || !require('crypto').timingSafeEqual(expectedBuffer, suppliedBuffer)) {
+    recordWebhookSecretRejection();
+    return res.sendStatus(401);
   }
 
   const update = req.body;
+  const updateId = Number(update?.update_id);
+  if (!Number.isSafeInteger(updateId) || updateId < 0) {
+    return res.status(400).json({ success: false, code: 'INVALID_UPDATE_ID' });
+  }
   const updateType = update?.channel_post ? 'channel_post'
     : update?.message_reaction ? 'message_reaction'
       : update?.callback_query ? 'callback_query'
         : parseTelegramStart(update?.message?.text) ? 'start'
           : update?.message ? 'message' : 'other';
+
+  let claim;
+  try {
+    claim = await claimWebhookUpdate(updateId, updateType);
+  } catch (error) {
+    recordWebhookProcessingFailure();
+    console.error('Telegram webhook deduplication could not be persisted:', error.message || error);
+    return res.sendStatus(503);
+  }
+  if (claim.duplicate) return res.sendStatus(200);
+  if (!claim.claimed) return res.status(400).json({ success: false, code: 'INVALID_UPDATE_ID' });
   recordWebhookUpdate(updateType);
 
-  if (update?.channel_post || update?.message_reaction) {
-    try {
-      if (update.channel_post) await handleLatestChannelPost(update);
-      if (update.message_reaction) await handleMessageReaction(update);
-      return res.sendStatus(200);
-    } catch (error) {
-      recordWebhookProcessingFailure();
-      console.error('Telegram engagement update processing failed; requesting retry:', error.message || error);
-      return res.sendStatus(500);
-    }
-  }
+  try {
+    if (update?.channel_post) await handleLatestChannelPost(update);
+    if (update?.message_reaction) await handleMessageReaction(update);
 
-  // Acknowledge /start only after user creation/referral handling and sendMessage succeed.
-  // This makes Telegram retry transient failures instead of silently losing the Welcome.
-  if (bot && update?.message && updateType === 'start') {
-    try {
+    if (bot && update?.message && updateType === 'start') {
       const result = await handleTelegramStart({
         message: update.message,
         bot,
@@ -252,87 +262,59 @@ router.post('/webhook', async (req, res) => {
       });
       if (result?.welcomeSent) recordStartWelcomeSent();
       console.info('Telegram /start handled', {
-        updateId: update.update_id,
+        updateId,
         isNewUser: Boolean(result?.isNewUser),
         referralPayloadReceived: Boolean(result?.hadReferralPayload),
         welcomeSent: Boolean(result?.welcomeSent)
       });
-      return res.sendStatus(200);
-    } catch (error) {
-      recordStartHandlerFailure();
-      console.error('Telegram /start failed; requesting retry:', {
-        updateId: update.update_id,
-        error: error.message || String(error)
-      });
-      return res.sendStatus(500);
-    }
-  }
-
-  res.sendStatus(200);
-  try {
-    if (bot && update && update.callback_query) {
+    } else if (bot && update?.callback_query) {
       await handleCallbackQuery(update.callback_query);
-      return;
-    }
-
-    const message = update && update.message;
-    if (!bot || !message) return;
-
-    const chatId = message.chat.id;
-    const senderId = message.from && String(message.from.id);
-    const text = (message.text || '').trim();
-
-    // ---- جریان «/admin» در خود تلگرام (فقط برای آیدی‌های داخل ADMIN_TELEGRAM_IDS) ----
-    if (text === '/admin') {
-      if (isAdminTelegramId(senderId)) {
-        await sendAdminMenu(chatId);
-      } else {
-        await bot.sendMessage(
-          chatId,
-          `آیدی عددی شما: ${senderId}
-
-برای دسترسی مدیریتی از تلگرام، این عدد را به متغیر محیطی ADMIN_TELEGRAM_IDS در تنظیمات سرور اضافه کنید.`
-        );
+    } else if (bot && update?.message) {
+      const message = update.message;
+      const chatId = message.chat.id;
+      const senderId = message.from && String(message.from.id);
+      const text = (message.text || '').trim();
+      if (text === '/admin') {
+        if (isAdminTelegramId(senderId)) await sendAdminMenu(chatId);
+        else await bot.sendMessage(chatId, `آیدی عددی شما: ${senderId}\n\nبرای دسترسی مدیریتی از تلگرام، این عدد را به متغیر محیطی ADMIN_TELEGRAM_IDS در تنظیمات سرور اضافه کنید.`);
+      } else if (isAdminTelegramId(senderId) && text === '/cancel' && await adminSessions.isAwaitingContent(senderId)) {
+        await adminSessions.clearAwaitingContent(senderId);
+        await bot.sendMessage(chatId, 'ارسال پیام همگانی لغو شد.');
+      } else if (isAdminTelegramId(senderId) && await adminSessions.isAwaitingContent(senderId)) {
+        await handleBroadcastContent(senderId, chatId, message);
       }
-      return;
     }
 
-    if (isAdminTelegramId(senderId) && text === '/cancel' && adminSessions.isAwaitingContent(senderId)) {
-      adminSessions.clearAwaitingContent(senderId);
-      await bot.sendMessage(chatId, 'ارسال پیام همگانی لغو شد.');
-      return;
-    }
-
-    // پیام (متن/عکس/فوروارد) که ادمین بعد از زدن «📢 ارسال پیام همگانی» می‌فرستد
-    if (isAdminTelegramId(senderId) && adminSessions.isAwaitingContent(senderId)) {
-      await handleBroadcastContent(senderId, chatId, message);
-      return;
-    }
-
-    if (!text) return;
+    await finishWebhookUpdate(updateId, 'completed');
+    return res.sendStatus(200);
   } catch (error) {
     recordWebhookProcessingFailure();
-    console.error('Webhook handling error:', error);
+    if (updateType === 'start') recordStartHandlerFailure();
+    await finishWebhookUpdate(updateId, 'failed', error?.code || 'PROCESSING_FAILED').catch(logError => {
+      console.error('Could not persist failed Telegram update status:', logError.message || logError);
+    });
+    console.error('Telegram webhook update processing failed:', { updateId, updateType, error: error.message || String(error) });
+    return res.sendStatus(500);
   }
 });
 
-// GET /api/telegram/set-webhook — یک‌بار برای تنظیم وبهوک صدا بزنید
-router.get('/set-webhook', async (req, res) => {
-  const adminKey = req.headers['x-admin-key'] || req.query.key;
+// POST /api/telegram/set-webhook — admin key is accepted only in a request header.
+router.post('/set-webhook', async (req, res) => {
+  const adminKey = req.headers['x-admin-key'];
   if (!isValidAdminKey(typeof adminKey === 'string' ? adminKey : '')) {
-    return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز. کلید ادمین لازم است (?key=ADMIN_KEY).' });
+    return res.status(403).json({ success: false, message: 'دسترسی غیرمجاز.' });
   }
   if (!bot || !APP_URL) {
     return res.status(400).json({ success: false, message: 'BOT_TOKEN یا APP_URL تنظیم نشده است.' });
   }
-  if (WEBHOOK_SECRET && !/^[A-Za-z0-9_-]{1,256}$/.test(WEBHOOK_SECRET)) {
+  if (!/^[A-Za-z0-9_-]{1,256}$/.test(WEBHOOK_SECRET)) {
     return res.status(400).json({ success: false, message: 'TELEGRAM_WEBHOOK_SECRET باید ۱ تا ۲۵۶ کاراکتر و فقط شامل حروف انگلیسی، عدد، _ یا - باشد.' });
   }
   try {
     const url = `${APP_URL.replace(/\/$/, '')}/api/telegram/webhook`;
     const options = {
       allowed_updates: ['message', 'callback_query', 'channel_post', 'message_reaction'],
-      ...(WEBHOOK_SECRET ? { secret_token: WEBHOOK_SECRET } : {})
+      secret_token: WEBHOOK_SECRET
     };
     await bot.setWebHook(url, options);
     const info = await bot.getWebhookInfo();

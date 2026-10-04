@@ -1,40 +1,91 @@
-GRAMUP VIP — SMALL UI TEXT FIX
+GRAMUP VIP PURCHASE ERROR — DEBUG AND FIX ONLY
 
-Only fix the incorrect reward label in the VIP Plans cards.
+The VIP UI design is now correct. DO NOT change the design.
 
 CURRENT PROBLEM:
-The UI currently says something like:
-"مجموعه پاداش روزانه: 120 Points"
+When a user clicks "Buy" on a VIP plan and confirms the purchase, the purchase fails.
 
-This is incorrect because 120 Points is the TOTAL reward for the full 30-day VIP 2 period, not the daily reward.
+The app displays an error similar to:
 
-CHANGE ONLY THE LABEL:
+"تنظیمات یا شناسه پلان VIP معتبر نیست"
 
-Replace:
-"مجموعه پاداش روزانه"
+The VIP purchase must work correctly.
 
-With:
-"مجموع پاداش"
+TASK:
 
-Example:
-VIP 2:
+Find the exact reason why the selected VIP Plan ID/configuration is considered invalid during purchase.
 
-- مجموع پاداش: 120 Points
-- پاداش روزانه: 4 Points
+Check the complete purchase flow:
 
-VIP 1:
+1. VIP plan displayed in the UI
+2. Plan ID passed when clicking Buy
+3. Selected plan state
+4. Purchase request/API payload
+5. Backend VIP plan lookup
+6. Database/configuration lookup
+7. Validation of the VIP Plan ID
+8. Purchase confirmation response
 
-- مجموع پاداش: 50 Points
-- پاداش روزانه: ~1.67 Points
-
-VIP 3:
-
-- مجموع پاداش: 210 Points
-- پاداش روزانه: 7 Points
+Identify the actual mismatch or missing configuration.
 
 IMPORTANT:
-Do NOT change any numbers, calculations, data, business logic, API, buttons, layout, styling, navigation, or functionality.
+Do NOT guess the solution.
 
-Only correct this text label.
+First trace the existing code and determine exactly where the invalid Plan ID/configuration error is generated.
 
-Do not modify anything else.
+Then fix ONLY the cause of this purchase error.
+
+STRICT RULES:
+
+DO NOT change:
+
+- VIP UI design
+- VIP card design
+- Colors
+- Layout
+- Typography
+- Navigation
+- Home
+- Tasks
+- Spin
+- Wallet
+- Profile
+- Referral
+- Transaction History
+- Admin Panel
+- Reward calculations
+- Daily rewards
+- Principal return logic
+
+Do NOT change VIP prices or rewards.
+
+Do NOT create a new VIP purchase system.
+
+Use the existing purchase system and fix only the broken Plan ID/configuration connection.
+
+After fixing, verify that:
+
+- VIP 1 can be selected correctly
+- VIP 2 can be selected correctly
+- VIP 3 can be selected correctly
+- The correct Points price is charged
+- The correct VIP plan is activated
+- Existing VIP functionality remains unchanged
+
+IMPORTANT FILE RULE:
+
+Modify only the minimum necessary file(s) required to fix the actual error.
+
+Do not refactor unrelated code.
+
+FINAL RESPONSE:
+
+Tell me:
+
+1. The exact cause of the error.
+2. The exact file(s) that were modified.
+3. The complete final content of every modified file.
+
+Do NOT return snippets.
+
+Do NOT change anything unrelated to the VIP purchase error.

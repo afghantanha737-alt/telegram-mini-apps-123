@@ -194,6 +194,15 @@ async function main() {
   assert.ok(source('server.js').includes('withDistributedJobLock'));
   assert.ok(source('routes/leaderboard.js').includes("{ isBanned: false }"));
   assert.ok(!source('public/js/app.js').includes('initData=${'));
+  const appSource = source('public/js/app.js');
+  const safeTaskHelper = appSource.match(/function safeTaskHttpUrl\(value\) \{[\s\S]*?\n\}/);
+  assert.ok(safeTaskHelper, 'task renderer helper must be declared before runtime use');
+  const safeTaskHttpUrl = new Function(`${safeTaskHelper[0]}; return safeTaskHttpUrl;`)();
+  assert.strictEqual(safeTaskHttpUrl('https://t.me/gramup'), 'https://t.me/gramup');
+  assert.strictEqual(safeTaskHttpUrl('javascript:alert(1)'), '');
+  assert.strictEqual(safeTaskHttpUrl('tg://resolve?domain=gramup'), '');
+  assert.strictEqual(safeTaskHttpUrl('https://user:pass@example.com'), '');
+  assert.ok(source('public/index.html').includes('app.js?v=20261004-task-url-fix'));
   assert.ok(source('public/js/app.js').includes('X-Telegram-Init-Data'));
   assert.ok(source('public/js/app.js').includes('getPendingIdempotencyKey("withdraw")'));
   assert.ok(!source('public/js/app.js').includes('idempotencyKeyFor("withdraw")'));

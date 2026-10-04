@@ -363,6 +363,8 @@ function applyStaticTranslations() {
   $$("[data-i18n-html]").forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); }); // فقط رشته‌های داخلی خودمان (i18n.js)
   $$("[data-i18n-ph]").forEach(el => { el.setAttribute("placeholder", t(el.dataset.i18nPh)); });
   $$("[data-i18n-aria]").forEach(el => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
+  const exchangeOverlay = $("#exchangeOverlay");
+  if (exchangeOverlay && exchangeOverlay.style.display !== "none") updateExchangePreview();
   renderOnboardingStep();
   updateThemeUI();
   updateHeader();
@@ -1720,13 +1722,13 @@ function setExchangeDirection(direction) {
   const input = $("#exchangePoints");
   const title = $("#exchangeTitle");
   if (exchangeDirection === "points_to_gram") {
-    if (label) label.textContent = t("exchange_points_label");
-    if (input) input.setAttribute("placeholder", t("exchange_points_ph"));
-    if (title) title.textContent = t("exchange_modal_title");
+    if (label) { label.dataset.i18n = "exchange_points_label"; label.textContent = t("exchange_points_label"); }
+    if (input) { input.dataset.i18nPh = "exchange_points_ph"; input.setAttribute("placeholder", t("exchange_points_ph")); }
+    if (title) { title.dataset.i18n = "exchange_modal_title"; title.textContent = t("exchange_modal_title"); }
   } else {
-    if (label) label.textContent = t("exchange_gram_label");
-    if (input) input.setAttribute("placeholder", t("withdraw_amount_ph"));
-    if (title) title.textContent = t("exchange_modal_title_reverse");
+    if (label) { label.dataset.i18n = "exchange_gram_label"; label.textContent = t("exchange_gram_label"); }
+    if (input) { input.dataset.i18nPh = "withdraw_amount_ph"; input.setAttribute("placeholder", t("withdraw_amount_ph")); }
+    if (title) { title.dataset.i18n = "exchange_modal_title_reverse"; title.textContent = t("exchange_modal_title_reverse"); }
   }
 
   if (input) input.value = "";
@@ -2574,7 +2576,7 @@ function renderReferralPageHeader() {
         <svg viewBox="0 0 24 24" fill="none"><path d="M15.5 19.5v-1.3a3.2 3.2 0 0 0-3.2-3.2H6.7a3.2 3.2 0 0 0-3.2 3.2v1.3M9.5 11.5a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2ZM19 8v6M16 11h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div class="referralHeadingText">
-        <span class="rf-overline">GRAMUP / COMMUNITY</span>
+        <span class="rf-overline">${t("referral_eyebrow")}</span>
         <h1 class="referralPageTitle">${t("referral_hub_title")}</h1>
         <p class="referralPageSubtitle">${t("referral_hub_subtitle")}</p>
       </div>

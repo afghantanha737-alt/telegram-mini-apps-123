@@ -1,5 +1,6 @@
 'use strict';
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 
 const taskCompletionSchema = new mongoose.Schema(
   {
@@ -33,19 +34,19 @@ const taskCompletionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Legacy rows may lack user/task. Exclude those malformed historical rows from
-// uniqueness enforcement while preserving one completion per valid ObjectId pair.
-taskCompletionSchema.index(
-  { user: 1, task: 1 },
-  {
-    name: 'taskcompletion_user_task_unique_objectids',
-    unique: true,
-    partialFilterExpression: {
-      user: { $type: 'objectId' },
-      task: { $type: 'objectId' }
-    }
+// Historical data may contain multiple completion rows for the same user/task,
+// so a unique compound index cannot be built safely during application startup.
+// New rows use a deterministic _id to retain database-level concurrency safety.
+taskCompletionSchema.statics.idForUserTask = function idForUserTask(userId, taskId) {
+  const user = String(userId?._id || userId || '');
+  const task = String(taskId?._id || taskId || '');
+  if (!mongoose.isValidObjectId(user) || !mongoose.isValidObjectId(task)) {
+    throw new TypeError('TaskCompletion requires valid user and task ObjectIds.');
   }
-);
+  const digest = crypto.createHash('sha256').update(`gramup:task-completion:${user}:${task}`).digest('hex');
+  return new mongoose.Types.ObjectId(digest.slice(0, 24));
+};
+taskCompletionSchema.index({ user: 1, task: 1 }, { name: 'taskcompletion_user_task_lookup' });
 taskCompletionSchema.index({ user: 1, status: 1, createdAt: -1 });
 taskCompletionSchema.index({ task: 1, status: 1, createdAt: -1 });
 

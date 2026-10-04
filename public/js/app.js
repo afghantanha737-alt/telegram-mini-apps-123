@@ -389,7 +389,7 @@ function updateNavigation() {
   });
 }
 async function navigate(tab) {
-  const validTabs = ["home", "tasks", "daily", "spin", "vip", "wallet", "profile"];
+  const validTabs = ["home", "tasks", "daily", "vip", "wallet", "profile"];
   if (!validTabs.includes(tab)) tab = "home";
   clearInterval(countdownInterval);
   state.activeTab = tab;
@@ -1612,24 +1612,19 @@ function renderDaily() {
   }).join("");
   content.innerHTML = `
     <div class="sectionHeader"><h2 class="sectionTitle">${t("daily_title")}</h2></div>
-    <div class="streakBox"><div class="streakFire">🔥</div><div><div class="streakValue">${formatPoints(state.streak)}</div><div class="streakLabel">${t("streak_label")}</div></div></div>
-    <div class="card"><div class="cardHeader"><div class="cardTitle">${t("daily_calendar_title")}</div></div><div class="dailyGrid">${dayCells}</div>
-      <button id="checkinBtn" class="primaryBtn" type="button" ${state.canCheckIn ? "" : "disabled"} onclick="doCheckIn()">${state.canCheckIn ? t("checkin_button") : t("checkin_done_button")}</button>
-      ${!state.canCheckIn ? `<div style="text-align:center;margin-top:10px"><div class="small" style="color:var(--text-muted);font-size:10px">${t("reset_countdown_label")}</div><div id="resetCountdown" style="font-size:20px;font-weight:900;margin-top:4px;letter-spacing:1px">00:00:00</div></div>` : ""}
-    </div>`;
-  startResetCountdown();
-}
-function renderSpin() {
-  const content = $("#content");
-  content.innerHTML = `
-    <div class="sectionHeader"><h2 class="sectionTitle">${t("spin_title")}</h2></div>
     <div class="card" style="text-align:center"><div class="cardHeader" style="justify-content:center"><div class="cardTitle">${t("spin_title")}</div></div>
       <div class="wheelOuter"><div class="wheelRingDots">${buildWheelRingDots()}</div><div class="wheelPointer">▼</div><div class="wheelDisc" id="wheelDisc" style="background:${buildWheelGradient()}">${buildWheelLabels()}</div><div class="wheelHub"><span>✦</span></div></div>
       <p style="font-size:11px;margin:14px 0 4px">${t("spin_chances_label")}: <b id="spinChancesValue">${formatPoints(state.spinChances)}</b></p>
       <button id="spinBtn" class="primaryBtn wheelSpinBtn" type="button" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">🎡 ${t("spin_button")}</button>
       <button id="paidSpinBtn" class="secondaryBtn wheelPaidBtn" type="button" ${state.points < state.spinCostPoints ? "disabled" : ""} onclick="doSpin(true)">🪙 ${t("spin_paid_button", { n: formatPoints(state.spinCostPoints) })}</button>
       <p class="wheelPaidHint">${t("spin_paid_hint", { n: formatPoints(state.spinCostPoints) })}</p>
+    </div>
+    <div class="streakBox"><div class="streakFire">🔥</div><div><div class="streakValue">${formatPoints(state.streak)}</div><div class="streakLabel">${t("streak_label")}</div></div></div>
+    <div class="card"><div class="cardHeader"><div class="cardTitle">${t("daily_calendar_title")}</div></div><div class="dailyGrid">${dayCells}</div>
+      <button id="checkinBtn" class="primaryBtn" type="button" ${state.canCheckIn ? "" : "disabled"} onclick="doCheckIn()">${state.canCheckIn ? t("checkin_button") : t("checkin_done_button")}</button>
+      ${!state.canCheckIn ? `<div style="text-align:center;margin-top:10px"><div class="small" style="color:var(--text-muted);font-size:10px">${t("reset_countdown_label")}</div><div id="resetCountdown" style="font-size:20px;font-weight:900;margin-top:4px;letter-spacing:1px">00:00:00</div></div>` : ""}
     </div>`;
+  startResetCountdown();
 }
 /* ================= WALLET ================= */
 function showWithdraw() {
@@ -2403,11 +2398,6 @@ function renderProfileMenu() {
         <div class="profileItem" onclick="setProfileView('history')">
           <div class="profileIcon">🧾</div>
           <div class="profileText">${t("menu_history")}</div>
-          <div class="profileChevron">‹</div>
-        </div>
-        <div class="profileItem" onclick="setProfileView('vip')">
-          <div class="profileIcon">💎</div>
-          <div class="profileText">${t("menu_vip_plans")}</div>
           <div class="profileChevron">‹</div>
         </div>
         <div class="profileItem" onclick="setProfileView('about')">
@@ -3191,9 +3181,6 @@ async function renderCurrentTab() {
     } else if (state.activeTab === "daily") {
       await loadUserData();
       renderDaily();
-    } else if (state.activeTab === "spin") {
-      await loadUserData();
-      renderSpin();
     } else if (state.activeTab === "vip") {
       await loadUserData();
       await renderVipTab();

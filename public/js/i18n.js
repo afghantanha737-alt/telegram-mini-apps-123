@@ -6,7 +6,7 @@
 
 const TRANSLATIONS = {
   fa: {
-    nav_home: "خانه", nav_tasks: "تسک‌ها", nav_daily: "روزانه", nav_spin: "گردونه", nav_vip: "VIP", nav_wallet: "کیف پول", nav_profile: "پروفایل",
+    nav_home: "خانه", nav_tasks: "تسک‌ها", nav_daily: "گردونه", nav_spin: "گردونه", nav_vip: "VIP", nav_wallet: "کیف پول", nav_profile: "پروفایل",
     greet_hello: "سلام {name} 👋",
     points_unit: "پوینت",
     hero_eyebrow: "TASK & LOYALTY",
@@ -391,7 +391,7 @@ const TRANSLATIONS = {
   },
 
   ps: {
-    nav_home: "کور", nav_tasks: "دندې", nav_daily: "ورځنی", nav_spin: "ګرځونه", nav_vip: "VIP", nav_wallet: "والټ", nav_profile: "پروفایل",
+    nav_home: "کور", nav_tasks: "دندې", nav_daily: "ګرځونه", nav_spin: "ګرځونه", nav_vip: "VIP", nav_wallet: "والټ", nav_profile: "پروفایل",
     greet_hello: "سلام {name} 👋",
     points_unit: "پوائن",
     hero_eyebrow: "TASK & LOYALTY",
@@ -776,7 +776,7 @@ const TRANSLATIONS = {
   },
 
   en: {
-    nav_home: "Home", nav_tasks: "Tasks", nav_daily: "Daily", nav_spin: "Spin", nav_vip: "VIP", nav_wallet: "Wallet", nav_profile: "Profile",
+    nav_home: "Home", nav_tasks: "Tasks", nav_daily: "Spin", nav_spin: "Spin", nav_vip: "VIP", nav_wallet: "Wallet", nav_profile: "Profile",
     greet_hello: "Hi {name} 👋",
     points_unit: "points",
     hero_eyebrow: "TASK & LOYALTY",

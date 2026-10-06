@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Settings = require('../models/Settings');
 const ReferralRelationship = require('../models/ReferralRelationship');
 const { withMongoTransaction } = require('./mongoTransaction');
+const { sendNotificationOnce } = require('./notificationDelivery');
 const {
   DEFAULT_REFERRAL_LEVEL_RATES,
   DEFAULT_REFERRAL_INITIAL_REWARD_POINTS,
@@ -21,6 +22,11 @@ function sessionQuery(query, session) {
 function safeRates(settings) {
   try { return normalizeReferralRates(settings?.referralLevelRates); }
   catch { return [...DEFAULT_REFERRAL_LEVEL_RATES]; }
+}
+
+function referralDiagnostic(stage, details = {}) {
+  if (process.env.NODE_ENV !== 'test') return;
+  console.info('[REFERRAL_DIAGNOSTIC]', JSON.stringify({ stage, ...details }));
 }
 
 async function getReferralSettings(session) {
@@ -67,7 +73,7 @@ async function createOrUpdateRelationship({ referrerId, referredUserId, level, s
 async function linkReferral({ referredUserId, referrerId, riskScore = 0, riskFlags = [], source = 'signup' }) {
   if (!referredUserId || !referrerId || String(referredUserId) === String(referrerId)) return { linked: false, reason: 'invalid_link' };
 
-  return withMongoTransaction(async session => {
+  const result = await withMongoTransaction(async session => {
     let invitee = await sessionQuery(User.findById(referredUserId), session);
     const referrer = await sessionQuery(User.findById(referrerId), session);
     if (!invitee || !referrer || referrer.isBanned) return { linked: false, reason: 'invalid_referrer' };
@@ -125,12 +131,38 @@ async function linkReferral({ referredUserId, referrerId, riskScore = 0, riskFla
     }
 
     let initialPaid = false;
+    referralDiagnostic('relationship_registered', {
+      directRelationshipStatus: directRelationship?.status || null,
+      initialRewardStatus: directRelationship?.initialRewardStatus || null
+    });
+    const paymentGateReasons = [];
+    if (!invitee.referralInitialRewardEligible) paymentGateReasons.push('referralInitialRewardEligible_false');
+    if (!directRelationship) paymentGateReasons.push('directRelationship_missing');
+    else if (directRelationship.status !== 'active') paymentGateReasons.push(`directRelationship_status_${directRelationship.status || 'missing'}`);
+    referralDiagnostic('payment_gate', {
+      referralInitialRewardEligible: Boolean(invitee.referralInitialRewardEligible),
+      directRelationshipStatus: directRelationship?.status || null,
+      initialRewardPoints,
+      referralRiskScore: Number(invitee.referralRiskScore) || 0,
+      referralRiskFlags: Array.isArray(invitee.referralRiskFlags) ? invitee.referralRiskFlags : [],
+      accountReviewStatus: invitee.accountReviewStatus || 'normal',
+      isBanned: Boolean(invitee.isBanned),
+      referralRiskBlocked: Boolean(invitee.referralRiskBlocked),
+      referrerAccountReviewStatus: referrer.accountReviewStatus || 'normal',
+      referrerIsBanned: Boolean(referrer.isBanned),
+      referrerReferralRiskBlocked: Boolean(referrer.referralRiskBlocked),
+      referrerReferralRiskScore: Number(referrer.referralRiskScore) || 0,
+      initialRewardStatus: directRelationship?.initialRewardStatus || null,
+      paymentGatePassed: paymentGateReasons.length === 0,
+      paymentGateReasons
+    });
     if (invitee.referralInitialRewardEligible && directRelationship?.status === 'active') {
       const claimed = await User.findOneAndUpdate(
         { _id: invitee._id, referredBy: referrer._id, referralInitialRewardEligible: true },
         { $set: { referralInitialRewardEligible: false } },
         { new: true, session }
       );
+      referralDiagnostic('claim', { result: claimed ? 'claimed' : 'null' });
       if (claimed) {
         const sourceId = `referral-initial:${invitee._id}`;
         if (initialRewardPoints > 0) {
@@ -143,6 +175,7 @@ async function linkReferral({ referredUserId, referrerId, riskScore = 0, riskFla
               { new: true, session }
             );
             if (!updatedReferrer) throw new Error('دعوت‌کننده برای پاداش اولیه Referral پیدا نشد.');
+            referralDiagnostic('points_update', { applied: true });
             const { recordLedgerRequired } = require('./ledger');
             const ledgerResult = await recordLedgerRequired({
               user: updatedReferrer._id,
@@ -157,6 +190,7 @@ async function linkReferral({ referredUserId, referrerId, riskScore = 0, riskFla
               recipientUserId: updatedReferrer._id,
               session
             });
+            referralDiagnostic('ledger', { created: Boolean(ledgerResult.created) });
             if (!ledgerResult.created) {
               const error = new Error('Referral initial reward was concurrently recorded; abort to preserve idempotency.');
               error.code = 'REFERRAL_INITIAL_DUPLICATE_RACE';
@@ -173,13 +207,61 @@ async function linkReferral({ referredUserId, referrerId, riskScore = 0, riskFla
       }
     }
 
+    referralDiagnostic('transaction_work_complete', {
+      initialPaid,
+      initialRewardStatus: directRelationship?.initialRewardStatus || null,
+      referralInitialRewardEligible: Boolean(invitee.referralInitialRewardEligible)
+    });
+
     if (directRelationship && !invitee.referralInitialRewardEligible && !linkedNow && directRelationship.initialRewardStatus !== 'paid') {
       directRelationship.initialRewardStatus = 'legacy_exempt';
       await directRelationship.save({ session });
     }
 
-    return { linked: linkedNow || Boolean(invitee.referredBy), created: linkedNow, initialPaid, referrerId: referrer._id, referredUserId: invitee._id };
+    const referredName = invitee.username
+      ? `@${invitee.username}`
+      : [invitee.firstName, invitee.lastName].filter(Boolean).join(' ') || '—';
+    return {
+      linked: linkedNow || Boolean(invitee.referredBy),
+      created: linkedNow,
+      initialPaid,
+      referrerId: referrer._id,
+      referredUserId: invitee._id,
+      notification: initialPaid && initialRewardPoints > 0 ? {
+        eventKey: `referral-initial:${invitee._id}`,
+        type: 'referral_initial',
+        user: referrer._id,
+        telegramId: referrer.telegramId,
+        language: referrer.language,
+        referredName,
+        rewardPoints: initialRewardPoints
+      } : null
+    };
   });
+
+  referralDiagnostic('commit', { committed: true, initialPaid: Boolean(result.initialPaid) });
+
+  if (result.notification) {
+    referralDiagnostic('notification_trigger', { triggered: true });
+    const notification = result.notification;
+    sendNotificationOnce({
+      eventKey: notification.eventKey,
+      type: notification.type,
+      user: notification.user,
+      telegramId: notification.telegramId,
+      text: require('./botMessages').botText(
+        'referralInitial',
+        notification.language,
+        notification.referredName,
+        notification.rewardPoints
+      )
+    }).catch(error => console.error('Referral notification failed:', error.message || error));
+  } else {
+    referralDiagnostic('notification_trigger', { triggered: false });
+  }
+
+  const { notification, ...publicResult } = result;
+  return publicResult;
 }
 
 async function findReferrerByIdentifier(identifier, projection = '_id telegramId isBanned signupIpHash') {
@@ -211,11 +293,6 @@ async function distributeReferralCommissions(earningEntry, session) {
   const { rates } = await getReferralSettings(session);
   const origin = await sessionQuery(User.findById(earningEntry.user).select('_id referredBy isBanned accountReviewStatus referralRiskBlocked referralRiskScore createdAt'), session);
   if (!origin || !origin.referredBy) return [];
-  const TaskCompletion = require('../models/TaskCompletion');
-  const completions = await sessionQuery(TaskCompletion.find({ user: origin._id, status: 'approved' }).select('status createdAt'), session);
-  const { evaluateReferralEligibility } = require('./referralEligibility');
-  if (!evaluateReferralEligibility(origin, completions, new Date()).eligible) return [];
-
   const paid = [];
   const pathUsers = [origin];
   const seen = new Set([String(origin._id)]);

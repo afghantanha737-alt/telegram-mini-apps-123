@@ -6,8 +6,8 @@ const Settings = require('../models/Settings');
 const WeeklyLeaderboardAward = require('../models/WeeklyLeaderboardAward');
 const { withMongoTransaction } = require('./mongoTransaction');
 const { recordLedgerRequired } = require('./ledger');
-const { notifyUser } = require('./bot');
 const { botText } = require('./botMessages');
+const { sendNotificationOnce } = require('./notificationDelivery');
 const { startOfUtcWeek, endOfUtcWeek, weekKey: buildWeekKey } = require('./weeklyLeaderboard');
 
 const POSITIVE_TYPES = Object.freeze(['task', 'checkin', 'spin', 'referral_bonus']);
@@ -171,10 +171,13 @@ async function settleWeek(week, options = {}) {
       });
 
       if (payment.status === 'paid' && options.notify !== false && row.user?.telegramId) {
-        notifyUser(
-          row.user.telegramId,
-          botText('leaderboardReward', row.user.language, rank, rewardPoints, window.key)
-        ).catch(() => {});
+        sendNotificationOnce({
+          eventKey: `weekly-reward:${window.key}:${rank}`,
+          type: 'weekly_reward',
+          user: payment.user,
+          telegramId: row.user.telegramId,
+          text: botText('leaderboardReward', row.user.language, rank, payment.points)
+        }).catch(error => console.error('Weekly reward notification failed:', error.message || error));
       }
 
       results.push({ rank, status: payment.status, points: payment.points || rewardPoints, user: payment.user });

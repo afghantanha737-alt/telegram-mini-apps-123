@@ -193,9 +193,9 @@ router.get('/me', auth, async (req, res) => {
       waitDays: REFERRAL_WAIT_DAYS
     },
     referralTasks: buildReferralTaskProgress(u.activeInvitedCount, u.referralRewardClaims),
-    // Per-person identities, Telegram IDs, and earnings are deliberately omitted.
-    invited: [],
-    team: []
+    // Referral View deliberately exposes only safe display fields; Telegram IDs are omitted.
+    invited: referralView.team,
+    team: referralView.team
   });
 });
 

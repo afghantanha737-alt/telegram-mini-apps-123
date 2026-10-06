@@ -12,6 +12,7 @@ const Settings = require('../models/Settings');
 const { normalizeTonAddress, amountToNanoGram } = require('../utils/tonNativeDepositVerify');
 const { bot, notifyUser, markTelegramBlocked, isTelegramDeliveryBlocked, broadcastToActiveUsers } = require('../utils/bot');
 const { botText } = require('../utils/botMessages');
+const { sendNotificationOnce } = require('../utils/notificationDelivery');
 const { verifyTonTransaction, normalizeTonTxHash, legacyTonTxHashMatcher } = require('../utils/tonVerify');
 const { recordLedgerRequired } = require('../utils/ledger');
 const { recordAdminLog, recordAdminLogRequired } = require('../utils/adminLog');
@@ -22,7 +23,12 @@ const PointsLedger = require('../models/PointsLedger');
 const BalanceAudit = require('../models/BalanceAudit');
 const ReferralRelationship = require('../models/ReferralRelationship');
 const WeeklyLeaderboardAward = require('../models/WeeklyLeaderboardAward');
+const LatestPostEngagementState = require('../models/LatestPostEngagementState');
+const Deposit = require('../models/Deposit');
+const NotificationDelivery = require('../models/NotificationDelivery');
+const IdempotencyOperation = require('../models/IdempotencyOperation');
 const VipPlan = require('../models/VipPlan');
+const VipSubscription = require('../models/VipSubscription');
 const { isValidAdminKey } = require('../utils/adminKey');
 const RequiredChannel = require('../models/RequiredChannel');
 const { membership, validateChannelRef, normalizeChannelInput } = require('../utils/membership');
@@ -35,16 +41,30 @@ const { startOfUtcWeek, endOfUtcWeek, weekKey } = require('../utils/weeklyLeader
 const { createAdminSession, getAdminSession, revokeAdminSession, SESSION_TTL_MS } = require('../utils/adminSession');
 const { buildDiscrepancy, isDiscrepant } = require('../utils/financialAudit');
 const { snapshot: metricsSnapshot } = require('../utils/metrics');
-const { withMongoTransaction } = require('../utils/mongoTransaction');
+const { withMongoTransaction, getMongoTransactionStatus } = require('../utils/mongoTransaction');
 const { transitionWithdrawalWithRefund } = require('../utils/withdrawalFinance');
 const { normalizeReferralRates, DEFAULT_REFERRAL_LEVEL_RATES, DEFAULT_REFERRAL_INITIAL_REWARD_POINTS } = require('../utils/referralCore');
 const { validateLatestPostConfig } = require('../utils/latestPostEngagement');
 const { getTelegramWebhookMetrics } = require('../utils/telegramWebhookMetrics');
 const { calculateTotalRewardCents } = require('../utils/vipRewards');
+const { toVipAdminRecord } = require('../utils/vipAdminReadModel');
+const { isTestEnvironment, normalizeAllowedTelegramIds } = require('../utils/maintenance');
 
 const MAX_REQUIRED_CHANNELS = 5;
 
 const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function isTestDeleteEnvironment() {
+  const nodeEnv = String(process.env.NODE_ENV || '').trim().toLowerCase();
+  const appEnv = String(process.env.APP_ENV || '').trim().toLowerCase();
+  if (appEnv === 'production') return false;
+  if (nodeEnv === 'test' || appEnv === 'test') return true;
+  try {
+    const hostname = new URL(String(process.env.APP_URL || '')).hostname.toLowerCase();
+    return hostname === 'gramup-test.onrender.com' || hostname.endsWith('.gramup-test.onrender.com');
+  } catch {
+    return false;
+  }
+}
 function pageParams(query, defaultLimit = 100, maxLimit = 300) {
   const page = Math.max(1, Math.floor(Number(query.page) || 1));
   const limit = Math.min(maxLimit, Math.max(1, Math.floor(Number(query.limit) || defaultLimit)));
@@ -970,7 +990,7 @@ router.post('/weekly-leaderboard/:selectedWeekKey/pay', async (req, res) => {
           { $set: { status: 'paid', paidAt: new Date(), error: '' } },
           { session }
         );
-        return { status: 'paid', user: updatedUser._id };
+        return { status: 'paid', user: updatedUser._id, points };
       });
 
       if (payment.status === 'already_paid') {
@@ -982,7 +1002,13 @@ router.post('/weekly-leaderboard/:selectedWeekKey/pay', async (req, res) => {
         continue;
       }
       if (row.user.telegramId) {
-        notifyUser(row.user.telegramId, botText('leaderboardReward', row.user.language, rank, points, selectedKey)).catch(() => {});
+        sendNotificationOnce({
+          eventKey: `weekly-reward:${selectedKey}:${rank}`,
+          type: 'weekly_reward',
+          user: payment.user,
+          telegramId: row.user.telegramId,
+          text: botText('leaderboardReward', row.user.language, rank, payment.points)
+        }).catch(error => console.error('Weekly reward notification failed:', error.message || error));
       }
       results.push({ rank, status: 'paid', points, user: payment.user });
     } catch (error) {
@@ -1464,6 +1490,137 @@ router.post('/users/:id/unban', async (req, res) => {
   });
 });
 
+router.delete('/users/:id', async (req, res) => {
+  if (!isTestDeleteEnvironment()) {
+    return res.status(403).json({ success: false, code: 'TEST_ONLY', message: 'حذف User فقط در محیط TEST مجاز است.' });
+  }
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ success: false, message: 'شناسه کاربر نامعتبر است.' });
+  }
+
+  const transactionStatus = getMongoTransactionStatus();
+  if (!transactionStatus.checked || !transactionStatus.supported) {
+    return res.status(503).json({
+      success: false,
+      code: 'TRANSACTIONS_UNAVAILABLE',
+      message: 'حذف انجام نشد؛ MongoDB Transaction در محیط TEST در دسترس نیست.',
+      reason: transactionStatus.reason || 'Transaction capability was not confirmed.'
+    });
+  }
+
+  try {
+    const outcome = await withMongoTransaction(async session => {
+      const user = await User.findById(req.params.id).session(session);
+      if (!user) return { missing: true };
+
+      const dependentCount = await User.countDocuments({ referredBy: user._id }).session(session);
+      if (dependentCount > 0) return { hasDependents: true, dependentCount };
+
+      const referrer = user.referredBy
+        ? await User.findById(user.referredBy).session(session)
+        : null;
+
+      await ReferralRelationship.deleteMany({
+        $or: [{ referrerId: user._id }, { referredUserId: user._id }]
+      }).session(session);
+      await PointsLedger.deleteMany({
+        $or: [
+          { user: user._id },
+          { sourceUserId: user._id },
+          { recipientUserId: user._id }
+        ]
+      }).session(session);
+      await TaskCompletion.deleteMany({ user: user._id }).session(session);
+      await LatestPostEngagementState.deleteMany({ user: user._id }).session(session);
+      await Withdrawal.deleteMany({ user: user._id }).session(session);
+      await Deposit.deleteMany({ user: user._id }).session(session);
+      await VipSubscription.deleteMany({ user: user._id }).session(session);
+      await WeeklyLeaderboardAward.deleteMany({ user: user._id }).session(session);
+      await NotificationDelivery.deleteMany({
+        $or: [
+          { user: user._id },
+          { eventKey: `referral-initial:${user._id}` }
+        ]
+      }).session(session);
+      await IdempotencyOperation.deleteMany({ userId: user._id }).session(session);
+      await BalanceAudit.deleteMany({ userId: user._id }).session(session);
+      await User.deleteOne({ _id: user._id }).session(session);
+
+      if (referrer) {
+        const remainingInvitedCount = await User.countDocuments({ referredBy: referrer._id }).session(session);
+        const activeReferralIds = Array.isArray(referrer.activeReferralIds)
+          ? referrer.activeReferralIds.filter(id => String(id) !== String(user._id))
+          : [];
+        await User.updateOne(
+          { _id: referrer._id },
+          {
+            $set: {
+              invitedCount: remainingInvitedCount,
+              activeInvitedCount: activeReferralIds.length,
+              activeReferralIds
+            }
+          },
+          { session }
+        );
+      }
+
+      return { deleted: true };
+    });
+
+    if (outcome.missing) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
+    if (outcome.hasDependents) {
+      return res.status(409).json({
+        success: false,
+        code: 'REFERRAL_DEPENDENCIES_EXIST',
+        message: `حذف انجام نشد؛ این User هنوز Referrer ${outcome.dependentCount} کاربر دیگر است.`
+      });
+    }
+    return res.json({ success: true, message: 'User و داده‌های وابسته‌ی او از محیط TEST حذف شدند.' });
+  } catch (error) {
+    if (error?.code === 'TRANSACTIONS_UNAVAILABLE') {
+      return res.status(503).json({ success: false, code: error.code, message: 'حذف انجام نشد؛ MongoDB Transaction در دسترس نیست.' });
+    }
+    throw error;
+  }
+});
+
+router.post('/users/:id/test-weekly-reward-notification', async (req, res) => {
+  if (!isTestDeleteEnvironment()) {
+    return res.status(403).json({ success: false, code: 'TEST_ONLY', message: 'تست Notification فقط در محیط TEST مجاز است.' });
+  }
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ success: false, message: 'شناسه کاربر نامعتبر است.' });
+  }
+
+  const rank = Number(req.body?.rank);
+  const reward = Number(req.body?.reward);
+  if (!Number.isInteger(rank) || rank < 1 || rank > 3) {
+    return res.status(400).json({ success: false, message: 'مقام باید عدد صحیح بین ۱ تا ۳ باشد.' });
+  }
+  if (!Number.isSafeInteger(reward) || reward <= 0) {
+    return res.status(400).json({ success: false, message: 'مقدار Reward باید یک عدد صحیح مثبت باشد.' });
+  }
+
+  const user = await User.findById(req.params.id).select('_id telegramId language').lean();
+  if (!user) return res.status(404).json({ success: false, message: 'کاربر پیدا نشد.' });
+  const telegramId = String(user.telegramId || '').trim();
+  if (!/^\d{1,20}$/.test(telegramId)) {
+    return res.status(422).json({ success: false, message: 'کاربر Telegram ID معتبر ندارد.' });
+  }
+
+  const delivery = await sendNotificationOnce({
+    eventKey: `weekly-reward-test:${user._id}:${crypto.randomUUID()}`,
+    type: 'weekly_reward',
+    user: user._id,
+    telegramId,
+    text: botText('leaderboardReward', user.language, rank, reward)
+  });
+  if (delivery.status !== 'sent') {
+    return res.status(502).json({ success: false, code: 'TELEGRAM_NOTIFICATION_FAILED', status: delivery.status, message: 'ارسال پیام آزمایشی Telegram تأیید نشد.' });
+  }
+  return res.json({ success: true, status: delivery.status, message: 'پیام آزمایشی Weekly Reward با موفقیت ارسال شد.' });
+});
+
 /* -------------------- REQUIRED CHANNELS (عضویت اجباری) -------------------- */
 function publicChannel(c) {
   return {
@@ -1630,6 +1787,145 @@ router.post('/required-channels/:id/test', async (req, res) => {
 });
 
 /* -------------------- SETTINGS -------------------- */
+router.get('/vip/summary', async (req, res) => {
+  const now = new Date();
+  const activeExpression = { $and: [{ $eq: ['$status', 'active'] }, { $gt: ['$endAt', now] }] };
+  const expiredExpression = { $or: [
+    { $eq: ['$status', 'completed'] },
+    { $and: [{ $eq: ['$status', 'active'] }, { $lte: ['$endAt', now] }] }
+  ] };
+  const [rows, uniqueUsers] = await Promise.all([
+    VipSubscription.aggregate([{ $group: {
+      _id: null,
+      totalVipPurchases: { $sum: 1 },
+      activeVips: { $sum: { $cond: [activeExpression, 1, 0] } },
+      expiredVips: { $sum: { $cond: [expiredExpression, 1, 0] } },
+      cancelledVips: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+      totalVipRevenuePoints: { $sum: { $ifNull: ['$pricePoints', 0] } },
+      totalDailyVipEarningsPoints: { $sum: { $cond: [activeExpression, { $ifNull: ['$dailyRewardAveragePoints', 0] }, 0] } }
+    } }]),
+    VipSubscription.distinct('user', { user: { $type: 'objectId' } })
+  ]);
+  const summary = rows[0] || {};
+  return res.json({
+    success: true,
+    asOf: now.toISOString(),
+    totalVipPurchases: Number(summary.totalVipPurchases) || 0,
+    activeVips: Number(summary.activeVips) || 0,
+    expiredVips: Number(summary.expiredVips) || 0,
+    cancelledVips: Number(summary.cancelledVips) || 0,
+    totalVipRevenuePoints: Number(summary.totalVipRevenuePoints) || 0,
+    totalDailyVipEarningsPoints: Number(summary.totalDailyVipEarningsPoints) || 0,
+    totalVipUsers: uniqueUsers.length
+  });
+});
+
+router.get('/vip/subscriptions', async (req, res) => {
+  const { page, limit, skip } = pageParams(req.query, 25, 100);
+  const now = new Date();
+  const match = {};
+
+  if (req.query.planNumber != null && String(req.query.planNumber).trim()) {
+    const planNumber = Number(req.query.planNumber);
+    if (!Number.isInteger(planNumber) || planNumber < 1 || planNumber > 10) {
+      return res.status(400).json({ success: false, code: 'VIP_FILTER_INVALID', message: 'پلن VIP نامعتبر است.' });
+    }
+    match.planNumber = planNumber;
+  }
+
+  const requestedStatus = String(req.query.status || '').trim().toLowerCase();
+  if (requestedStatus && !['active', 'expired', 'cancelled'].includes(requestedStatus)) {
+    return res.status(400).json({ success: false, code: 'VIP_FILTER_INVALID', message: 'وضعیت VIP نامعتبر است.' });
+  }
+  if (requestedStatus) match.adminDisplayStatus = requestedStatus;
+
+  const dateFilter = {};
+  const dateFrom = String(req.query.dateFrom || '').trim();
+  const dateTo = String(req.query.dateTo || '').trim();
+  const parseDate = (value, endOfDay = false) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const date = new Date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`);
+    return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date;
+  };
+  if (dateFrom) {
+    const parsed = parseDate(dateFrom);
+    if (!parsed) return res.status(400).json({ success: false, code: 'VIP_FILTER_INVALID', message: 'تاریخ شروع نامعتبر است.' });
+    dateFilter.$gte = parsed;
+  }
+  if (dateTo) {
+    const parsed = parseDate(dateTo, true);
+    if (!parsed) return res.status(400).json({ success: false, code: 'VIP_FILTER_INVALID', message: 'تاریخ پایان نامعتبر است.' });
+    dateFilter.$lte = parsed;
+  }
+  if (dateFilter.$gte && dateFilter.$lte && dateFilter.$gte > dateFilter.$lte) {
+    return res.status(400).json({ success: false, code: 'VIP_FILTER_INVALID', message: 'محدوده تاریخ نامعتبر است.' });
+  }
+  if (Object.keys(dateFilter).length) match.createdAt = dateFilter;
+
+  const search = String(req.query.search || '').trim().slice(0, 100);
+  const pipeline = [
+    { $lookup: { from: User.collection.name, localField: 'user', foreignField: '_id', as: 'vipUser' } },
+    { $unwind: { path: '$vipUser', preserveNullAndEmptyArrays: true } },
+    { $addFields: { adminDisplayStatus: { $switch: { branches: [
+      { case: { $eq: ['$status', 'cancelled'] }, then: 'cancelled' },
+      { case: { $eq: ['$status', 'completed'] }, then: 'expired' },
+      { case: { $and: [{ $eq: ['$status', 'active'] }, { $lte: ['$endAt', now] }] }, then: 'expired' },
+      { case: { $and: [{ $eq: ['$status', 'active'] }, { $gt: ['$endAt', now] }] }, then: 'active' }
+    ], default: 'unknown' } } } },
+    { $match: {
+      ...match,
+      ...(search ? { $or: [
+        { 'vipUser.telegramId': new RegExp(escapeRegex(search), 'i') },
+        { 'vipUser.username': new RegExp(escapeRegex(search), 'i') },
+        { 'vipUser.firstName': new RegExp(escapeRegex(search), 'i') },
+        { 'vipUser.lastName': new RegExp(escapeRegex(search), 'i') },
+        ...(mongoose.isValidObjectId(search) ? [{ 'vipUser._id': new mongoose.Types.ObjectId(search) }] : [])
+      ] } : {})
+    } },
+    { $facet: {
+      items: [
+        { $sort: { createdAt: -1, _id: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+        { $project: {
+          _id: 1,
+          user: { _id: '$vipUser._id', telegramId: '$vipUser.telegramId', username: '$vipUser.username', firstName: '$vipUser.firstName', lastName: '$vipUser.lastName' },
+          planNumber: 1,
+          pricePoints: 1,
+          monthlyRewardPercent: 1,
+          durationDays: 1,
+          totalRewardPoints: 1,
+          dailyRewardAveragePoints: 1,
+          claimedRewardPoints: 1,
+          claimsCompleted: 1,
+          startAt: 1,
+          endAt: 1,
+          createdAt: 1,
+          status: 1,
+          displayStatus: '$adminDisplayStatus'
+        } }
+      ],
+      metadata: [{ $count: 'total' }]
+    } }
+  ];
+
+  const [result] = await VipSubscription.aggregate(pipeline);
+  const total = Number(result?.metadata?.[0]?.total) || 0;
+  const subscriptions = (result?.items || []).map(item => toVipAdminRecord(item, now));
+  return res.json({ success: true, subscriptions, page, limit, total, totalPages: Math.ceil(total / limit), asOf: now.toISOString() });
+});
+
+router.get('/vip/subscriptions/:id', async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ success: false, code: 'VIP_SUBSCRIPTION_INVALID', message: 'شناسه اشتراک VIP نامعتبر است.' });
+  }
+  const subscription = await VipSubscription.findById(req.params.id)
+    .populate('user', 'telegramId username firstName lastName')
+    .lean();
+  if (!subscription) return res.status(404).json({ success: false, code: 'VIP_SUBSCRIPTION_NOT_FOUND', message: 'اشتراک VIP پیدا نشد.' });
+  return res.json({ success: true, subscription: toVipAdminRecord(subscription) });
+});
+
 router.get('/vip/plans', async (req, res) => {
   const plans = await VipPlan.find({}).sort({ planNumber: 1 }).lean();
   res.json({ success: true, plans });
@@ -1698,6 +1994,39 @@ router.get('/settings', async (req, res) => {
     spinModel: spinModel(),
     timezones: COMMON_TIMEZONES
   });
+});
+
+router.get('/maintenance', async (req, res) => {
+  if (!isTestEnvironment()) return res.status(403).json({ success: false, code: 'TEST_ONLY', message: 'Maintenance Mode فقط در محیط TEST مجاز است.' });
+  const settings = await Settings.getGlobal();
+  res.json({
+    success: true,
+    enabled: settings.maintenanceMode === true,
+    allowedTelegramIds: normalizeAllowedTelegramIds(settings.maintenanceAllowedTelegramIds || []) || []
+  });
+});
+
+router.put('/maintenance', async (req, res) => {
+  if (!isTestEnvironment()) return res.status(403).json({ success: false, code: 'TEST_ONLY', message: 'Maintenance Mode فقط در محیط TEST مجاز است.' });
+  const body = req.body || {};
+  const allowedTelegramIds = normalizeAllowedTelegramIds(body.allowedTelegramIds);
+  if (allowedTelegramIds === null) {
+    return res.status(400).json({ success: false, code: 'INVALID_ALLOWED_USERS', message: 'Allowed Users باید حداکثر ۱۰۰ Telegram User ID عددی باشد.' });
+  }
+  if (typeof body.enabled !== 'boolean') {
+    return res.status(400).json({ success: false, code: 'INVALID_MAINTENANCE_STATE', message: 'وضعیت Maintenance باید boolean باشد.' });
+  }
+  const settings = await Settings.getGlobal();
+  settings.maintenanceMode = body.enabled;
+  settings.maintenanceAllowedTelegramIds = allowedTelegramIds;
+  await settings.save();
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'maintenance_mode_update',
+    targetType: 'settings',
+    details: `${body.enabled ? 'enabled' : 'disabled'}; allowed=${allowedTelegramIds.length}`
+  });
+  res.json({ success: true, enabled: settings.maintenanceMode === true, allowedTelegramIds });
 });
 
 router.put('/settings', async (req, res) => {

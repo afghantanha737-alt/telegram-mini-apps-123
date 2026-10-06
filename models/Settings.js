@@ -22,6 +22,8 @@ const settingsSchema = new mongoose.Schema(
     dailyReminderLastSentCount: { type: Number, default: 0 },
     dailyReminderLastStatus: { type: String, default: '' },
     dailyReminderLastError: { type: String, default: '' },
+    maintenanceMode: { type: Boolean, default: false },
+    maintenanceAllowedTelegramIds: { type: [String], default: () => [] },
     weeklyLeaderboardEnabled: { type: Boolean, default: true },
     weeklyLeaderboardPrizes: { type: [Number], default: () => [500, 250, 100] },
     // Native GRAM deposits stay disabled until an administrator supplies the project's TON Mainnet wallet.

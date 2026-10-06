@@ -35,9 +35,49 @@
   .tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
   .tabs button{background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
   .tabs button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+  @media (max-width:900px){
+    .tabs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-auto-rows:68px;gap:8px;align-items:stretch}
+    .tabs button{display:flex;width:100%;height:100%;min-width:0;min-height:68px;align-items:center;justify-content:center;padding:8px 6px;text-align:center;white-space:normal;overflow-wrap:anywhere;line-height:1.35}
+    .adminPanelHeader{align-items:stretch;flex-direction:column;gap:14px}
+    .adminHeaderActions{display:grid;width:100%;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:68px;gap:8px}
+    .adminHeaderActions button{width:100%;height:100%;min-width:0;min-height:68px;padding:8px 6px;text-align:center;white-space:normal;overflow-wrap:anywhere;line-height:1.35}
+  }
+  @media (max-width:720px){
+    .tabs{grid-template-columns:repeat(4,minmax(0,1fr))}
+  }
+  @media (max-width:600px){
+    .wrap{padding:16px 12px 48px}
+    .tabs{gap:7px}
+    .tabs button{padding:8px 4px;font-size:12px}
+    .adminHeaderActions{gap:7px}
+    .adminHeaderActions button{padding:8px 5px;font-size:12px}
+  }
+  @media (max-width:360px){
+    .tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
+  }
   table{width:100%;border-collapse:collapse;font-size:12px}
   th,td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--line);vertical-align:middle}
   th{color:var(--muted);font-weight:700}
+  @media (max-width:600px){
+    #usersList .adminUsersTable{border-collapse:separate;border-spacing:0}
+    #usersList .adminUsersTable,#usersList .adminUsersTable tbody{display:block;width:100%}
+    #usersList .adminUsersTable thead,#usersList .adminUsersTable thead tr{display:block}
+    #usersList .adminUsersTable thead th{display:none}
+    #usersList .adminUsersTable thead th:first-child{display:flex;align-items:center;gap:8px;padding:4px 2px 8px;border:0}
+    #usersList .adminUsersTable thead th:first-child::after{content:"انتخاب همه نتایج";color:var(--muted);font-size:11px}
+    #usersList .adminUsersTable tbody{display:grid;gap:10px}
+    #usersList .adminUsersTable tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 9px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface2)}
+    #usersList .adminUsersTable tbody td{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);text-align:right;overflow-wrap:anywhere;font-size:12px}
+    #usersList .adminUsersTable tbody td::before{content:attr(data-label);flex:0 0 auto;color:var(--muted);font-size:10px;line-height:1.3}
+    #usersList .adminUsersTable tbody td.usersSelectCell{grid-column:1/-1;justify-content:flex-start;padding:0 0 2px;border:0}
+    #usersList .adminUsersTable tbody td.usersSelectCell::before{display:none}
+    #usersList .adminUsersTable tbody td.usersNameCell{grid-column:1/-1;display:block}
+    #usersList .adminUsersTable tbody td.usersNameCell::before{display:block;margin-bottom:4px}
+    #usersList .adminUsersTable tbody td.usersNameCell .small{margin-top:4px;direction:ltr;text-align:right;line-height:1.4}
+    #usersList .adminUsersTable tbody td.usersActions{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:center}
+    #usersList .adminUsersTable tbody td.usersActions::before{flex:0 0 100%}
+    #usersList .adminUsersTable tbody td.usersActions button{flex:1 1 125px;min-width:0;margin:0;padding:8px 9px;font-size:11px;white-space:normal}
+  }
   .badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:700}
   .badge.pending{background:rgba(245,158,11,.15);color:var(--warning)}
   .badge.approved{background:rgba(34,197,94,.15);color:var(--success)}
@@ -73,12 +113,12 @@
   </div>
 
   <div id="panel" class="hidden">
-    <div class="flexBetween">
+    <div class="flexBetween adminPanelHeader">
       <div>
         <h1>پنل ادمین</h1>
         <div class="sub">مدیریت تسک‌ها، برداشت‌ها، کاربران و پیام همگانی</div>
       </div>
-      <div class="row">
+      <div class="row adminHeaderActions">
         <button class="secondary" onclick="diagnoseTelegramBot()">بررسی Telegram Bot</button>
         <button class="secondary" onclick="reconfigureTelegramWebhook()">تنظیم مجدد Webhook</button>
         <button class="secondary" onclick="logout()">خروج</button>
@@ -93,6 +133,7 @@
       <button data-tab="audit" onclick="switchTab('audit')">حسابرسی مالی</button>
       <button data-tab="ops" onclick="switchTab('ops')">وضعیت سیستم</button>
       <button data-tab="users" onclick="switchTab('users')">کاربران</button>
+      <button data-tab="vip" onclick="switchTab('vip')">VIP Management</button>
       <button data-tab="broadcast" onclick="switchTab('broadcast')">پیام همگانی</button>
       <button data-tab="logs" onclick="switchTab('logs')">لاگ فعالیت</button>
       <button data-tab="channels" onclick="switchTab('channels')">کانال‌های اجباری</button>
@@ -400,11 +441,68 @@
       </div>
     </div>
 
+    <!-- VIP MANAGEMENT -->
+    <div id="tab-vip" class="tabContent hidden">
+      <div class="card">
+        <div class="flexBetween"><b>VIP Management</b><button type="button" class="secondary" onclick="loadVipManagement()">Refresh</button></div>
+        <p class="small">Read-only subscription reporting. Revenue and rewards are shown in Points using recorded purchase snapshots.</p>
+        <div id="vipSummaryGrid" class="statsGrid" style="margin-top:12px"><div class="empty">Loading VIP summary…</div></div>
+      </div>
+
+      <div class="card">
+        <div class="flexBetween"><b>VIP Subscriptions</b><span id="vipSubscriptionsStatus" class="small"></span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px">
+          <input id="vipFilterSearch" placeholder="User ID / username / name" onkeydown="if(event.key==='Enter')loadVipSubscriptionsAdmin(1)">
+          <select id="vipFilterPlan"><option value="">All plans</option><option value="1">Plan 1</option><option value="2">Plan 2</option><option value="3">Plan 3</option><option value="4">Plan 4</option><option value="5">Plan 5</option><option value="6">Plan 6</option><option value="7">Plan 7</option><option value="8">Plan 8</option><option value="9">Plan 9</option><option value="10">Plan 10</option></select>
+          <select id="vipFilterStatus"><option value="">All statuses</option><option value="active">Active</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option></select>
+          <label class="small">Purchase date from<input id="vipFilterFrom" type="date"></label>
+          <label class="small">Purchase date to<input id="vipFilterTo" type="date"></label>
+          <div class="row"><button type="button" onclick="loadVipSubscriptionsAdmin(1)">Apply filters</button><button type="button" class="secondary" onclick="resetVipFilters()">Reset</button></div>
+        </div>
+        <div class="vipAdminTableWrap" style="overflow:auto;margin-top:10px">
+          <table class="vipAdminTable" style="min-width:1500px">
+            <thead><tr><th>User ID</th><th>Username / Name</th><th>Plan</th><th>Purchase Date</th><th>Start Date</th><th>Expiry Date</th><th>Duration</th><th>Purchase Amount</th><th>Daily Earning</th><th>Total Expected Earning</th><th>Status</th><th>Remaining Days</th><th>Details</th></tr></thead>
+            <tbody id="vipSubscriptionsRows"><tr><td colspan="13" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div id="vipPagination" class="flexBetween" style="margin-top:12px"></div>
+      </div>
+
+      <div class="card">
+        <div class="flexBetween"><b>VIP Plan Settings</b><span class="small">The existing plan API and validation are unchanged.</span></div>
+        <p class="small">The purchase amount is deducted from Points. Existing plan changes continue to affect new purchases only.</p>
+        <div id="vipPlansAdminStatus" class="small" style="margin:8px 0"></div>
+        <div id="vipPlansAdminList"></div>
+        <button type="button" class="secondary" onclick="saveVipPlansAdmin()" style="margin-top:10px">ذخیره پلن‌های VIP</button>
+      </div>
+    </div>
+
+    <div id="vipDetailOverlay" class="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="vipDetailTitle" onclick="if(event.target===this)closeVipDetails()">
+      <div class="modalCard">
+        <div class="flexBetween"><b id="vipDetailTitle">VIP Subscription Details</b><button type="button" class="secondary" onclick="closeVipDetails()">Close</button></div>
+        <div id="vipDetailContent" style="margin-top:12px">Loading…</div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div id="tab-settings" class="tabContent hidden">
       <div class="card">
         <b>تنظیمات کلی</b>
         <br><br>
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:4px 0 14px;background:var(--surface2)">
+          <div class="flexBetween"><b>🛠️ TEST Maintenance Mode</b><span id="maintenanceStatus" class="badge">OFF</span></div>
+          <p class="small" style="margin:8px 0">فقط در محیط TEST فعال است. هنگام روشن بودن، کاربران عادی صفحه بروزرسانی را می‌بینند و Allowed Users همچنان Mini App اصلی را می‌بینند.</p>
+          <label style="display:flex;align-items:center;gap:8px;margin:10px 0">
+            <input type="checkbox" id="setMaintenanceEnabled" style="width:auto" onchange="saveMaintenanceMode()">
+            <b>Maintenance روشن باشد</b>
+          </label>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;align-items:end">
+            <div><label>Telegram User ID برای Allowed Users</label><input id="maintenanceAllowedId" inputmode="numeric" placeholder="مثلاً 123456789" style="margin:0"></div>
+            <button type="button" class="secondary" onclick="addMaintenanceAllowedUser()">افزودن</button>
+          </div>
+          <div id="maintenanceAllowedList" class="small" style="margin-top:10px"></div>
+          <div id="maintenanceMessage" class="small" style="margin-top:8px"></div>
+        </div>
         <label>نرخ تبدیل (هر پوینت به GRAM)</label>
         <input id="setRate" type="number" step="0.000001">
         <label>قیمت هر ۱ GRAM به دلار (برای نمایش ≈ USD؛ صفر = مخفی)</label>
@@ -508,13 +606,6 @@
           <input id="setMinimumDepositGram" type="number" min="0.000000001" step="0.000000001" value="1">
           <p class="small" style="margin-bottom:0">برای روشن‌کردن، آدرس معتبر TON Mainnet و حداقل مبلغ Native GRAM لازم است. برنامه هیچ کلید یا عبارت بازیابی کیف‌پول را نگهداری نمی‌کند.</p>
         </div>
-        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0;background:var(--surface2)">
-          <b>💎 VIP Plans — قیمت و پاداش</b>
-          <p class="small">مبلغ خرید از موجودی Points کسر می‌شود. بازده ماهانه نسبت به قیمت پلن محاسبه و بین روزهای دوره تقسیم می‌شود؛ کاربر می‌تواند هر ۲۴ ساعت یک پاداش دریافت کند. اصل Points در پایان دوره به‌صورت خودکار برمی‌گردد. تغییر پلن فقط روی خریدهای بعدی اثر می‌گذارد.</p>
-          <div id="vipPlansAdminStatus" class="small" style="margin:8px 0"></div>
-          <div id="vipPlansAdminList"></div>
-          <button type="button" class="secondary" onclick="saveVipPlansAdmin()" style="margin-top:10px">ذخیره پلن‌های VIP</button>
-        </div>
         <button onclick="saveSettings()">ذخیره تنظیمات</button>
       </div>
     </div>
@@ -535,6 +626,7 @@
 let ADMIN_KEY = "";
 let ADMIN_SESSION = sessionStorage.getItem("adminSession") || "";
 let ADMIN_NAME = sessionStorage.getItem("adminName") || "";
+let maintenanceState = { enabled: false, allowedTelegramIds: [] };
 
 function showMsg(text, type) {
   const el = document.getElementById("msg");
@@ -672,7 +764,8 @@ function switchTab(tab) {
   if (tab === "weekly") loadWeeklyAwards();
   if (tab === "audit") loadFinancialAudit();
   if (tab === "ops") loadOpsMetrics();
-  if (tab === "settings") { loadSettings(); loadVipPlansAdmin(); }
+  if (tab === "settings") loadSettings();
+  if (tab === "vip") loadVipManagement();
 }
 
 /* ---------- STATS (داشبورد آمار) ---------- */
@@ -1433,28 +1526,25 @@ async function loadUsers() {
       return;
     }
     container.innerHTML = `
-      <table>
-        <thead><tr><th><input type="checkbox" aria-label="انتخاب همه نتایج" style="width:auto;margin:0" onchange="selectVisibleUsers(this.checked)"></th><th>نام / شناسه</th><th>Points</th><th>GRAM</th><th>دعوت‌شده</th><th>وضعیت</th><th>Eligibility</th><th>عملیات</th></tr></thead>
+      <table class="adminUsersTable">
+        <thead><tr><th><input type="checkbox" aria-label="انتخاب همه نتایج" style="width:auto;margin:0" onchange="selectVisibleUsers(this.checked)"></th><th>نام / یوزرنیم · Telegram ID</th><th>Points</th><th>GRAM</th><th>دعوت‌شده</th><th>وضعیت</th><th>عملیات</th></tr></thead>
         <tbody>
           ${users.map(u => `
             <tr>
-              <td><input class="user-select" type="checkbox" value="${u._id}" style="width:auto;margin:0"></td>
-              <td>${escapeHtml(u.firstName || u.username || "—")}<div class="small">TG ${escapeHtml(u.telegramId || "—")} · DB ${escapeHtml(u._id)}</div></td>
-              <td>${Number(u.points || 0)}</td>
-              <td>${Number(u.gramBalance || 0)}</td>
-              <td>${u.invitedCount || 0}</td>
-              <td>${u.isBanned ? '<span class="badge rejected">مسدود</span>' : '<span class="badge approved">فعال</span>'}<div class="small">Review: ${escapeHtml(u.accountReviewStatus || "normal")}</div></td>
-              <td>${u.referralEligibilityStatus === "eligible"
-                ? '<span class="badge approved">معتبر</span>'
-                : u.referralEligibilityStatus === "blocked"
-                  ? '<span class="badge rejected">مسدود</span>'
-                  : `<span class="badge pending">در انتظار${u.referralEligibilityReasons?.length ? `: ${escapeHtml(u.referralEligibilityReasons.join(", "))}` : ""}</span>`}</td>
-              <td>
+              <td class="usersSelectCell"><input class="user-select" type="checkbox" value="${u._id}" aria-label="انتخاب کاربر" style="width:auto;margin:0"></td>
+              <td class="usersNameCell" data-label="نام / یوزرنیم · Telegram ID">${escapeHtml(u.firstName || u.username || "—")}<div class="small">Telegram ID: ${escapeHtml(u.telegramId || "—")}</div></td>
+              <td data-label="Points">${Number(u.points || 0)}</td>
+              <td data-label="GRAM">${Number(u.gramBalance || 0)}</td>
+              <td data-label="دعوت‌شده">${u.invitedCount || 0}</td>
+              <td data-label="وضعیت">${u.isBanned ? '<span class="badge rejected">مسدود</span>' : '<span class="badge approved">فعال</span>'}</td>
+              <td class="usersActions" data-label="عملیات">
                 ${u.isBanned
                   ? `<button class="success" onclick="userAction('${u._id}','unban')">رفع مسدودی</button>`
                   : `<button class="danger" onclick="userAction('${u._id}','ban')">مسدود کردن</button>`
                 }
                 <button class="secondary" onclick="openUserAccount('${u._id}')">موجودی و جزئیات</button>
+                <button class="danger" onclick="deleteUser('${u._id}')">Delete User</button>
+                <button class="secondary" onclick="testWeeklyRewardNotification('${u._id}')">Test Weekly Reward Notification</button>
               </td>
             </tr>
           `).join("")}
@@ -1598,6 +1688,42 @@ async function userAction(id, action) {
   try {
     await api(`/api/admin/users/${id}/${action}`, { method: "POST", body: JSON.stringify({}) });
     loadUsers();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+async function deleteUser(id) {
+  const warning = "این عملیات User و داده‌های وابسته او را به‌صورت کامل از TEST حذف می‌کند و قابل بازگشت نیست.";
+  if (!confirm(warning)) return;
+  const confirmation = prompt("برای تأیید نهایی حذف، عبارت DELETE USER را دقیقاً وارد کنید:");
+  if (confirmation !== "DELETE USER") {
+    showMsg("حذف لغو شد؛ عبارت تأیید صحیح وارد نشد.", "error");
+    return;
+  }
+  try {
+    const result = await api(`/api/admin/users/${id}`, { method: "DELETE" });
+    showMsg(result.message || "User با موفقیت حذف شد.", "success");
+    loadUsers();
+  } catch (error) {
+    showMsg(error.message, "error");
+  }
+}
+
+async function testWeeklyRewardNotification(id) {
+  if (!confirm("این فقط یک پیام آزمایشی Telegram است و هیچ Reward واقعی پرداخت نمی‌شود. ادامه می‌دهید؟")) return;
+  const rank = Number(prompt("مقام آزمایشی را وارد کنید (۱ تا ۳):"));
+  const reward = Number(prompt("مقدار Reward آزمایشی را به Points وارد کنید:"));
+  if (!Number.isInteger(rank) || rank < 1 || rank > 3 || !Number.isSafeInteger(reward) || reward <= 0) {
+    showMsg("مقام و مقدار Reward باید عدد صحیح معتبر باشند.", "error");
+    return;
+  }
+  try {
+    const result = await api(`/api/admin/users/${id}/test-weekly-reward-notification`, {
+      method: "POST",
+      body: JSON.stringify({ rank, reward })
+    });
+    showMsg(result.message || "پیام آزمایشی ارسال شد.", "success");
   } catch (error) {
     showMsg(error.message, "error");
   }
@@ -1785,6 +1911,138 @@ function renderReferralRates() {
     </div>`).join("");
 }
 
+let vipAdminCurrentPage = 1;
+
+function formatVipAdminNumber(value) {
+  return (Number(value) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function formatVipAdminDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+}
+
+function vipAdminStatusLabel(status) {
+  return ({ active: "Active", expired: "Expired", cancelled: "Cancelled" })[status] || "Unknown";
+}
+
+async function loadVipManagement() {
+  await Promise.all([loadVipSummaryAdmin(), loadVipSubscriptionsAdmin(1), loadVipPlansAdmin()]);
+}
+
+async function loadVipSummaryAdmin() {
+  const grid = document.getElementById("vipSummaryGrid");
+  if (!grid) return;
+  grid.innerHTML = '<div class="empty">Loading VIP summary…</div>';
+  try {
+    const data = await api("/api/admin/vip/summary");
+    const cards = [
+      ["Total VIP Purchases", data.totalVipPurchases, ""],
+      ["Active VIPs", data.activeVips, ""],
+      ["Expired VIPs", data.expiredVips, ""],
+      ["Total VIP Revenue", data.totalVipRevenuePoints, "Points"],
+      ["Total Daily VIP Earnings", data.totalDailyVipEarningsPoints, "Points / day (average)"],
+      ["Total VIP Users", data.totalVipUsers, ""]
+    ];
+    grid.innerHTML = cards.map(([label, value, unit]) => `<div class="card" style="margin:0"><div class="small">${escapeHtml(label)}</div><strong style="display:block;font-size:20px;margin-top:8px">${formatVipAdminNumber(value)}${unit ? ` <small>${escapeHtml(unit)}</small>` : ""}</strong></div>`).join("");
+  } catch (error) {
+    grid.innerHTML = `<div class="empty" style="color:var(--danger)">VIP summary failed: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function loadVipSubscriptionsAdmin(page = 1) {
+  const rows = document.getElementById("vipSubscriptionsRows");
+  const status = document.getElementById("vipSubscriptionsStatus");
+  const pagination = document.getElementById("vipPagination");
+  if (!rows || !status || !pagination) return;
+  vipAdminCurrentPage = Math.max(1, Number(page) || 1);
+  rows.innerHTML = '<tr><td colspan="13" class="empty">Loading subscriptions…</td></tr>';
+  status.textContent = "Loading…";
+  const params = new URLSearchParams({ page: String(vipAdminCurrentPage), limit: "25" });
+  const search = document.getElementById("vipFilterSearch")?.value.trim();
+  const planNumber = document.getElementById("vipFilterPlan")?.value;
+  const selectedStatus = document.getElementById("vipFilterStatus")?.value;
+  const dateFrom = document.getElementById("vipFilterFrom")?.value;
+  const dateTo = document.getElementById("vipFilterTo")?.value;
+  if (search) params.set("search", search);
+  if (planNumber) params.set("planNumber", planNumber);
+  if (selectedStatus) params.set("status", selectedStatus);
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
+
+  try {
+    const data = await api(`/api/admin/vip/subscriptions?${params.toString()}`);
+    const subscriptions = Array.isArray(data.subscriptions) ? data.subscriptions : [];
+    status.textContent = `${formatVipAdminNumber(data.total)} record(s)`;
+    if (!subscriptions.length) {
+      rows.innerHTML = '<tr><td colspan="13" class="empty">No VIP subscriptions match these filters.</td></tr>';
+    } else {
+      rows.innerHTML = subscriptions.map(item => `
+        <tr>
+          <td>${escapeHtml(item.userId || "—")}</td>
+          <td>${escapeHtml(item.username ? `@${item.username}` : "—")}<br><span class="small">${escapeHtml(item.name || "")}</span></td>
+          <td>${formatVipAdminNumber(item.planNumber)}</td>
+          <td>${escapeHtml(formatVipAdminDate(item.purchaseDate))}</td>
+          <td>${escapeHtml(formatVipAdminDate(item.startDate))}</td>
+          <td>${escapeHtml(formatVipAdminDate(item.expiryDate))}</td>
+          <td>${formatVipAdminNumber(item.durationDays)} days</td>
+          <td>${formatVipAdminNumber(item.purchaseAmountPoints)} Points</td>
+          <td>${formatVipAdminNumber(item.dailyEarningPoints)} Points</td>
+          <td>${formatVipAdminNumber(item.totalExpectedEarningPoints)} Points</td>
+          <td><span class="badge ${escapeHtml(item.status)}">${vipAdminStatusLabel(item.status)}</span></td>
+          <td>${formatVipAdminNumber(item.remainingDays)}</td>
+          <td><button type="button" class="secondary" onclick="openVipDetails('${escapeHtml(item.id)}')">Details</button></td>
+        </tr>`).join("");
+    }
+    const totalPages = Math.max(1, Number(data.totalPages) || 1);
+    pagination.innerHTML = `<span class="small">Page ${vipAdminCurrentPage} of ${totalPages}</span><div class="row"><button type="button" class="secondary" ${vipAdminCurrentPage <= 1 ? "disabled" : ""} onclick="loadVipSubscriptionsAdmin(${vipAdminCurrentPage - 1})">Previous</button><button type="button" class="secondary" ${vipAdminCurrentPage >= totalPages ? "disabled" : ""} onclick="loadVipSubscriptionsAdmin(${vipAdminCurrentPage + 1})">Next</button></div>`;
+  } catch (error) {
+    status.textContent = "Could not load VIP subscriptions.";
+    rows.innerHTML = `<tr><td colspan="13" class="empty" style="color:var(--danger)">${escapeHtml(error.message)}</td></tr>`;
+    pagination.innerHTML = "";
+  }
+}
+
+function resetVipFilters() {
+  document.getElementById("vipFilterSearch").value = "";
+  document.getElementById("vipFilterPlan").value = "";
+  document.getElementById("vipFilterStatus").value = "";
+  document.getElementById("vipFilterFrom").value = "";
+  document.getElementById("vipFilterTo").value = "";
+  void loadVipSubscriptionsAdmin(1);
+}
+
+async function openVipDetails(id) {
+  const overlay = document.getElementById("vipDetailOverlay");
+  const content = document.getElementById("vipDetailContent");
+  overlay.style.display = "flex";
+  content.innerHTML = '<div class="empty">Loading details…</div>';
+  try {
+    const data = await api(`/api/admin/vip/subscriptions/${encodeURIComponent(id)}`);
+    const item = data.subscription;
+    const fields = [
+      ["User ID", item.userId], ["Username", item.username ? `@${item.username}` : "—"], ["Name", item.name || "—"],
+      ["VIP Plan", item.planNumber], ["Purchase Amount", `${formatVipAdminNumber(item.purchaseAmountPoints)} Points`],
+      ["Purchase Date", formatVipAdminDate(item.purchaseDate)], ["Start Date", formatVipAdminDate(item.startDate)],
+      ["Expiry Date", formatVipAdminDate(item.expiryDate)], ["Duration", `${formatVipAdminNumber(item.durationDays)} days`],
+      ["Daily Earning", `${formatVipAdminNumber(item.dailyEarningPoints)} Points`],
+      ["Total Expected Earning", `${formatVipAdminNumber(item.totalExpectedEarningPoints)} Points`],
+      ["Earned to Date", `${formatVipAdminNumber(item.earnedToDatePoints)} Points`],
+      ["Remaining Earning", `${formatVipAdminNumber(item.remainingEarningPoints)} Points`],
+      ["Claims", `${formatVipAdminNumber(item.claimsCompleted)} / ${formatVipAdminNumber(item.totalClaims)}`],
+      ["Remaining Days", formatVipAdminNumber(item.remainingDays)], ["Current Status", vipAdminStatusLabel(item.status)]
+    ];
+    content.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px">${fields.map(([label, value]) => `<div class="card" style="margin:0"><div class="small">${escapeHtml(label)}</div><b>${escapeHtml(value)}</b></div>`).join("")}</div>`;
+  } catch (error) {
+    content.innerHTML = `<div class="empty" style="color:var(--danger)">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function closeVipDetails() {
+  document.getElementById("vipDetailOverlay").style.display = "none";
+}
+
 async function loadVipPlansAdmin() {
   const list = document.getElementById("vipPlansAdminList");
   const status = document.getElementById("vipPlansAdminStatus");
@@ -1847,7 +2105,85 @@ async function saveVipPlansAdmin() {
   }
 }
 
+function renderMaintenanceState() {
+  const status = document.getElementById("maintenanceStatus");
+  const checkbox = document.getElementById("setMaintenanceEnabled");
+  const list = document.getElementById("maintenanceAllowedList");
+  if (!status || !checkbox || !list) return;
+  checkbox.checked = maintenanceState.enabled === true;
+  status.textContent = maintenanceState.enabled ? "ON" : "OFF";
+  status.className = `badge ${maintenanceState.enabled ? "approved" : "cancelled"}`;
+  list.innerHTML = maintenanceState.allowedTelegramIds.length
+    ? maintenanceState.allowedTelegramIds.map(id => `<span style="display:inline-flex;align-items:center;gap:6px;margin:3px 4px 3px 0;padding:6px 9px;border:1px solid var(--line);border-radius:999px"><code>${escapeHtml(id)}</code><button type="button" class="danger" style="padding:3px 7px;font-size:11px" onclick="removeMaintenanceAllowedUser('${escapeHtml(id)}')">حذف</button></span>`).join("")
+    : "هیچ Allowed User ثبت نشده است.";
+}
+
+async function loadMaintenance() {
+  try {
+    const data = await api("/api/admin/maintenance");
+    maintenanceState = { enabled: data.enabled === true, allowedTelegramIds: Array.isArray(data.allowedTelegramIds) ? data.allowedTelegramIds : [] };
+    renderMaintenanceState();
+  } catch (error) {
+    const message = document.getElementById("maintenanceMessage");
+    if (message) message.textContent = error.message;
+  }
+}
+
+async function persistMaintenance() {
+  const data = await api("/api/admin/maintenance", {
+    method: "PUT",
+    body: JSON.stringify({ enabled: maintenanceState.enabled, allowedTelegramIds: maintenanceState.allowedTelegramIds })
+  });
+  maintenanceState = { enabled: data.enabled === true, allowedTelegramIds: data.allowedTelegramIds || [] };
+  renderMaintenanceState();
+}
+
+async function saveMaintenanceMode() {
+  const checkbox = document.getElementById("setMaintenanceEnabled");
+  const previous = maintenanceState.enabled;
+  maintenanceState.enabled = checkbox.checked;
+  try {
+    await persistMaintenance();
+    showMsg(`Maintenance Mode: ${maintenanceState.enabled ? "ON" : "OFF"}`, "success");
+  } catch (error) {
+    maintenanceState.enabled = previous;
+    renderMaintenanceState();
+    showMsg(error.message, "error");
+  }
+}
+
+async function addMaintenanceAllowedUser() {
+  const input = document.getElementById("maintenanceAllowedId");
+  const id = input.value.trim();
+  if (!/^\d{1,20}$/.test(id)) return showMsg("Telegram User ID باید عددی باشد.", "error");
+  if (maintenanceState.allowedTelegramIds.includes(id)) return showMsg("این User قبلاً اضافه شده است.", "error");
+  maintenanceState.allowedTelegramIds.push(id);
+  try {
+    await persistMaintenance();
+    input.value = "";
+    showMsg("Allowed User اضافه شد.", "success");
+  } catch (error) {
+    maintenanceState.allowedTelegramIds = maintenanceState.allowedTelegramIds.filter(item => item !== id);
+    renderMaintenanceState();
+    showMsg(error.message, "error");
+  }
+}
+
+async function removeMaintenanceAllowedUser(id) {
+  const previous = [...maintenanceState.allowedTelegramIds];
+  maintenanceState.allowedTelegramIds = maintenanceState.allowedTelegramIds.filter(item => item !== String(id));
+  try {
+    await persistMaintenance();
+    showMsg("Allowed User حذف شد.", "success");
+  } catch (error) {
+    maintenanceState.allowedTelegramIds = previous;
+    renderMaintenanceState();
+    showMsg(error.message, "error");
+  }
+}
+
 async function loadSettings() {
+  loadMaintenance();
   try {
     const data = await api("/api/admin/settings");
     const s = data.settings || {};

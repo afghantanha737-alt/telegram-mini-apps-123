@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Gramup — Maintenance</title>
+  <style>
+    :root{color-scheme:dark;--bg:#090b12;--card:rgba(20,24,38,.88);--line:rgba(255,255,255,.12);--text:#f6f7fb;--muted:#a8afc2;--accent:#a78bfa}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(circle at 20% 10%,#25204b 0,transparent 42%),linear-gradient(135deg,#090b12,#151128);font-family:Inter,Vazirmatn,Tahoma,sans-serif;color:var(--text)}
+    .card{width:min(510px,100%);padding:34px 26px 28px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:26px;box-shadow:0 24px 80px rgba(0,0,0,.35);backdrop-filter:blur(18px)}
+    .mark{width:88px;height:88px;margin:0 auto 22px;display:grid;place-items:center;border-radius:28px;background:linear-gradient(135deg,#c4b5fd,#7c3aed);box-shadow:0 14px 36px rgba(124,58,237,.35)}
+    .mark svg{width:52px;height:52px;stroke:#fff;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.eyebrow{color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}.title{margin:10px 0 12px;font-size:29px;line-height:1.25}.text{margin:0 auto 25px;max-width:390px;color:var(--muted);font-size:15px;line-height:1.9}.langs{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}.langs button{border:1px solid var(--line);border-radius:999px;padding:9px 14px;background:rgba(255,255,255,.05);color:var(--muted);font:inherit;font-size:12px;cursor:pointer}.langs button.active,.langs button:hover{border-color:var(--accent);background:rgba(167,139,250,.16);color:var(--text)}
+  </style>
+</head>
+<body>
+  <main class="card" role="status" aria-live="polite">
+    <div class="mark" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 6v8M24 34v8M6 24h8M34 24h8M11.3 11.3l5.7 5.7M31 31l5.7 5.7M36.7 11.3 31 17M17 31l-5.7 5.7"/><path d="M17 27.5a9 9 0 1 1 14 0c-1.5 1.5-2.5 2.7-2.5 4.5h-9c0-1.8-1-3-2.5-4.5Z"/><path d="M20 36h8M21 40h6"/></svg></div>
+    <div class="eyebrow" id="eyebrow">GRAMUP</div>
+    <h1 class="title" id="title">Mini App در حال بروزرسانی است</h1>
+    <p class="text" id="text">Mini App در حال بروزرسانی است و به‌زودی دوباره در دسترس خواهد بود.</p>
+    <div class="langs" aria-label="Language selector">
+      <button type="button" data-lang="en">English</button>
+      <button type="button" data-lang="fa">فارسی</button>
+      <button type="button" data-lang="ps">پښتو</button>
+    </div>
+  </main>
+  <script>
+    const copy = {
+      en: { dir:'ltr', eyebrow:'GRAMUP · MAINTENANCE', title:'Mini App is being updated', text:'The Mini App is being updated and will be available again soon.' },
+      fa: { dir:'rtl', eyebrow:'GRAMUP · بروزرسانی', title:'Mini App در حال بروزرسانی است', text:'Mini App در حال بروزرسانی است و به‌زودی دوباره در دسترس خواهد بود.' },
+      ps: { dir:'rtl', eyebrow:'GRAMUP · تازه کول', title:'Mini App د تازه کېدو په حال کې دی', text:'Mini App تازه کېږي او ډېر ژر به بیا د لاسرسي وړ وي.' }
+    };
+    const params = new URLSearchParams(location.search);
+    const initial = params.get('lang') || localStorage.getItem('gramup-maintenance-language') || 'fa';
+    function setLanguage(lang) {
+      const value = copy[lang] ? lang : 'fa'; const item = copy[value];
+      document.documentElement.lang = value; document.documentElement.dir = item.dir;
+      document.getElementById('eyebrow').textContent = item.eyebrow;
+      document.getElementById('title').textContent = item.title;
+      document.getElementById('text').textContent = item.text;
+      document.querySelectorAll('[data-lang]').forEach(button => button.classList.toggle('active', button.dataset.lang === value));
+      localStorage.setItem('gramup-maintenance-language', value);
+    }
+    document.querySelectorAll('[data-lang]').forEach(button => button.addEventListener('click', () => setLanguage(button.dataset.lang)));
+    setLanguage(initial);
+  </script>
+</body>
+</html>

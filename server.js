@@ -8,6 +8,7 @@ const { consumeRateLimit } = require('./utils/sharedRateLimit');
 const { verifyMongoTransactionCapability, getMongoTransactionStatus } = require('./utils/mongoTransaction');
 const { isValidAdminKey } = require('./utils/adminKey');
 const { withDistributedJobLock } = require('./utils/distributedJobLock');
+const { getMaintenanceState, telegramIdFromInitData, isAllowedTelegramId } = require('./utils/maintenance');
 
 const app = express();
 app.disable('x-powered-by');
@@ -68,6 +69,21 @@ app.use(
 app.use(express.json({ limit: '150kb' }));
 app.use(express.urlencoded({ extended: false, limit: '150kb' }));
 
+/* TEST-only Maintenance Mode: Admin and the access probe remain available. */
+app.use('/api', async (req, res, next) => {
+  if (req.path === '/maintenance/access' || req.path === '/health' || req.path === '/ready' || req.path.startsWith('/admin')) return next();
+  try {
+    const state = await getMaintenanceState();
+    if (!state.enabled) return next();
+    const telegramId = telegramIdFromInitData(req.get('X-Telegram-Init-Data'));
+    if (isAllowedTelegramId(state, telegramId)) return next();
+    return res.status(423).json({ success: false, code: 'MAINTENANCE_MODE', maintenance: true, message: 'Mini App در حال بروزرسانی است.' });
+  } catch (error) {
+    console.error('Maintenance access check failed:', error.message || error);
+    return res.status(503).json({ success: false, code: 'MAINTENANCE_CHECK_UNAVAILABLE', message: 'سرویس موقتاً در دسترس نیست.' });
+  }
+});
+
 /* =========================================================
    SHARED DATABASE RATE LIMITS — common to every app instance
 ========================================================= */
@@ -120,6 +136,7 @@ app.use('/api/points', require('./routes/points'));
 app.use('/api/referral', require('./routes/referral'));
 app.use('/api/leaderboard', require('./routes/leaderboard'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/maintenance', require('./routes/maintenance'));
 app.use('/api/telegram', require('./routes/telegramWebhook'));
 
 app.get('/api/health', (req, res) => {
@@ -246,6 +263,10 @@ async function startServer() {
     const { settleClosedWeeks } = require('./utils/weeklyLeaderboardSettlement');
     void runJob('weekly-leaderboard-settlement', 'Initial weekly settlement', settleClosedWeeks);
     setInterval(() => { void runJob('weekly-leaderboard-settlement', 'Scheduled weekly settlement', settleClosedWeeks); }, 60 * 1000);
+
+    const { runWeeklyChallengeStartNotification } = require('./utils/weeklyChallengeStartNotification');
+    void runJob('weekly-challenge-start-notification', 'Initial weekly challenge start notification', runWeeklyChallengeStartNotification);
+    setInterval(() => { void runJob('weekly-challenge-start-notification', 'Scheduled weekly challenge start notification', runWeeklyChallengeStartNotification); }, 60 * 1000);
 
     const { settleMaturedVipSubscriptions } = require('./utils/vipSettlement');
     void runJob('vip-principal-settlement', 'Initial VIP principal settlement', settleMaturedVipSubscriptions);

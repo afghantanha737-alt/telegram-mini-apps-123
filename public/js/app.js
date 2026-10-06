@@ -2692,7 +2692,7 @@ function renderProfileReferral() {
       { key: "1", label: t("referral_level_label", { n: 1 }), min: 1, max: 1, rate: 10 },
     { key: "2", label: t("referral_level_label", { n: 2 }), min: 2, max: 2, rate: 5 },
     { key: "3", label: t("referral_level_label", { n: 3 }), min: 3, max: 3, rate: 3 },
-    { key: "4plus", label: t("referral_level_4_plus"), min: 4, max: 10, rate: 1 }
+    { key: "4plus", label: t("referral_level_4_plus"), min: 4, max: 4, rate: 2 }
   ].map(bucket => {
     const rows = rawNetwork.filter(row => Number(row.level) >= bucket.min && Number(row.level) <= bucket.max);
     return {
@@ -2700,7 +2700,7 @@ function renderProfileReferral() {
       members: rows.reduce((sum, row) => sum + (Number(row.members) || 0), 0),
       active: rows.reduce((sum, row) => sum + (Number(row.activeMembers) || 0), 0),
       earned: rows.reduce((sum, row) => sum + (Number(row.commissionPoints) || 0), 0),
-      rate: bucket.key === "4plus" ? 1 : Number(configuredRates[bucket.min - 1]) || bucket.rate
+      rate: bucket.key === "4plus" ? 2 : Number(configuredRates[bucket.min - 1]) || bucket.rate
     };
   });
   const maxMembers = Math.max(1, ...buckets.map(row => row.members));

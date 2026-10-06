@@ -1952,49 +1952,27 @@ html[data-theme="light"] .depositMemoCode {
   background: rgba(124, 58, 237, .07);
 }
 
-/* Boot loading state: keep the app informative while auth/API initializes. */
-.bootLoading { min-height: 330px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--text-soft); text-align: center; }
-.bootLoadingMark { width: 58px; height: 58px; display: grid; place-items: center; border: 2px solid var(--primary-2); border-radius: 18px; color: var(--primary-2); font-size: 30px; font-weight: 900; box-shadow: 0 0 24px rgba(167,139,250,.25); }
-.bootLoadingTitle { color: var(--text); font-size: 17px; font-weight: 900; }
-.bootLoadingText { font-size: 11px; }
-.bootLoadingBar { width: 118px; height: 4px; overflow: hidden; margin-top: 5px; border-radius: 999px; background: var(--surface-3); }
-.bootLoadingBar span { display: block; width: 42%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), var(--primary-2)); animation: bootLoadingMove 1.2s ease-in-out infinite; }
-@keyframes bootLoadingMove { 0% { transform: translateX(-130%); } 100% { transform: translateX(300%); } }
-
-/* VIP reference visual specification: scoped metallic tiers and glass cards. */
-.vipRedesign { overflow-x: hidden; display: flex; flex-direction: column; padding-inline: 2px; background: radial-gradient(circle at 50% 0%, rgba(124,58,237,.14), transparent 42%); }
-.vipRedesign .vipPlanCard { border-radius: 25px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); gap: 20px; }
-.vipRedesign .vipPlanCard--bronze .badge { color: #fff7ed; background: linear-gradient(135deg, #8c6239, #e0a96d); border: 0; box-shadow: 0 4px 15px rgba(140,98,57,.3); }
-.vipRedesign .vipPlanCard--silver .badge { color: #172033; background: linear-gradient(135deg, #757f9a, #d7dde8); border: 0; box-shadow: 0 4px 15px rgba(215,221,232,.25); }
-.vipRedesign .vipPlanCard--gold .badge { color: #3b2705; background: linear-gradient(135deg, #bf953f, #fcf6ba 52%, #aa771c); border: 0; box-shadow: 0 4px 20px rgba(191,149,63,.4); }
-.vipRedesign .vipPlanCard--bronze .vipPlanButton--primary { background: linear-gradient(135deg, #8c6239, #e0a96d); box-shadow: 0 4px 15px rgba(140,98,57,.3); }
-.vipRedesign .vipPlanCard--silver .vipPlanButton--primary { color: #172033; background: linear-gradient(135deg, #757f9a, #d7dde8); box-shadow: 0 4px 15px rgba(215,221,232,.25); }
-.vipRedesign .vipPlanCard--gold .vipPlanButton--primary { color: #3b2705; background: linear-gradient(135deg, #bf953f, #fcf6ba 52%, #aa771c); box-shadow: 0 4px 20px rgba(191,149,63,.4); }
-.vipRedesign .vipPlanButton { border-radius: 16px; }
-.vipRedesign .vipPlanStat span, .vipRedesign .vipPlanDaily { color: rgba(255,255,255,.62); }
-.vipRedesign .vipPlanStat b, .vipRedesign .vipPlanReward b { font-weight: 900; }
-.vipHeroReference { padding: 18px 16px 16px; border-color: rgba(167,139,250,.28); background: linear-gradient(155deg, rgba(76,29,149,.42), rgba(15,12,27,.96) 72%); }
-.vipHeroBrand { display: flex; align-items: center; justify-content: flex-start; gap: 10px; direction: rtl; margin-bottom: 16px; }
-.vipHeroBrand img { width: 48px; height: 48px; border-radius: 14px; box-shadow: 0 7px 22px rgba(139,92,246,.34); }
-.vipHeroBrand div { display: flex; flex-direction: column; gap: 2px; }
-.vipHeroBrand strong { font-size: 21px; line-height: 1.1; color: #fff; }
-.vipHeroBrand strong span { color: #c4b5fd; }
-.vipHeroBrand small { color: #aaa5bd; font-size: 10px; direction: ltr; text-align: right; }
-.vipHeroRows { display: grid; gap: 8px; margin-bottom: 15px; }
-.vipHeroRows > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; padding: 0 13px; border-radius: 14px; background: rgba(139,92,246,.13); color: #bdb7ce; font-size: 11px; }
-.vipHeroRows > div:first-child { background: rgba(255,255,255,.07); }
-.vipHeroRows b { color: #fff; font-size: 13px; direction: ltr; white-space: nowrap; }
-.vipHeroButton { width: 100%; min-height: 48px; border-radius: 17px; color: #fff; font-size: 14px; font-weight: 900; background: linear-gradient(100deg, #a78bfa, #7c3aed); box-shadow: 0 12px 28px rgba(124,58,237,.32); }
-.vipHeroButton:active { transform: scale(.98); }
-.vipPlanCard { min-height: 390px; }
-.vipPlanCard--gold { box-shadow: 0 16px 38px rgba(234,179,8,.12), 0 15px 35px rgba(0,0,0,.22); }
-.vipPlanCard .vipPlanStat { min-height: 94px; display: flex; flex-direction: column; justify-content: center; }
-.vipPlanCard .vipPlanStat b { font-size: 18px; }
-.vipPlanCard .vipPlanReward { min-height: 48px; margin-top: 10px; }
-@media (max-width: 420px) {
-  .vipHeroReference { padding: 16px 14px 14px; }
-  .vipHeroBrand strong { font-size: 19px; }
-  .vipPlanCard { min-height: 0; }
-  .vipPlanCard .vipPlanStat { min-height: 82px; }
-  .vipPlanCard .vipPlanStat b { font-size: 16px; }
+/* Maintenance mode overlay — scoped and independent from the existing app layout. */
+.maintenanceOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 6, 9, .96);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
+.maintenanceCard {
+  width: min(100%, 420px);
+  padding: 30px 24px;
+  border: 1px solid rgba(167, 139, 250, .34);
+  border-radius: 26px;
+  background: linear-gradient(155deg, rgba(76, 29, 149, .38), rgba(15, 12, 27, .96) 74%);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, .42), 0 0 34px rgba(124, 58, 237, .16);
+  text-align: center;
+}
+.maintenanceIcon { margin-bottom: 12px; font-size: 42px; }
+.maintenanceCard h2 { margin: 0 0 10px; color: #fff; font-size: 21px; font-weight: 900; }
+.maintenanceCard p { margin: 0; color: rgba(255, 255, 255, .68); font-size: 13px; line-height: 1.9; }

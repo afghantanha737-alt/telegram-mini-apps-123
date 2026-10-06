@@ -4,6 +4,7 @@ const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
 const { requireTelegramAuth } = require('../utils/telegramAuth');
 const { membership, toPublic } = require('../utils/membership');
+const RequiredChannel = require('../models/RequiredChannel');
 
 // عمداً فقط احراز هویت (بدون gate) تا کاربری که هنوز عضو نشده بتواند وضعیتش را ببیند و بررسی کند
 const auth = requireTelegramAuth(process.env.BOT_TOKEN);
@@ -11,6 +12,11 @@ const auth = requireTelegramAuth(process.env.BOT_TOKEN);
 async function respond(req, res) {
   // هویت کاربر فقط از initData امضاشده‌ی تلگرام می‌آید (req.dbUser)، نه از ورودی فرانت‌اند.
   // همیشه بررسی تازه از تلگرام (force) — هیچ‌وقت از کش استفاده نمی‌شود.
+  const activeChannelCount = await RequiredChannel.countDocuments({ isActive: true });
+  if (activeChannelCount === 0) {
+    res.set('Cache-Control', 'no-store');
+    return res.json({ success: true, required: false, verified: true, unavailable: false, channels: [] });
+  }
   let result;
   try {
     result = await membership.check(req.dbUser.telegramId, { force: true });

@@ -1585,7 +1585,7 @@ router.delete('/users/:id', async (req, res) => {
 });
 
 router.post('/users/:id/test-weekly-reward-notification', async (req, res) => {
-  if (!isTestEnvironment()) {
+  if (!isTestDeleteEnvironment()) {
     return res.status(403).json({ success: false, code: 'TEST_ONLY', message: 'تست Notification فقط در محیط TEST مجاز است.' });
   }
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -1616,12 +1616,7 @@ router.post('/users/:id/test-weekly-reward-notification', async (req, res) => {
     text: botText('leaderboardReward', user.language, rank, reward)
   });
   if (delivery.status !== 'sent') {
-    return res.status(502).json({
-      success: false,
-      code: 'TELEGRAM_NOTIFICATION_FAILED',
-      status: delivery.status,
-      message: `ارسال پیام آزمایشی Telegram تأیید نشد؛ وضعیت delivery: ${delivery.status}.`
-    });
+    return res.status(502).json({ success: false, code: 'TELEGRAM_NOTIFICATION_FAILED', status: delivery.status, message: 'ارسال پیام آزمایشی Telegram تأیید نشد.' });
   }
   return res.json({ success: true, status: delivery.status, message: 'پیام آزمایشی Weekly Reward با موفقیت ارسال شد.' });
 });

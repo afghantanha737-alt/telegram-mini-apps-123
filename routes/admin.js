@@ -1705,6 +1705,37 @@ router.post('/required-channels/:id/test', async (req, res) => {
 });
 
 /* -------------------- SETTINGS -------------------- */
+router.get('/maintenance', async (req, res) => {
+  const settings = await Settings.getGlobal();
+  res.json({
+    success: true,
+    enabled: settings.maintenanceEnabled === true,
+    allowedTelegramIds: Array.isArray(settings.maintenanceAllowedTelegramIds)
+      ? settings.maintenanceAllowedTelegramIds.map(String)
+      : []
+  });
+});
+
+router.put('/maintenance', async (req, res) => {
+  const settings = await Settings.getGlobal();
+  const enabled = req.body?.enabled === true || req.body?.enabled === 'true';
+  const rawIds = Array.isArray(req.body?.allowedTelegramIds) ? req.body.allowedTelegramIds : [];
+  const allowedTelegramIds = [...new Set(rawIds.map(value => String(value).trim()))];
+  if (allowedTelegramIds.length > 500 || allowedTelegramIds.some(id => !/^\d{1,20}$/.test(id))) {
+    return res.status(400).json({ success: false, message: 'Allowed Userها باید آیدی عددی معتبر و حداکثر ۵۰۰ مورد باشند.' });
+  }
+  settings.maintenanceEnabled = enabled;
+  settings.maintenanceAllowedTelegramIds = allowedTelegramIds;
+  await settings.save();
+  recordAdminLog({
+    actor: req.adminActor,
+    action: 'maintenance_update',
+    targetType: 'settings',
+    details: `${enabled ? 'enabled' : 'disabled'}; allowed=${allowedTelegramIds.length}`
+  });
+  res.json({ success: true, enabled, allowedTelegramIds });
+});
+
 router.get('/vip/plans', async (req, res) => {
   const plans = await VipPlan.find({}).sort({ planNumber: 1 }).lean();
   res.json({ success: true, plans });

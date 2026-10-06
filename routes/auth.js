@@ -7,6 +7,7 @@ const User = require('../models/User');
 const { hashNetworkIdentifier, assessReferralRisk } = require('../utils/referralRisk');
 const { linkReferral } = require('../utils/referralSystem');
 const { referralIdentifierQuery } = require('../utils/referralCore');
+const Settings = require('../models/Settings');
 
 const auth = requireTelegramAuth(process.env.BOT_TOKEN);
 
@@ -31,6 +32,11 @@ router.get('/me', auth, async (req, res) => {
     }
   }
 
+  const settings = await Settings.getGlobal();
+  const allowedTelegramIds = Array.isArray(settings.maintenanceAllowedTelegramIds)
+    ? settings.maintenanceAllowedTelegramIds.map(String)
+    : [];
+  const maintenanceEnabled = settings.maintenanceEnabled === true;
   res.json({
     success: true,
     telegramId: u.telegramId,
@@ -40,7 +46,12 @@ router.get('/me', auth, async (req, res) => {
     photoUrl: u.photoUrl,
     points: u.points,
     referralCode: u.referralCode,
-    language: u.language
+    language: u.language,
+    maintenance: {
+      enabled: maintenanceEnabled,
+      allowed: allowedTelegramIds.includes(String(u.telegramId)),
+      required: maintenanceEnabled && !allowedTelegramIds.includes(String(u.telegramId))
+    }
   });
 });
 

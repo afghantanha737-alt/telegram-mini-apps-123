@@ -9,6 +9,14 @@ const RequiredChannel = require('../models/RequiredChannel');
 // عمداً فقط احراز هویت (بدون gate) تا کاربری که هنوز عضو نشده بتواند وضعیتش را ببیند و بررسی کند
 const auth = requireTelegramAuth(process.env.BOT_TOKEN);
 
+// این مسیر عمداً عمومی است: فقط می‌گوید آیا کانال فعالی وجود دارد یا نه.
+// هیچ اطلاعات کاربر، کانال خصوصی یا وضعیت عضویت را برنمی‌گرداند.
+router.get('/status', async (req, res) => {
+  const activeChannelCount = await RequiredChannel.countDocuments({ isActive: true });
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, required: activeChannelCount > 0, activeChannelCount });
+});
+
 async function respond(req, res) {
   // هویت کاربر فقط از initData امضاشده‌ی تلگرام می‌آید (req.dbUser)، نه از ورودی فرانت‌اند.
   // همیشه بررسی تازه از تلگرام (force) — هیچ‌وقت از کش استفاده نمی‌شود.

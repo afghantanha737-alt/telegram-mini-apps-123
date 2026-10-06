@@ -22,10 +22,11 @@ const settingsSchema = new mongoose.Schema(
     dailyReminderLastSentCount: { type: Number, default: 0 },
     dailyReminderLastStatus: { type: String, default: '' },
     dailyReminderLastError: { type: String, default: '' },
-    maintenanceMode: { type: Boolean, default: false },
-    maintenanceAllowedTelegramIds: { type: [String], default: () => [] },
     weeklyLeaderboardEnabled: { type: Boolean, default: true },
     weeklyLeaderboardPrizes: { type: [Number], default: () => [500, 250, 100] },
+    // حالت تعمیرات برای محیط‌های تست/به‌روزرسانی؛ کاربران مجاز همچنان می‌توانند وارد شوند.
+    maintenanceEnabled: { type: Boolean, default: false },
+    maintenanceAllowedTelegramIds: { type: [String], default: () => [] },
     // Native GRAM deposits stay disabled until an administrator supplies the project's TON Mainnet wallet.
     depositEnabled: { type: Boolean, default: false },
     depositNetwork: { type: String, enum: ['TON_MAINNET'], default: 'TON_MAINNET' },
@@ -39,21 +40,9 @@ const settingsSchema = new mongoose.Schema(
 );
 
 settingsSchema.statics.getGlobal = async function getGlobal() {
-  // The unique key plus an atomic upsert prevents parallel first requests from
-  // racing into duplicate documents; if concurrent upserts still collide, read
-  // the winner instead of failing an otherwise safe request.
-  try {
-    return await this.findOneAndUpdate(
-      { key: 'global' },
-      { $setOnInsert: { key: 'global' } },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
-    );
-  } catch (error) {
-    if (error?.code !== 11000) throw error;
-    const existing = await this.findOne({ key: 'global' });
-    if (existing) return existing;
-    throw error;
-  }
+  let doc = await this.findOne({ key: 'global' });
+  if (!doc) doc = await this.create({ key: 'global' });
+  return doc;
 };
 
 module.exports = mongoose.model('Settings', settingsSchema);

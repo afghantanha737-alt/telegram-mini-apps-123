@@ -1,133 +1,97 @@
 'use strict';
+
 const assert = require('assert');
-const User = require('../models/User');
-const Settings = require('../models/Settings');
-const TaskCompletion = require('../models/TaskCompletion');
-const PointsLedger = require('../models/PointsLedger');
-const ReferralRelationship = require('../models/ReferralRelationship');
-const ledger = require('../utils/ledger');
 
 function query(value) {
   return {
     select() { return this; },
     session() { return this; },
-    async lean() { return typeof value === 'function' ? value() : value; },
+    lean: async () => (typeof value === 'function' ? value() : value),
     then(resolve, reject) { return Promise.resolve(typeof value === 'function' ? value() : value).then(resolve, reject); }
   };
 }
 
-(async () => {
-  const originals = {
-    userFindById: User.findById,
-    userFindByIdAndUpdate: User.findByIdAndUpdate,
-    settingsFindOne: Settings.findOne,
-    completionFind: TaskCompletion.find,
-    ledgerFindOne: PointsLedger.findOne,
-    relationshipUpsert: ReferralRelationship.findOneAndUpdate,
-    recordLedgerRequired: ledger.recordLedgerRequired
-  };
-  const parent = { _id: 'parent-id', telegramId: '200', points: 0, referredBy: null, isBanned: false, accountReviewStatus: 'active' };
-  const invitee = { _id: 'child-id', telegramId: '100', points: 0, referredBy: parent._id, isBanned: false, accountReviewStatus: 'active', referralRiskScore: 0, createdAt: new Date(Date.now() - 8 * 86400000) };
-  let completions = [
-    { status: 'approved', createdAt: new Date(Date.now() - 3 * 86400000) },
-    { status: 'approved', createdAt: new Date(Date.now() - 2 * 86400000) },
-    { status: 'approved', createdAt: new Date(Date.now() - 86400000) }
-  ];
-  const users = new Map([[parent._id, parent], [invitee._id, invitee]]);
-  const entries = new Map();
-  const incrementsByTransaction = new Map();
-  let concurrentReadCount = 0;
-  let releaseConcurrentReads;
-  let concurrentReads = null;
-  let failLedgerOnce = false;
+const modelPaths = {
+  User: require.resolve('../models/User'),
+  Settings: require.resolve('../models/Settings'),
+  ReferralRelationship: require.resolve('../models/ReferralRelationship'),
+  PointsLedger: require.resolve('../models/PointsLedger'),
+  NotificationDelivery: require.resolve('../utils/notificationDelivery'),
+  MongoTransaction: require.resolve('../utils/mongoTransaction')
+};
 
-  User.findById = id => query(users.get(String(id)) || null);
-  User.findByIdAndUpdate = async (id, update, options = {}) => {
+const parent4 = { _id: 'l4', referredBy: null, isBanned: false, accountReviewStatus: 'normal', referralRiskScore: 0, referralRiskBlocked: false, points: 0 };
+const parent3 = { _id: 'l3', referredBy: 'l4', isBanned: false, accountReviewStatus: 'normal', referralRiskScore: 0, referralRiskBlocked: false, points: 0 };
+const parent2 = { _id: 'l2', referredBy: 'l3', isBanned: false, accountReviewStatus: 'normal', referralRiskScore: 0, referralRiskBlocked: false, points: 0 };
+const parent1 = { _id: 'l1', referredBy: 'l2', isBanned: false, accountReviewStatus: 'normal', referralRiskScore: 0, referralRiskBlocked: false, points: 0 };
+const origin = { _id: 'origin', referredBy: 'l1', isBanned: false, accountReviewStatus: 'normal', referralRiskScore: 0, referralRiskBlocked: false, points: 0, createdAt: new Date() };
+const users = new Map([parent4, parent3, parent2, parent1, origin].map(user => [user._id, user]));
+const entries = new Map();
+const relationships = [];
+
+const fakeUser = {
+  findById(id) { return query(users.get(String(id)) || null); },
+  async findByIdAndUpdate(id, update) {
     const user = users.get(String(id));
     if (!user) return null;
-    const increment = Number(update.$inc?.points || 0);
-    user.points += increment;
-    if (options.session) incrementsByTransaction.set(options.session.id, (incrementsByTransaction.get(options.session.id) || 0) + increment);
+    user.points += Number(update.$inc?.points || 0);
     return { ...user };
-  };
-  Settings.findOne = () => query({ referralLevelRates: [10, 5, 3] });
-  TaskCompletion.find = () => query(completions);
-  PointsLedger.findOne = filter => ({
-    select() { return this; },
-    session() { return this; },
-    async lean() {
-      if (concurrentReads) {
-        concurrentReadCount += 1;
-        if (concurrentReadCount === 2) releaseConcurrentReads();
-        await concurrentReads;
-      }
-      return entries.has(filter.sourceId) ? { _id: filter.sourceId } : null;
-    },
-    then(resolve, reject) { return this.lean().then(resolve, reject); }
-  });
-  ReferralRelationship.findOneAndUpdate = async () => ({ ok: true });
-  ledger.recordLedgerRequired = async payload => {
-    if (failLedgerOnce) { failLedgerOnce = false; throw new Error('transient ledger write failure'); }
-    if (entries.has(payload.sourceId)) return { created: false, entry: entries.get(payload.sourceId) };
-    entries.set(payload.sourceId, { ...payload });
-    return { created: true, entry: entries.get(payload.sourceId) };
-  };
-
-  const { distributeReferralCommissions } = require('../utils/referralSystem');
-  let transactionSequence = 0;
-  async function withMockTransaction(work) {
-    const session = { id: `tx-${++transactionSequence}` };
-    try { return await work(session); }
-    catch (error) {
-      parent.points -= incrementsByTransaction.get(session.id) || 0;
-      incrementsByTransaction.delete(session.id);
-      throw error;
-    }
   }
-  const earning = { user: invitee._id, amount: 100, currency: 'points', type: 'task', sourceId: 'task-source-123', transactionId: 'earn-tx-123' };
-  try {
-    completions = completions.slice(0, 2);
-    assert.deepStrictEqual(await withMockTransaction(session => distributeReferralCommissions(earning, session)), [], 'ineligible referred user earns no commission');
-    assert.strictEqual(parent.points, 0);
-    completions = [
-      { status: 'approved', createdAt: new Date(Date.now() - 3 * 86400000) },
-      { status: 'approved', createdAt: new Date(Date.now() - 2 * 86400000) },
-      { status: 'approved', createdAt: new Date(Date.now() - 86400000) }
-    ];
-
-    failLedgerOnce = true;
-    await assert.rejects(withMockTransaction(session => distributeReferralCommissions(earning, session)), /transient ledger write failure/);
-    assert.strictEqual(parent.points, 0, 'failed ledger write rolls back the ancestor balance in the transaction double');
-    const first = await withMockTransaction(session => distributeReferralCommissions(earning, session));
-    assert.strictEqual(first.length, 1);
-    const onceBalance = parent.points;
-    const duplicate = await withMockTransaction(session => distributeReferralCommissions(earning, session));
-    assert.deepStrictEqual(duplicate, []);
-    assert.strictEqual(parent.points, onceBalance, 'duplicate earning cannot pay twice');
-
-    // Exercise simultaneous reads of the unique source IDs. The unique ledger write
-    // lets one transaction win; the other must abort so only one set of credits remains.
-    entries.clear(); parent.points = 0;
-    concurrentReadCount = 0;
-    concurrentReads = new Promise(resolve => { releaseConcurrentReads = resolve; });
-    const raced = await Promise.allSettled([
-      withMockTransaction(session => distributeReferralCommissions(earning, session)),
-      withMockTransaction(session => distributeReferralCommissions(earning, session))
-    ]);
-    concurrentReads = null;
-    assert.strictEqual(raced.filter(result => result.status === 'fulfilled').length, 1);
-    assert.strictEqual(raced.filter(result => result.status === 'rejected').length, 1);
-    const expected = [...entries.values()].reduce((sum, entry) => sum + entry.amount, 0);
-    assert.strictEqual(parent.points, expected, 'losing duplicate commission transaction rolls back its credits');
-    assert.strictEqual(entries.size, 1, 'only one commission ledger leg survives for the one-level chain');
-    console.log('ALL PASS — referral commission eligibility, failed retry, duplicate, and concurrent unique-ledger guard (transaction test double)');
-  } finally {
-    User.findById = originals.userFindById;
-    User.findByIdAndUpdate = originals.userFindByIdAndUpdate;
-    Settings.findOne = originals.settingsFindOne;
-    TaskCompletion.find = originals.completionFind;
-    PointsLedger.findOne = originals.ledgerFindOne;
-    ReferralRelationship.findOneAndUpdate = originals.relationshipUpsert;
-    ledger.recordLedgerRequired = originals.recordLedgerRequired;
+};
+const fakeSettings = { findOne: () => query({ referralLevelRates: [10, 5, 3, 2] }) };
+const fakeRelationship = {
+  findOneAndUpdate(filter, update) {
+    const row = { referrerId: filter.referrerId, referredUserId: filter.referredUserId, level: update.$set.level, status: update.$set.status };
+    relationships.push(row);
+    return query(row);
   }
-})().catch(error => { console.error(error); process.exitCode = 1; });
+};
+function FakePointsLedger(payload) {
+  this.payload = payload;
+}
+FakePointsLedger.prototype.save = async function save() {
+  const entry = { ...this.payload };
+  entries.set(entry.sourceId, entry);
+  return entry;
+};
+FakePointsLedger.findOne = filter => query(entries.has(filter.sourceId) ? { _id: filter.sourceId } : null);
+
+require.cache[modelPaths.User] = { id: modelPaths.User, filename: modelPaths.User, loaded: true, exports: fakeUser };
+require.cache[modelPaths.Settings] = { id: modelPaths.Settings, filename: modelPaths.Settings, loaded: true, exports: fakeSettings };
+require.cache[modelPaths.ReferralRelationship] = { id: modelPaths.ReferralRelationship, filename: modelPaths.ReferralRelationship, loaded: true, exports: fakeRelationship };
+require.cache[modelPaths.PointsLedger] = { id: modelPaths.PointsLedger, filename: modelPaths.PointsLedger, loaded: true, exports: FakePointsLedger };
+require.cache[modelPaths.NotificationDelivery] = { id: modelPaths.NotificationDelivery, filename: modelPaths.NotificationDelivery, loaded: true, exports: { sendNotificationOnce: async () => ({ status: 'sent' }) } };
+require.cache[modelPaths.MongoTransaction] = { id: modelPaths.MongoTransaction, filename: modelPaths.MongoTransaction, loaded: true, exports: { withMongoTransaction: async work => work({ id: 'tx-test' }) } };
+
+const { recordLedgerRequired } = require('../utils/ledger');
+const { distributeReferralCommissions } = require('../utils/referralSystem');
+
+(async () => {
+  const earning = { user: origin._id, amount: 60, currency: 'points', type: 'spin', sourceId: 'spin-source-60', transactionId: 'spin-tx-60', session: { id: 'tx-1' } };
+  await recordLedgerRequired(earning);
+  const paid = [...entries.values()]
+    .filter(entry => entry.type === 'referral_commission')
+    .sort((a, b) => a.referralLevel - b.referralLevel);
+  assert.deepStrictEqual(paid.map(entry => [entry.referralLevel, entry.amount]), [[1, 6], [2, 3], [3, 1], [4, 1]]);
+  assert.deepStrictEqual([parent1, parent2, parent3, parent4].map(user => user.points), [6, 3, 1, 1]);
+  assert.ok(paid.every(entry => entry.currency === 'points'));
+  assert.deepStrictEqual(relationships.map(row => row.level), [1, 2, 3, 4]);
+
+  const duplicate = await distributeReferralCommissions(earning, { id: 'tx-2' });
+  assert.deepStrictEqual(duplicate, []);
+  assert.deepStrictEqual([parent1, parent2, parent3, parent4].map(user => user.points), [6, 3, 1, 1]);
+
+  const youngOrigin = { ...origin, _id: 'young', referredBy: parent1._id, createdAt: new Date() };
+  users.set(youngOrigin._id, youngOrigin);
+  const youngPaid = await distributeReferralCommissions({ ...earning, user: youngOrigin._id, sourceId: 'spin-young-60' }, { id: 'tx-3' });
+  assert.strictEqual(youngPaid[0].amount, 6, 'a new account is not blocked by referral age');
+
+  parent2.referralRiskScore = 50;
+  const blocked = await distributeReferralCommissions({ ...earning, sourceId: 'spin-risk-60' }, { id: 'tx-4' });
+  assert.deepStrictEqual(blocked.map(item => [item.level, item.amount]), [[1, 6]], 'a risky L2 ancestor blocks L2+ without invalidating a clean L1');
+
+  console.log('ALL PASS — real Spin ledger trigger, immediate L1-L4 commission, young account, anti-abuse and idempotency');
+})().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

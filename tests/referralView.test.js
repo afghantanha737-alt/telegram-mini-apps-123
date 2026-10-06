@@ -4,7 +4,7 @@ const { buildReferralViewData, calculateReferralEarningsTotal } = require('../ut
 
 const view = buildReferralViewData({
   rootUserId: 'root',
-  rates: [10, 5, 3, 1],
+  rates: [10, 5, 3, 2],
   descendants: [
     { _id: 'root', depth: 3 },
     { _id: 'friend-1', depth: 0, firstName: 'Ava', username: 'ava', createdAt: '2026-01-01T00:00:00Z' },
@@ -36,7 +36,7 @@ assert.strictEqual(view.earningsByLevel[4].commissionRatePercent, null, 'histori
 assert.strictEqual(view.team.find(person => person.username === 'ava').earnedPoints, 20);
 assert.strictEqual(view.team.find(person => person.username === 'third').level, 4);
 
-const empty = buildReferralViewData({ rates: [10, 5, 3, 1] });
+const empty = buildReferralViewData({ rates: [10, 5, 3, 2] });
 assert.strictEqual(empty.totalReferrals, 0);
 assert.strictEqual(empty.totalReferralCommissionPoints, 0);
 assert.deepStrictEqual(empty.earningsByLevel.map(row => row.friends), [0, 0, 0, 0]);

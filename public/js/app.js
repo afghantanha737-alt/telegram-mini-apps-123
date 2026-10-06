@@ -245,6 +245,7 @@ async function api(url, options = {}) {
   const separator = url.includes("?") ? "&" : "?";
   const initData = getInitData();
   const finalUrl = `${url}${separator}initData=${encodeURIComponent(initData)}`;
+  if (initData) config.headers["X-Telegram-Init-Data"] = initData;
 
   // اگر سرور بیش از حد کند شد، درخواست قطع می‌شود تا صفحه برای همیشه خالی نماند.
   const controller = new AbortController();
@@ -294,11 +295,16 @@ async function api(url, options = {}) {
  */
 async function apiUpload(url, formData) {
   const separator = url.includes("?") ? "&" : "?";
-  const finalUrl = `${url}${separator}initData=${encodeURIComponent(getInitData())}`;
+  const initData = getInitData();
+  const finalUrl = `${url}${separator}initData=${encodeURIComponent(initData)}`;
 
   let response;
   try {
-    response = await fetch(finalUrl, { method: "POST", body: formData });
+    response = await fetch(finalUrl, {
+      method: "POST",
+      body: formData,
+      ...(initData ? { headers: { "X-Telegram-Init-Data": initData } } : {})
+    });
   } catch (error) {
     throw new Error(t("error_generic"));
   }

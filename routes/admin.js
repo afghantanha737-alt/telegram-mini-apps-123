@@ -1736,6 +1736,95 @@ router.put('/maintenance', async (req, res) => {
   res.json({ success: true, enabled, allowedTelegramIds });
 });
 
+function vipAdminStatus(subscription, now = new Date()) {
+  if (subscription.status === 'cancelled') return 'cancelled';
+  if (subscription.status === 'completed' || new Date(subscription.endAt) <= now) return 'expired';
+  return 'active';
+}
+
+function vipAdminRecord(subscription, now = new Date()) {
+  const totalExpected = Number(subscription.totalRewardPoints || 0);
+  const earnedToDate = Number(subscription.claimedRewardPoints || 0);
+  const status = vipAdminStatus(subscription, now);
+  const user = subscription.user || {};
+  return {
+    id: String(subscription._id),
+    userId: String(user._id || subscription.user || ''),
+    username: user.username || '',
+    name: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.firstName || '',
+    planNumber: subscription.planNumber,
+    purchaseDate: subscription.createdAt,
+    startDate: subscription.startAt,
+    expiryDate: subscription.endAt,
+    durationDays: subscription.durationDays,
+    purchaseAmountPoints: Number(subscription.pricePoints || 0),
+    dailyEarningPoints: Number(subscription.dailyRewardAveragePoints || 0),
+    totalExpectedEarningPoints: totalExpected,
+    earnedToDatePoints: earnedToDate,
+    remainingEarningPoints: Math.max(0, totalExpected - earnedToDate),
+    claimsCompleted: Number(subscription.claimsCompleted || 0),
+    totalClaims: Number(subscription.durationDays || 0),
+    remainingDays: status === 'active' ? Math.max(0, Math.ceil((new Date(subscription.endAt).getTime() - now.getTime()) / 86400000)) : 0,
+    status
+  };
+}
+
+router.get('/vip/summary', async (req, res) => {
+  const now = new Date();
+  const [totalVipPurchases, activeVips, expiredVips, revenue, daily, users] = await Promise.all([
+    VipSubscription.countDocuments({}),
+    VipSubscription.countDocuments({ status: 'active', endAt: { $gt: now } }),
+    VipSubscription.countDocuments({ $or: [{ status: 'completed' }, { status: 'active', endAt: { $lte: now } }] }),
+    VipSubscription.aggregate([{ $group: { _id: null, total: { $sum: '$pricePoints' } } }]),
+    VipSubscription.aggregate([{ $group: { _id: null, total: { $sum: '$dailyRewardAveragePoints' } } }]),
+    VipSubscription.distinct('user')
+  ]);
+  res.json({
+    success: true,
+    totalVipPurchases,
+    activeVips,
+    expiredVips,
+    totalVipRevenuePoints: revenue[0]?.total || 0,
+    totalDailyVipEarningsPoints: daily[0]?.total || 0,
+    totalVipUsers: users.length
+  });
+});
+
+router.get('/vip/subscriptions', async (req, res) => {
+  const { page, limit, skip } = pageParams(req.query, 25, 100);
+  const now = new Date();
+  const filter = {};
+  const search = String(req.query.search || '').trim();
+  const planNumber = Number(req.query.planNumber);
+  const selectedStatus = String(req.query.status || '').trim();
+  if (Number.isInteger(planNumber) && planNumber >= 1 && planNumber <= 10) filter.planNumber = planNumber;
+  if (selectedStatus === 'active') filter.$and = [{ status: 'active' }, { endAt: { $gt: now } }];
+  if (selectedStatus === 'cancelled') filter.status = 'cancelled';
+  if (selectedStatus === 'expired') filter.$or = [{ status: 'completed' }, { status: 'active', endAt: { $lte: now } }];
+  if (req.query.dateFrom || req.query.dateTo) {
+    filter.createdAt = {};
+    if (req.query.dateFrom) filter.createdAt.$gte = new Date(`${String(req.query.dateFrom)}T00:00:00.000Z`);
+    if (req.query.dateTo) filter.createdAt.$lte = new Date(`${String(req.query.dateTo)}T23:59:59.999Z`);
+  }
+  if (search) {
+    const regex = new RegExp(escapeRegex(search), 'i');
+    const userIds = await User.find({ $or: [{ telegramId: regex }, { username: regex }, { firstName: regex }, { lastName: regex }] }).distinct('_id');
+    filter.user = { $in: userIds };
+  }
+  const [records, total] = await Promise.all([
+    VipSubscription.find(filter).populate('user', 'telegramId username firstName lastName').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    VipSubscription.countDocuments(filter)
+  ]);
+  res.json({ success: true, subscriptions: records.map(item => vipAdminRecord(item, now)), total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) });
+});
+
+router.get('/vip/subscriptions/:id', async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: 'شناسه اشتراک VIP نامعتبر است.' });
+  const subscription = await VipSubscription.findById(req.params.id).populate('user', 'telegramId username firstName lastName').lean();
+  if (!subscription) return res.status(404).json({ success: false, message: 'اشتراک VIP پیدا نشد.' });
+  res.json({ success: true, subscription: vipAdminRecord(subscription) });
+});
+
 router.get('/vip/plans', async (req, res) => {
   const plans = await VipPlan.find({}).sort({ planNumber: 1 }).lean();
   res.json({ success: true, plans });

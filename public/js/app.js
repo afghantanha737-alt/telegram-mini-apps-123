@@ -539,6 +539,17 @@ async function enforceMembership() {
     showMembershipGate(data);
     return false;
   } catch (error) {
+    // اگر احراز هویت/بررسی Telegram موقتاً شکست خورد، ابتدا بررسی می‌کنیم
+    // که آیا واقعاً کانال فعالی وجود دارد یا خیر؛ در حالت بدون کانال ورود نباید قفل شود.
+    try {
+      const status = await api('/api/required-channels/status');
+      if (status.required === false) {
+        hideMembershipGate();
+        return true;
+      }
+    } catch (statusError) {
+      console.warn('Required-channel status fallback failed:', statusError);
+    }
     // اگر نتوانستیم عضویت را بررسی کنیم، اجازه‌ی ورود نمی‌دهیم
     if (!state.gateActive) {
       showMembershipGate({ required: true, verified: false, unavailable: true, fetchFailed: true, channels: [] });

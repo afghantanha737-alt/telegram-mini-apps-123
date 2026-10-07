@@ -1080,14 +1080,6 @@ function renderHome() {
       </div>
     </section>
 
-    <section class="tbExplore">
-      <div class="tbExploreText">
-        <h3 class="tbExploreTitle">${t("tb_explore_title")}</h3>
-        <p class="tbExploreDesc">${t("tb_explore_desc")}</p>
-        <button class="tbBtnDark" type="button" onclick="navigate('tasks')">${t("tb_view_tasks")} <span class="tbBtnIcon tbFlip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button>
-      </div>
-      <div class="tbExploreGem"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#2f9bf0"/><path d="M20 24h24l6 8-18 20L14 32z" fill="#fff"/><path d="M32 30v10M27 35h10" stroke="#2f9bf0" stroke-width="3" stroke-linecap="round"/></svg></div>
-    </section>
   `;
 }
 

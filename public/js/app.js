@@ -1012,6 +1012,9 @@ function renderHome() {
       <button class="auroraQuickAction auroraQuickTasks" type="button" onclick="navigate('tasks')">
         <span class="auroraQuickIcon">✓</span><span>${t("tb_tasks")}</span>
       </button>
+      <button class="auroraQuickAction auroraQuickReferral" type="button" onclick="setProfileView('referral'); navigate('profile')">
+        <span class="auroraQuickIcon">↗</span><span>${t("menu_referral")}</span>
+      </button>
     </section>
     <section class="auroraDailyCard">
       <div class="auroraDailyIcon">🔥</div>

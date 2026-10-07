@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#08090d">
+<meta name="theme-color" content="#faf5ff">
 <meta name="color-scheme" content="dark light">
 <meta name="description" content="Gramup — پلتفرم جمع‌آوری پوینت و پاداش با انجام تسک، دعوت دوستان و ورود روزانه، قابل تبدیل به کوین در تلگرام">
 <title>Gramup</title>
@@ -14,7 +14,6 @@
 
 <!-- Telegram Mini App -->
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<style>html.maintenance-gate-pending body{visibility:hidden!important}</style>
 
 <!-- Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,7 +22,7 @@
 
 <!-- App CSS -->
 <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-<link rel="stylesheet" href="css/style.css?v=20261006-product-polish-1">
+<link rel="stylesheet" href="css/style.css?v=20261006-auth-header">
 
 <style id="bottom-nav-six-items-fix">
   /* Keep the existing navigation styling while ensuring all six items fit in one row. */
@@ -98,6 +97,15 @@
       <span class="tabLabel">پروفایل</span>
     </button>
   </nav>
+</div>
+
+<!-- MAINTENANCE MODE -->
+<div id="maintenanceOverlay" class="maintenanceOverlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="maintenanceTitle">
+  <div class="maintenanceCard">
+    <div class="maintenanceIcon" aria-hidden="true">🛠️</div>
+    <h2 id="maintenanceTitle">Gramup در حال به‌روزرسانی است</h2>
+    <p>لطفاً کمی بعد دوباره وارد شوید. پس از پایان به‌روزرسانی، Mini App دوباره در دسترس خواهد بود.</p>
+  </div>
 </div>
 
 <!-- ONBOARDING -->
@@ -222,10 +230,10 @@
   <div class="modalBox" role="dialog" aria-modal="true">
     <div class="modalHeader">
       <div>
-        <span class="modalEyebrow" data-i18n="language_modal_eyebrow">Language</span>
-        <h3 data-i18n="language_title">زبان / ژبه / Language</h3>
+        <span class="modalEyebrow">Language</span>
+        <h3>زبان / ژبه / Language</h3>
       </div>
-      <button class="closeBtn" type="button" onclick="hideLanguageOverlay()" data-i18n-aria="common_close" aria-label="Close">×</button>
+      <button class="closeBtn" type="button" onclick="hideLanguageOverlay()" aria-label="close">×</button>
     </div>
     <div class="langOption" onclick="selectLanguage('fa')">
       <span>دری (Dari)</span><span>🇦🇫</span>
@@ -244,17 +252,17 @@
   <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="exchangeTitle">
     <div class="modalHeader">
       <div>
-        <span class="modalEyebrow" data-i18n="exchange_eyebrow">Exchange</span>
+        <span class="modalEyebrow">Exchange</span>
         <h3 id="exchangeTitle" data-i18n="exchange_modal_title">تبدیل پوینت به GRAM</h3>
       </div>
       <button class="closeBtn" type="button" onclick="hideExchange()" data-i18n-aria="common_close" aria-label="بستن">×</button>
     </div>
     <div class="withdrawBody">
       <div class="exchangeDirectionToggle">
-        <button type="button" class="exchangeDirectionBtn active" id="exchangeDirPTG" onclick="setExchangeDirection('points_to_gram')" data-i18n="exchange_direction_points_to_gram">Point → Gram</button>
-        <button type="button" class="exchangeDirectionBtn" id="exchangeDirGTP" onclick="setExchangeDirection('gram_to_points')" data-i18n="exchange_direction_gram_to_points">Gram → Point</button>
+        <button type="button" class="exchangeDirectionBtn active" id="exchangeDirPTG" onclick="setExchangeDirection('points_to_gram')">Point → Gram</button>
+        <button type="button" class="exchangeDirectionBtn" id="exchangeDirGTP" onclick="setExchangeDirection('gram_to_points')">Gram → Point</button>
       </div>
-      <label class="fieldLabel" id="exchangeAmountLabel" data-i18n="exchange_points_label">مقدار پوینت</label>
+      <label class="fieldLabel" id="exchangeAmountLabel">مقدار پوینت</label>
       <input id="exchangePoints" type="number" inputmode="numeric" placeholder="مثلاً 1000" data-i18n-ph="exchange_points_ph" oninput="updateExchangePreview()">
       <p id="exchangePreview" style="font-size:12px;color:var(--text-muted);margin:-4px 0 12px">معادل GRAM دریافتی: 0</p>
       <p id="exchangeError" class="captchaErr" role="alert"></p>
@@ -268,7 +276,7 @@
   <div class="modalBox withdrawBox" role="dialog" aria-modal="true" aria-labelledby="depositTitle" style="text-align:center;max-height:92vh;overflow-y:auto">
     <div class="modalHeader">
       <div>
-        <span class="modalEyebrow" data-i18n="deposit_eyebrow">TON MAINNET · NATIVE GRAM</span>
+        <span class="modalEyebrow">TON MAINNET · NATIVE GRAM</span>
         <h3 id="depositTitle" data-i18n="deposit_modal_title">واریز</h3>
       </div>
       <button class="closeBtn" type="button" onclick="hideDeposit()" data-i18n-aria="common_close" aria-label="بستن">×</button>
@@ -301,7 +309,7 @@
       <p class="small" style="margin:8px 0 12px" data-i18n="deposit_reference_warning">این Reference را دقیقاً در comment تراکنش Native GRAM وارد کنید تا واریز به حساب شما منتسب شود. بدون comment صحیح، سیستم نمی‌تواند خودکار واریز را به حساب شما نسبت دهد.</p>
 
       <label for="depositTxHash" data-i18n="deposit_tx_hash_label">Transaction ID / Tx Hash</label>
-      <input id="depositTxHash" type="text" maxlength="66" autocomplete="off" spellcheck="false" dir="ltr" placeholder="64 hexadecimal characters" data-i18n-ph="deposit_tx_hash_ph">
+      <input id="depositTxHash" type="text" maxlength="66" autocomplete="off" spellcheck="false" dir="ltr" placeholder="64 hex characters">
 
       <button id="depositVerifyButton" type="button" class="primaryBtn" style="width:100%;margin-top:8px" onclick="submitGramDeposit()" data-i18n="deposit_check_button">بررسی تراکنش</button>
       <p id="depositActionMessage" role="status" aria-live="polite" class="small" style="min-height:20px"></p>
@@ -315,8 +323,7 @@
 <!-- TOAST -->
 <div id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/maintenanceGate.js?v=20261006-maintenance"></script>
-<script src="js/i18n.js?v=20261004-localization"></script>
-<script src="js/app.js?v=20261006-product-polish-1"></script>
+<script src="js/i18n.js?v=20261006-auth-header"></script>
+<script src="js/app.js?v=20261007-invite-action"></script>
 </body>
 </html>

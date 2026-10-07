@@ -78,7 +78,6 @@ const state = {
   vipLoading: false,
   vipError: "",
   vipServerOffsetMs: 0,
-  maintenanceBlocked: false,
   captchaA: 0,
   captchaB: 0,
   initialized: false
@@ -242,10 +241,8 @@ async function api(url, options = {}) {
     config.body = JSON.stringify(config.body);
   }
 
-  const separator = url.includes("?") ? "&" : "?";
   const initData = getInitData();
-  const finalUrl = `${url}${separator}initData=${encodeURIComponent(initData)}`;
-  if (initData) config.headers["X-Telegram-Init-Data"] = initData;
+  if (initData) config.headers['X-Telegram-Init-Data'] = initData;
 
   // اگر سرور بیش از حد کند شد، درخواست قطع می‌شود تا صفحه برای همیشه خالی نماند.
   const controller = new AbortController();
@@ -254,12 +251,12 @@ async function api(url, options = {}) {
 
   let response;
   try {
-    response = await fetch(finalUrl, config);
+    response = await fetch(url, config);
   } catch (error) {
-    if (error.name === "AbortError") {
-      throw new Error(t("error_generic") + " (Timeout)");
-    }
-    throw new Error(t("error_generic"));
+    const requestError = new Error(error.name === "AbortError" ? t("error_generic") : t("error_generic"));
+    requestError.code = error.name === "AbortError" ? 'REQUEST_TIMEOUT' : 'NETWORK_ERROR';
+    requestError.status = 0;
+    throw requestError;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -282,48 +279,41 @@ async function api(url, options = {}) {
         channels: Array.isArray(data.channels) ? data.channels : []
       });
     }
-    const err = new Error(data?.message || t("error_generic"));
-    err.code = data?.code || null;
+    const authFailure = response.status === 401 || response.status === 403;
+    const err = new Error(response.status === 401 ? t('auth_error') : response.status === 403 ? t('auth_forbidden') : (data?.message || t("error_generic")));
+    err.code = data?.code || (response.status === 401 ? 'AUTH_REQUIRED' : response.status === 403 ? 'AUTH_FORBIDDEN' : null);
+    err.status = response.status;
+    err.authFailure = authFailure;
+    throw err;
+  }
+  return data;
+}
+
+/** Multipart upload helper with header-based Telegram authentication and cancellation timeout. */
+async function apiUpload(url, formData) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const initData = getInitData();
+  const headers = initData ? { 'X-Telegram-Init-Data': initData } : {};
+  let response;
+  try {
+    response = await fetch(url, { method: 'POST', body: formData, headers, signal: controller.signal });
+  } catch (error) {
+    const requestError = new Error(t('error_generic'));
+    requestError.code = error.name === 'AbortError' ? 'REQUEST_TIMEOUT' : 'NETWORK_ERROR';
+    requestError.status = 0;
+    throw requestError;
+  } finally { clearTimeout(timeoutId); }
+  let data = null;
+  try { data = await response.json(); } catch { data = {}; }
+  if (!response.ok) {
+    const err = new Error(response.status === 401 ? t('auth_error') : response.status === 403 ? t('auth_forbidden') : (data?.message || t('error_generic')));
+    err.code = data?.code || (response.status === 401 ? 'AUTH_REQUIRED' : response.status === 403 ? 'AUTH_FORBIDDEN' : null);
     err.status = response.status;
     throw err;
   }
   return data;
 }
-
-/**
- * برای آپلود multipart (اسکرین‌شات تسک) — initData را به‌صورت query پاس می‌کند.
- */
-async function apiUpload(url, formData) {
-  const separator = url.includes("?") ? "&" : "?";
-  const initData = getInitData();
-  const finalUrl = `${url}${separator}initData=${encodeURIComponent(initData)}`;
-
-  let response;
-  try {
-    response = await fetch(finalUrl, {
-      method: "POST",
-      body: formData,
-      ...(initData ? { headers: { "X-Telegram-Init-Data": initData } } : {})
-    });
-  } catch (error) {
-    throw new Error(t("error_generic"));
-  }
-
-  let data = null;
-  try {
-    data = await response.json();
-  } catch {
-    data = {};
-  }
-
-  if (!response.ok) {
-    const err = new Error(data?.message || t("error_generic"));
-    err.code = data?.code || null;
-    throw err;
-  }
-  return data;
-}
-
 /* ================= LOADING SKELETON ================= */
 function showLoading() {
   const content = $("#content");
@@ -370,6 +360,8 @@ function applyStaticTranslations() {
   $$("[data-i18n-html]").forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); }); // فقط رشته‌های داخلی خودمان (i18n.js)
   $$("[data-i18n-ph]").forEach(el => { el.setAttribute("placeholder", t(el.dataset.i18nPh)); });
   $$("[data-i18n-aria]").forEach(el => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
+  const exchangeOverlay = $("#exchangeOverlay");
+  if (exchangeOverlay && exchangeOverlay.style.display !== "none") updateExchangePreview();
   renderOnboardingStep();
   updateThemeUI();
   updateHeader();
@@ -377,8 +369,10 @@ function applyStaticTranslations() {
 
 /* ================= NAVIGATION ================= */
 let countdownInterval = null;
+let navigationListenersInstalled = false;
 
 function setupNavigation() {
+  if (navigationListenersInstalled) return;
   $$("#tabbar [data-tab]").forEach(button => {
     button.addEventListener("click", () => {
       const tab = button.dataset.tab;
@@ -387,6 +381,7 @@ function setupNavigation() {
       navigate(tab);
     });
   });
+  navigationListenersInstalled = true;
   setupReferralTelegramBackButton();
 }
 function updateNavigation() {
@@ -394,7 +389,10 @@ function updateNavigation() {
     button.classList.toggle("active", button.dataset.tab === state.activeTab);
   });
 }
+let navigationSequence = 0;
 async function navigate(tab) {
+  const requestId = ++navigationSequence;
+  if (tab !== "profile") profileRenderSequence += 1;
   const validTabs = ["home", "tasks", "daily", "vip", "wallet", "profile"];
   if (!validTabs.includes(tab)) tab = "home";
   clearInterval(countdownInterval);
@@ -402,7 +400,8 @@ async function navigate(tab) {
   syncReferralTelegramBackButton();
   updateNavigation();
   window.scrollTo({ top: 0, behavior: "smooth" });
-  await renderCurrentTab();
+  await renderCurrentTab(requestId);
+  if (requestId !== navigationSequence || state.activeTab !== tab) return;
   syncReferralTelegramBackButton();
 }
 window.navigate = navigate;
@@ -545,17 +544,6 @@ async function enforceMembership() {
     showMembershipGate(data);
     return false;
   } catch (error) {
-    // اگر احراز هویت/بررسی Telegram موقتاً شکست خورد، ابتدا بررسی می‌کنیم
-    // که آیا واقعاً کانال فعالی وجود دارد یا خیر؛ در حالت بدون کانال ورود نباید قفل شود.
-    try {
-      const status = await api('/api/required-channels/status');
-      if (status.required === false) {
-        hideMembershipGate();
-        return true;
-      }
-    } catch (statusError) {
-      console.warn('Required-channel status fallback failed:', statusError);
-    }
     // اگر نتوانستیم عضویت را بررسی کنیم، اجازه‌ی ورود نمی‌دهیم
     if (!state.gateActive) {
       showMembershipGate({ required: true, verified: false, unavailable: true, fetchFailed: true, channels: [] });
@@ -765,9 +753,6 @@ async function bootstrapAuth() {
   try {
     const data = await api(url);
     state.language = localStorage.getItem("appLanguage") || data.language || "fa";
-    state.maintenanceBlocked = data.maintenance?.required === true;
-    const maintenanceOverlay = document.getElementById("maintenanceOverlay");
-    if (maintenanceOverlay) maintenanceOverlay.style.display = state.maintenanceBlocked ? "grid" : "none";
     if (data.firstName) state.user = { ...(state.user || {}), first_name: data.firstName };
   } catch (error) {
     console.warn("Bootstrap auth failed:", error);
@@ -776,9 +761,12 @@ async function bootstrapAuth() {
 }
 
 const CLIENT_DATA_TTL_MS = 15000;
+let userDataRequestSequence = 0;
 async function loadUserData({ force = false } = {}) {
+  const requestId = ++userDataRequestSequence;
   if (!force && state.userDataLoadedAt && Date.now() - state.userDataLoadedAt < CLIENT_DATA_TTL_MS) return;
   const data = await api("/api/points/me");
+  if (requestId !== userDataRequestSequence) return;
   state.points = Number(data?.points) || 0;
   state.gramBalance = Number(data?.gramBalance) || 0;
   state.rate = Number(data?.rate) || 0;
@@ -799,12 +787,15 @@ async function loadUserData({ force = false } = {}) {
   updateHeader();
 }
 
+let referralDataRequestSequence = 0;
 async function loadReferralData({ force = false } = {}) {
+  const requestId = ++referralDataRequestSequence;
   if (!force && state.referralDataLoaded) return;
   state.referralLoading = !state.referralDataLoaded;
   state.referralError = "";
   try {
     const data = await api("/api/referral/me");
+    if (requestId !== referralDataRequestSequence) return;
     state.referralCode = data?.referralCode || "";
     state.shareLink = data?.shareLink || "";
     state.referralTelegramId = "";
@@ -823,8 +814,10 @@ async function loadReferralData({ force = false } = {}) {
     state.referralDataLoaded = true;
   } catch (error) {
     console.warn("Referral data failed:", error);
+    if (requestId !== referralDataRequestSequence) return;
     if (!state.referralDataLoaded) state.referralError = error?.message || t("referral_load_error");
   } finally {
+    if (requestId !== referralDataRequestSequence) return;
     state.referralLoading = false;
     if (state.activeTab === "profile" && profileView === "referral") renderProfile();
     else if (state.activeTab === "home") renderHome();
@@ -864,10 +857,15 @@ async function claimReferralTask(taskId) {
 }
 window.claimReferralTask = claimReferralTask;
 
+let tasksRequestSequence = 0;
+let tasksLoadError = null;
 async function loadTasks({ force = false } = {}) {
+  const requestId = ++tasksRequestSequence;
   if (!force && state.tasksLoadedAt && Date.now() - state.tasksLoadedAt < CLIENT_DATA_TTL_MS) return state.tasks;
   try {
     const data = await api("/api/tasks");
+    if (requestId !== tasksRequestSequence) return state.tasks;
+    tasksLoadError = null;
     state.tasks = Array.isArray(data?.tasks) ? data.tasks : [];
     state.completions = Array.isArray(data?.completions) ? data.completions : [];
     latestPostOpenedTaskIds.clear();
@@ -880,8 +878,8 @@ async function loadTasks({ force = false } = {}) {
     return state.tasks;
   } catch (error) {
     console.warn("Tasks failed:", error);
-    state.tasks = [];
-    return [];
+    if (requestId === tasksRequestSequence) tasksLoadError = error;
+    return state.tasks;
   }
 }
 
@@ -889,6 +887,9 @@ async function loadTasks({ force = false } = {}) {
 let historyList = [];
 let historyHasMore = false;
 let historyLoading = false;
+let historyCursor = "";
+let historyLoadError = null;
+let historyRequestSequence = 0;
 
 const LEDGER_TYPE_UI = {
   task: { icon: "✅" },
@@ -909,22 +910,26 @@ const LEDGER_TYPE_UI = {
 };
 
 async function loadHistory(reset = true) {
-  if (historyLoading) return;
+  if (historyLoading && !reset) return false;
+  const requestId = ++historyRequestSequence;
   historyLoading = true;
+  const cursor = reset ? "" : historyCursor;
   try {
-    if (reset) historyList = [];
-    const before = reset || historyList.length === 0
-      ? ""
-      : `&before=${encodeURIComponent(historyList[historyList.length - 1].createdAt)}`;
-    const data = await api(`/api/points/history?limit=30${before}`);
+    const suffix = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+    const data = await api(`/api/points/history?limit=30${suffix}`);
+    if (requestId !== historyRequestSequence) return false;
     const items = Array.isArray(data?.history) ? data.history : [];
     historyList = reset ? items : historyList.concat(items);
     historyHasMore = Boolean(data?.hasMore);
+    historyCursor = String(data?.nextCursor || "");
+    historyLoadError = null;
+    return true;
   } catch (error) {
     console.warn("History failed:", error);
-    if (reset) { historyList = []; historyHasMore = false; }
+    if (requestId === historyRequestSequence) historyLoadError = error;
+    return false;
   } finally {
-    historyLoading = false;
+    if (requestId === historyRequestSequence) historyLoading = false;
   }
 }
 
@@ -936,22 +941,34 @@ async function loadMoreHistory() {
 }
 window.loadMoreHistory = loadMoreHistory;
 
+let leaderboardLoadError = null;
+let leaderboardRequestSequence = 0;
 async function loadLeaderboard() {
+  const requestId = ++leaderboardRequestSequence;
   try {
     const data = await api("/api/leaderboard/top");
+    if (requestId !== leaderboardRequestSequence) return state.leaderboard;
+    if (!Array.isArray(data?.top)) throw new Error("Invalid leaderboard response");
+    leaderboardLoadError = null;
     state.leaderboard = Array.isArray(data?.top) ? data.top : [];
     state.myRank = data?.myRank ?? null;
     return state.leaderboard;
   } catch (error) {
     console.warn("Leaderboard failed:", error);
-    state.leaderboard = [];
-    return [];
+    if (requestId === leaderboardRequestSequence) leaderboardLoadError = error;
+    return state.leaderboard;
   }
 }
 
+let weeklyLeaderboardLoadError = null;
+let weeklyLeaderboardRequestSequence = 0;
 async function loadWeeklyLeaderboard() {
+  const requestId = ++weeklyLeaderboardRequestSequence;
   try {
     const data = await api("/api/leaderboard/weekly");
+    if (requestId !== weeklyLeaderboardRequestSequence) return state.weeklyLeaderboard;
+    if (!Array.isArray(data?.top)) throw new Error("Invalid weekly leaderboard response");
+    weeklyLeaderboardLoadError = null;
     state.weeklyLeaderboard = Array.isArray(data?.top) ? data.top : [];
     state.weeklyMyRank = data?.myRank ?? null;
     state.weeklyMyPoints = Number(data?.myPoints) || 0;
@@ -961,10 +978,8 @@ async function loadWeeklyLeaderboard() {
     return state.weeklyLeaderboard;
   } catch (error) {
     console.warn("Weekly leaderboard failed:", error);
-    state.weeklyLeaderboard = [];
-    state.weeklyLeaderboardMeta = null;
-    state.weeklyServerOffsetMs = 0;
-    return [];
+    if (requestId === weeklyLeaderboardRequestSequence) weeklyLeaderboardLoadError = error;
+    return state.weeklyLeaderboard;
   }
 }
 
@@ -1012,7 +1027,7 @@ function renderHome() {
       <button class="auroraQuickAction auroraQuickTasks" type="button" onclick="navigate('tasks')">
         <span class="auroraQuickIcon">✓</span><span>${t("tb_tasks")}</span>
       </button>
-      <button class="auroraQuickAction auroraQuickReferral" type="button" onclick="setProfileView('referral'); navigate('profile')">
+      <button class="auroraQuickAction auroraQuickReferral" type="button" onclick="openReferralHub()">
         <span class="auroraQuickIcon">↗</span><span>${t("menu_referral")}</span>
       </button>
     </section>
@@ -1085,6 +1100,18 @@ function renderHome() {
 
 /* ================= TASKS ================= */
 const TASK_ICONS = { channel: "📢", group: "👥", link: "🔗", custom: "🎁" };
+
+function safeTaskHttpUrl(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text.length > 2048) return "";
+  try {
+    const url = new URL(text);
+    if (!["https:", "http:"].includes(url.protocol) || !url.hostname || url.username || url.password) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
 
 function openTaskLinkOnly(url) {
   if (!url) return;
@@ -1309,13 +1336,19 @@ function renderTasks() {
   const visibleTasks = state.tasks.filter(task => activeCategory === "all" || getTaskCategory(task) === activeCategory);
   const referralHtml = activeCategory === "all" ? renderReferralRewardTasks() : "";
   const categoryTabs = renderTaskCategoryTabs(activeCategory);
+  const taskErrorHtml = tasksLoadError ? `<div class="card" role="status"><div class="emptyDesc">${t("tasks_load_error")}</div><button class="secondaryBtn" type="button" onclick="retryTasks()">${t("retry_button")}</button></div>` : "";
 
+  if (state.tasks.length === 0 && tasksLoadError) {
+    content.innerHTML = `<div class="sectionHeader"><h2 class="sectionTitle">${t("tasks_title")}</h2></div>${categoryTabs}${taskErrorHtml}`;
+    return;
+  }
   if (state.tasks.length === 0 || visibleTasks.length === 0) {
     clearInterval(latestPostCooldownTimer);
     latestPostCooldownTimer = null;
     content.innerHTML = `
       <div class="sectionHeader"><h2 class="sectionTitle">${t("tasks_title")}</h2></div>
       ${categoryTabs}
+      ${taskErrorHtml}
       ${referralHtml}
       <div class="card emptyState">
         <div class="emptyIcon">🗂️</div>
@@ -1327,19 +1360,22 @@ function renderTasks() {
   }
 
   const doneCount = visibleTasks.filter(task => completionStatus(task._id) === "approved").length;
+  const taskProgress = state.tasks.length ? Math.round((doneCount / state.tasks.length) * 100) : 0;
 
   content.innerHTML = `
-    <div class="sectionHeader">
-      <h2 class="sectionTitle">${t("tasks_title")}</h2>
-      <span class="tbPill tbPillPurple">${formatPoints(doneCount)} / ${formatPoints(state.tasks.length)}</span>
-    </div>
+    <section class="tasksOverview">
+      <div class="tasksOverviewTop"><div><span class="tasksOverline">${t("task_category_label")}</span><h1>${t("tasks_title")}</h1></div><strong>${taskProgress}%</strong></div>
+      <div class="tasksProgressTrack"><i style="width:${taskProgress}%"></i></div>
+      <div class="tasksOverviewMeta"><span>${formatPoints(doneCount)} / ${formatPoints(state.tasks.length)} ${t("task_btn_done")}</span><span>${t("tb_points_chip", { n: formatPoints(state.points) })}</span></div>
+    </section>
     ${categoryTabs}
+    ${taskErrorHtml}
     ${referralHtml}
     <div class="taskList">
       ${visibleTasks.map(task => {
         const status = completionStatus(task._id);
         const icon = TASK_ICONS[task.type] || "🎁";
-        const safeUrl = (task.url || "").replaceAll("'", "\\'");
+        const safeUrl = safeTaskHttpUrl(task.url).replaceAll("'", "\\'");
         let actionHtml;
 
         if (task.verifyType === "latest_post") {
@@ -1348,9 +1384,9 @@ function renderTasks() {
           const remaining = nextAvailableAt && Number.isFinite(nextAvailableAt.getTime())
             ? nextAvailableAt.getTime() - (Date.now() + state.tasksServerOffsetMs)
             : 0;
-          const latestPostUrlArgument = escapeHTML(JSON.stringify(String(task.url || "")).replaceAll("<", "\\u003c"));
+          const latestPostUrlArgument = escapeHTML(JSON.stringify(safeTaskHttpUrl(task.url)).replaceAll("<", "\\u003c"));
           const waitingForCheck = latestPostOpenedTaskIds.has(String(task._id)) && remaining <= 0;
-          const openButton = !waitingForCheck && remaining <= 0 && task.url
+          const openButton = !waitingForCheck && remaining <= 0 && safeUrl
             ? `<button class="taskAction" data-latest-post-open="${escapeHTML(task._id)}" style="background:var(--surface-3);color:var(--text)" onclick="openLatestPostTask(${latestPostUrlArgument}, '${escapeHTML(task._id)}')">${t("task_action_open_task")}</button>`
             : "";
           let actionButton = "";
@@ -1430,6 +1466,8 @@ function setTaskCategoryFilter(category) {
   renderTasks();
 }
 window.setTaskCategoryFilter = setTaskCategoryFilter;
+async function retryTasks() { await loadTasks({ force: true }); if (state.activeTab === "tasks") renderTasks(); else if (state.activeTab === "home") renderHome(); }
+window.retryTasks = retryTasks;
 
 /* ================= DAILY + SPIN WHEEL ================= */
 const WHEEL_SIZE = 260;
@@ -1621,16 +1659,18 @@ function renderDaily() {
     return `<div class="dayCell ${isFilled ? "filled" : ""} ${isToday ? "today" : ""}"><span class="dayNum">${isFilled ? "✓" : dayNumber}</span><span>${t("day_label", { n: dayNumber })}</span></div>`;
   }).join("");
   content.innerHTML = `
-    <div class="sectionHeader"><h2 class="sectionTitle">${t("daily_title")}</h2></div>
-    <div class="card" style="text-align:center"><div class="cardHeader" style="justify-content:center"><div class="cardTitle">${t("spin_title")}</div></div>
+    <section class="dailyOverview">
+      <div><span class="dailyOverline">${t("daily_title")}</span><h1>${t("streak_label").split("—")[0].trim()}</h1><p>${state.canCheckIn ? t("checkin_button") : t("checkin_done_button")}</p></div>
+      <div class="dailyStreakValue"><strong>${formatPoints(state.streak)}</strong><span>${t("streak_label").split("—")[0].trim()}</span></div>
+    </section>
+    <div class="card dailySpinCard" style="text-align:center"><div class="cardHeader" style="justify-content:center"><div class="cardTitle">${t("spin_title")}</div></div>
       <div class="wheelOuter"><div class="wheelRingDots">${buildWheelRingDots()}</div><div class="wheelPointer">▼</div><div class="wheelDisc" id="wheelDisc" style="background:${buildWheelGradient()}">${buildWheelLabels()}</div><div class="wheelHub"><span>✦</span></div></div>
       <p style="font-size:11px;margin:14px 0 4px">${t("spin_chances_label")}: <b id="spinChancesValue">${formatPoints(state.spinChances)}</b></p>
       <button id="spinBtn" class="primaryBtn wheelSpinBtn" type="button" ${state.spinChances <= 0 ? "disabled" : ""} onclick="doSpin()">🎡 ${t("spin_button")}</button>
       <button id="paidSpinBtn" class="secondaryBtn wheelPaidBtn" type="button" ${state.points < state.spinCostPoints ? "disabled" : ""} onclick="doSpin(true)">🪙 ${t("spin_paid_button", { n: formatPoints(state.spinCostPoints) })}</button>
       <p class="wheelPaidHint">${t("spin_paid_hint", { n: formatPoints(state.spinCostPoints) })}</p>
     </div>
-    <div class="streakBox"><div class="streakFire">🔥</div><div><div class="streakValue">${formatPoints(state.streak)}</div><div class="streakLabel">${t("streak_label")}</div></div></div>
-    <div class="card"><div class="cardHeader"><div class="cardTitle">${t("daily_calendar_title")}</div></div><div class="dailyGrid">${dayCells}</div>
+    <div class="card dailyCalendarCard"><div class="cardHeader"><div class="cardTitle">${t("daily_calendar_title")}</div><span class="tbPill tbPillOrange tbPillSm">${formatPoints(streakDays)} / 7</span></div><div class="dailyGrid">${dayCells}</div>
       <button id="checkinBtn" class="primaryBtn" type="button" ${state.canCheckIn ? "" : "disabled"} onclick="doCheckIn()">${state.canCheckIn ? t("checkin_button") : t("checkin_done_button")}</button>
       ${!state.canCheckIn ? `<div style="text-align:center;margin-top:10px"><div class="small" style="color:var(--text-muted);font-size:10px">${t("reset_countdown_label")}</div><div id="resetCountdown" style="font-size:20px;font-weight:900;margin-top:4px;letter-spacing:1px">00:00:00</div></div>` : ""}
     </div>`;
@@ -1679,7 +1719,8 @@ async function submitWithdraw() {
 
   if (button) button.disabled = true;
   try {
-    const result = await api("/api/points/withdraw", { method: "POST", body: { gram, address } });
+    const result = await api("/api/points/withdraw", { method: "POST", headers: { "Idempotency-Key": getPendingIdempotencyKey("withdraw") }, body: { gram, address } });
+    clearPendingIdempotencyKey("withdraw");
     state.gramBalance = Number(result.gramBalance) ?? state.gramBalance;
     haptic("success");
     toast(result.message, "success");
@@ -1687,6 +1728,7 @@ async function submitWithdraw() {
     updateHeader();
     renderWallet();
   } catch (err) {
+    clearDefinitiveIdempotencyFailure("withdraw", err);
     if (error) error.textContent = translateServerMessage(err.code, err.message);
     haptic("error");
   } finally {
@@ -1731,13 +1773,13 @@ function setExchangeDirection(direction) {
   const input = $("#exchangePoints");
   const title = $("#exchangeTitle");
   if (exchangeDirection === "points_to_gram") {
-    if (label) label.textContent = t("exchange_points_label");
-    if (input) input.setAttribute("placeholder", t("exchange_points_ph"));
-    if (title) title.textContent = t("exchange_modal_title");
+    if (label) { label.dataset.i18n = "exchange_points_label"; label.textContent = t("exchange_points_label"); }
+    if (input) { input.dataset.i18nPh = "exchange_points_ph"; input.setAttribute("placeholder", t("exchange_points_ph")); }
+    if (title) { title.dataset.i18n = "exchange_modal_title"; title.textContent = t("exchange_modal_title"); }
   } else {
-    if (label) label.textContent = t("exchange_gram_label");
-    if (input) input.setAttribute("placeholder", t("withdraw_amount_ph"));
-    if (title) title.textContent = t("exchange_modal_title_reverse");
+    if (label) { label.dataset.i18n = "exchange_gram_label"; label.textContent = t("exchange_gram_label"); }
+    if (input) { input.dataset.i18nPh = "withdraw_amount_ph"; input.setAttribute("placeholder", t("withdraw_amount_ph")); }
+    if (title) { title.dataset.i18n = "exchange_modal_title_reverse"; title.textContent = t("exchange_modal_title_reverse"); }
   }
 
   if (input) input.value = "";
@@ -1887,6 +1929,10 @@ function setDepositActionMessage(message, type = "normal") {
 function renderDepositHistory(deposits) {
   const container = $("#depositHistoryList");
   if (!container) return;
+  if (depositHistoryError) {
+    container.innerHTML = `<div class="small" role="status" style="opacity:.9">${escapeHTML(t("history_load_error"))} <button type="button" class="secondaryBtn" onclick="retryDepositHistory()">${t("retry_button")}</button></div>`;
+    return;
+  }
   const list = Array.isArray(deposits) ? deposits.slice(0, 5) : [];
   if (!list.length) {
     container.innerHTML = `<div class="small" style="opacity:.75">${escapeHTML(t("history_empty"))}</div>`;
@@ -1905,16 +1951,22 @@ function renderDepositHistory(deposits) {
     }).join("")}`;
 }
 
+let depositHistoryError = null;
 async function refreshDepositHistory() {
   try {
     const data = await api("/api/points/deposits");
-    renderDepositHistory(data?.deposits || []);
-    return Array.isArray(data?.deposits) ? data.deposits : [];
-  } catch {
+    if (!Array.isArray(data?.deposits)) throw new Error('Invalid deposit history response');
+    depositHistoryError = null;
+    renderDepositHistory(data.deposits);
+    return data.deposits;
+  } catch (error) {
+    depositHistoryError = error;
     renderDepositHistory([]);
-    return [];
+    throw error;
   }
 }
+async function retryDepositHistory() { try { await refreshDepositHistory(); } catch {} }
+window.retryDepositHistory = retryDepositHistory;
 
 function showDeposit() {
   const overlay = $("#depositOverlay");
@@ -2013,7 +2065,8 @@ async function submitGramDeposit() {
   } catch (error) {
     setDepositActionMessage(translateServerMessage(error.code, error.message), "error");
     haptic("error");
-    const deposits = await refreshDepositHistory();
+    let deposits = [];
+    try { deposits = await refreshDepositHistory(); } catch { deposits = []; }
     const refreshed = deposits.find(item => item._id === currentDeposit?._id);
     if (refreshed) currentDeposit = refreshed;
     if (button) button.disabled = currentDeposit?.status !== "pending";
@@ -2030,13 +2083,19 @@ function hideDeposit() {
 window.hideDeposit = hideDeposit;
 
 let walletHistory = [];
+let walletHistoryError = null;
+let walletHistorySequence = 0;
 async function loadWalletHistory() {
+  const requestId = ++walletHistorySequence;
   try {
     const data = await api("/api/points/withdrawals");
-    walletHistory = Array.isArray(data?.withdrawals) ? data.withdrawals : [];
+    if (requestId !== walletHistorySequence) return;
+    if (!Array.isArray(data?.withdrawals)) throw new Error("Invalid withdrawals response");
+    walletHistory = data.withdrawals;
+    walletHistoryError = null;
   } catch (error) {
     console.warn("Withdrawals failed:", error);
-    walletHistory = [];
+    if (requestId === walletHistorySequence) walletHistoryError = error;
   }
 }
 
@@ -2046,13 +2105,19 @@ const WITHDRAW_STATUS_UI = {
 };
 
 let publicHistory = [];
+let publicHistoryError = null;
+let publicHistorySequence = 0;
 async function loadPublicHistory() {
+  const requestId = ++publicHistorySequence;
   try {
     const data = await api("/api/points/public-history");
-    publicHistory = Array.isArray(data?.history) ? data.history : [];
+    if (requestId !== publicHistorySequence) return;
+    if (!Array.isArray(data?.history)) throw new Error("Invalid public history response");
+    publicHistory = data.history;
+    publicHistoryError = null;
   } catch (error) {
     console.warn("Public history failed:", error);
-    publicHistory = [];
+    if (requestId === publicHistorySequence) publicHistoryError = error;
   }
 }
 
@@ -2064,11 +2129,17 @@ const TB_ICONS = {
   out: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>'
 };
 
+let walletRenderSequence = 0;
 function renderWallet() {
+  const renderRequestId = ++walletRenderSequence;
   const content = $("#content");
 
   content.innerHTML = `
-    <div class="sectionHeader"><h2 class="sectionTitle">${t("wallet_title")}</h2></div>
+    <section class="walletOverview">
+      <div class="walletOverviewTop"><div><span class="walletOverline">${t("wallet_title")}</span><h1>${t("wallet_balance_title")}</h1></div><span class="walletLivePill">● ${t("wallet_rate_label", { rate: formatNumber(state.rate, 6) })}</span></div>
+      <div class="walletOverviewValue"><strong>${formatNumber(state.gramBalance, 6)}</strong><span>GRAM</span></div>
+      <div class="walletOverviewBottom"><span>${t("wallet_estimated_value")}</span><b>${state.gramUsdPrice > 0 ? `≈ $${formatFixed(state.gramBalance * state.gramUsdPrice, 3)}` : "—"}</b></div>
+    </section>
 
     <div class="tbWalletGrid">
       <div class="tbWalletCard">
@@ -2122,8 +2193,10 @@ function renderWallet() {
   `;
 
   loadWalletHistory().then(() => {
+    if (renderRequestId !== walletRenderSequence || state.activeTab !== "wallet") return;
     const list = $("#withdrawHistoryList");
     if (!list) return;
+    if (walletHistoryError) { list.innerHTML = `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("history_load_error")}</div><button class="secondaryBtn" type="button" onclick="retryWalletHistory()">${t("retry_button")}</button></div>`; return; }
     if (walletHistory.length === 0) {
       list.innerHTML = `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("wallet_history_empty")}</div></div>`;
       return;
@@ -2147,8 +2220,10 @@ function renderWallet() {
   });
 
   loadPublicHistory().then(() => {
+    if (renderRequestId !== walletRenderSequence || state.activeTab !== "wallet") return;
     const list = $("#publicHistoryList");
     if (!list) return;
+    if (publicHistoryError) { list.innerHTML = `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("history_load_error")}</div><button class="secondaryBtn" type="button" onclick="retryWalletHistory()">${t("retry_button")}</button></div>`; return; }
     if (publicHistory.length === 0) {
       list.innerHTML = `<div class="emptyState" style="padding:20px 0"><div class="emptyDesc">${t("wallet_public_history_empty")}</div></div>`;
       return;
@@ -2169,6 +2244,8 @@ function renderWallet() {
   });
 }
 
+async function retryWalletHistory() { renderWallet(); }
+window.retryWalletHistory = retryWalletHistory;
 
 /* ================= WITHDRAWAL DETAIL (Timeline) =================
    Overlay مثل withdraw/exchange پویا ساخته می‌شود (چیزی به index.html اضافه نشده) */
@@ -2339,6 +2416,12 @@ function openHistory() {
 }
 window.openHistory = openHistory;
 
+function openReferralHub() {
+  pendingProfileView = "referral";
+  navigate("profile");
+}
+window.openReferralHub = openReferralHub;
+
 function setProfileView(view) {
   if (view === "referral" && profileView !== "referral") {
     referralPreviousProfileView = profileView || "menu";
@@ -2347,7 +2430,6 @@ function setProfileView(view) {
     referralEntryTransitionPending = false;
   }
   profileView = view;
-  if (view === "history") { historyList = []; historyHasMore = false; }
   if (view === "vip") state.vipDataLoaded = false;
   if (view === "referral") {
     state.referralFilter = "all";
@@ -2371,9 +2453,10 @@ function renderProfileMenu() {
   const user = state.user || telegramUser || {};
   const firstName = user.first_name || user.firstName || "";
   const langNames = { fa: t("language_fa"), ps: t("language_ps"), en: t("language_en") };
+  const level = state.level || { badge: "🥉", name: "Bronze" };
 
   return `
-    <div class="card profileHeaderCard">
+    <section class="profileOverviewCard">
       <div class="profileAvatarLg">
         ${user.photo_url ? `<img src="${escapeHTML(user.photo_url)}" alt="">` : escapeHTML(getInitials(user))}
       </div>
@@ -2382,16 +2465,24 @@ function renderProfileMenu() {
         <div class="tbPills">
           <span class="tbPill tbPillPurple tbPillSm">${t("tb_points_chip", { n: formatPoints(state.points) })}</span>
           <span class="tbPill tbPillOrange tbPillSm">${formatPoints(state.invitedCount)} ${t("tb_referrals")}</span>
-          ${state.level ? `<span class="tbPill tbPillGreen tbPillSm">${state.level.badge} ${escapeHTML(state.level.name)}</span>` : ""}
+          <span class="tbPill tbPillGreen tbPillSm">${level.badge} ${escapeHTML(level.name)}</span>
         </div>
       </div>
-    </div>
+      <div class="profileBalanceMini"><span>${t("tb_total_balance")}</span><strong>${formatNumber(state.gramBalance, 3)} <small>GRAM</small></strong></div>
+    </section>
 
-    <div class="card">
+    <section class="profilePulseGrid" aria-label="${escapeHTML(t("tb_your_progress"))}">
+      <div><strong>${formatPoints(state.points)}</strong><span>${t("wallet_points_card_title")}</span></div>
+      <div><strong>${formatNumber(state.invitedCount)}</strong><span>${t("referral_kpi_direct")}</span></div>
+      <div><strong>${formatPoints(state.totalEarnedPoints)}</strong><span>${t("tb_earned")}</span></div>
+    </section>
+    <div class="card profileMenuPanel">
+      <div class="profileMenuLabel">${t("menu_referral")}</div>
       <div class="profileList">
         <div class="profileItem" onclick="setProfileView('referral')">
-          <div class="profileIcon">👥</div>
+          <div class="profileIcon profileIconReferral">↗</div>
           <div class="profileText">${t("menu_referral")}</div>
+          <span class="profileItemHint">${t("referral_kpi_network")}</span>
           <div class="profileChevron">‹</div>
         </div>
         <div class="profileItem" onclick="setProfileView('leaderboard')">
@@ -2409,6 +2500,11 @@ function renderProfileMenu() {
           <div class="profileText">${t("menu_history")}</div>
           <div class="profileChevron">‹</div>
         </div>
+      </div>
+    </div>
+    <div class="card profileMenuPanel profileSettingsPanel">
+      <div class="profileMenuLabel">${t("menu_about")}</div>
+      <div class="profileList">
         <div class="profileItem" onclick="setProfileView('about')">
           <div class="profileIcon">ℹ️</div>
           <div class="profileText">${t("menu_about")}</div>
@@ -2437,6 +2533,7 @@ function renderProfileMenu() {
 
 function renderProfileAbout() {
   return `
+    <div class="profileAboutView">
     <div class="sectionHeader">
       <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
       <h2 class="sectionTitle">${t("about_title")}</h2>
@@ -2470,6 +2567,7 @@ function renderProfileAbout() {
       </div>
       <p class="cardSubtitle" style="line-height:1.9;margin-bottom:12px">${t("about_proof_desc")}</p>
       <button type="button" class="secondaryBtn" style="width:100%" onclick="openProofPage()">${t("about_proof_button")}</button>
+    </div>
     </div>
   `;
 }
@@ -2584,7 +2682,7 @@ function renderReferralPageHeader() {
         <svg viewBox="0 0 24 24" fill="none"><path d="M15.5 19.5v-1.3a3.2 3.2 0 0 0-3.2-3.2H6.7a3.2 3.2 0 0 0-3.2 3.2v1.3M9.5 11.5a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2ZM19 8v6M16 11h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div class="referralHeadingText">
-        <span class="rf-overline">GRAMUP / COMMUNITY</span>
+        <span class="rf-overline">${t("referral_eyebrow")}</span>
         <h1 class="referralPageTitle">${t("referral_hub_title")}</h1>
         <p class="referralPageSubtitle">${t("referral_hub_subtitle")}</p>
       </div>
@@ -2613,7 +2711,7 @@ function renderProfileReferral() {
       { key: "1", label: t("referral_level_label", { n: 1 }), min: 1, max: 1, rate: 10 },
     { key: "2", label: t("referral_level_label", { n: 2 }), min: 2, max: 2, rate: 5 },
     { key: "3", label: t("referral_level_label", { n: 3 }), min: 3, max: 3, rate: 3 },
-    { key: "4plus", label: t("referral_level_4_plus"), min: 4, max: 10, rate: 1 }
+    { key: "4plus", label: t("referral_level_4_plus"), min: 4, max: 4, rate: 2 }
   ].map(bucket => {
     const rows = rawNetwork.filter(row => Number(row.level) >= bucket.min && Number(row.level) <= bucket.max);
     return {
@@ -2621,7 +2719,7 @@ function renderProfileReferral() {
       members: rows.reduce((sum, row) => sum + (Number(row.members) || 0), 0),
       active: rows.reduce((sum, row) => sum + (Number(row.activeMembers) || 0), 0),
       earned: rows.reduce((sum, row) => sum + (Number(row.commissionPoints) || 0), 0),
-      rate: bucket.key === "4plus" ? 1 : Number(configuredRates[bucket.min - 1]) || bucket.rate
+      rate: bucket.key === "4plus" ? 2 : Number(configuredRates[bucket.min - 1]) || bucket.rate
     };
   });
   const maxMembers = Math.max(1, ...buckets.map(row => row.members));
@@ -2801,10 +2899,15 @@ async function startWeeklyCompetitionCountdown() {
   }
 }
 
+async function retryLeaderboard() { if (leaderboardMode === "weekly") await loadWeeklyLeaderboard(); else await loadLeaderboard(); if (state.activeTab === "profile" && profileView === "leaderboard") renderProfile(); }
+window.retryLeaderboard = retryLeaderboard;
+
 function renderProfileLeaderboard() {
   const weekly = leaderboardMode === "weekly";
   const list = weekly ? state.weeklyLeaderboard : state.leaderboard;
   const myRank = weekly ? state.weeklyMyRank : state.myRank;
+  const loadError = weekly ? weeklyLeaderboardLoadError : leaderboardLoadError;
+  const errorHtml = loadError ? `<div class="card" role="status"><div class="emptyDesc">${t("error_generic")}</div><button class="secondaryBtn" type="button" onclick="retryLeaderboard()">${t("retry_button")}</button></div>` : "";
   const rows = list.map((person, index) => {
     const rank = index + 1;
     const rankClass = rank === 1 ? "top1" : rank === 2 ? "top2" : rank === 3 ? "top3" : "";
@@ -2818,6 +2921,7 @@ function renderProfileLeaderboard() {
   }).join("");
 
   return `
+    <div class="profileLeaderboardView">
     <div class="sectionHeader">
       <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
       <h2 class="sectionTitle">${weekly ? t("weekly_leaderboard_title") : t("leaderboard_title")}</h2>
@@ -2829,6 +2933,7 @@ function renderProfileLeaderboard() {
       <button class="${weekly ? "primaryBtn" : "secondaryBtn"}" type="button" style="min-height:40px;padding:8px" onclick="setLeaderboardMode('weekly')">${t("leaderboard_weekly")}</button>
     </div>
     ${weekly ? renderWeeklyCompetitionBanner() : ""}
+    ${errorHtml}
     ${myRank ? `
       <div class="card" style="text-align:center">
         <div class="cardSubtitle">${t("leaderboard_rank_label")}</div>
@@ -2837,7 +2942,7 @@ function renderProfileLeaderboard() {
       </div>` : ""
     }
 
-    ${list.length === 0
+    ${list.length === 0 && !loadError
       ? `<div class="card emptyState"><div class="emptyDesc">${t("leaderboard_empty")}</div></div>`
       : rows
     }
@@ -2878,6 +2983,7 @@ function renderProfileHistory() {
   }).join("");
 
   return `
+    <div class="profileHistoryView">
     <div class="sectionHeader">
       <button class="sectionMore" type="button" onclick="setProfileView('menu')">${t("referral_back")}</button>
       <h2 class="sectionTitle">${t("history_page_title")}</h2>
@@ -2892,6 +2998,7 @@ function renderProfileHistory() {
     </div>
 
     ${historyHasMore ? `<button class="loadMoreBtn" id="historyLoadMoreBtn" type="button" onclick="loadMoreHistory()">${t("history_load_more")}</button>` : ""}
+    </div>
   `;
 }
 
@@ -3145,25 +3252,33 @@ async function claimVipReward(subscriptionId) {
 }
 window.claimVipReward = claimVipReward;
 
+let profileRenderSequence = 0;
 async function renderProfile() {
+  const renderRequestId = ++profileRenderSequence;
+  const isCurrentProfileRender = () => renderRequestId === profileRenderSequence
+    && (state.activeTab === "profile" || (state.activeTab === "vip" && profileView === "vip"));
   const content = $("#content");
   if (profileView !== "leaderboard" || leaderboardMode !== "weekly") stopWeeklyCompetitionCountdown();
   if (profileView !== "vip") stopVipCountdown();
   if (profileView === "leaderboard" && state.leaderboard.length === 0) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadLeaderboard();
+    if (!isCurrentProfileRender()) return;
   }
   if (profileView === "leaderboard" && leaderboardMode === "weekly" && !state.weeklyLeaderboardMeta) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadWeeklyLeaderboard();
+    if (!isCurrentProfileRender()) return;
   }
   if (profileView === "history" && historyList.length === 0 && !historyLoading) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadHistory(true);
+    if (!isCurrentProfileRender()) return;
   }
   if (profileView === "vip" && !state.vipDataLoaded && !state.vipLoading) {
     content.innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadVipPlans();
+    if (!isCurrentProfileRender()) return;
   }
   if (profileView === "referral") {
     content.innerHTML = renderProfileReferral();
@@ -3189,11 +3304,13 @@ async function renderProfile() {
 }
 
 async function renderVipTab() {
+  const renderRequestId = navigationSequence;
   profileView = "vip";
   if (!state.vipDataLoaded && !state.vipLoading) {
     $("#content").innerHTML = `<div class="loading" style="height:300px"></div>`;
     await loadVipPlans();
   }
+  if (renderRequestId !== navigationSequence || state.activeTab !== "vip") return;
   $("#content").innerHTML = state.vipError
     ? `<div class="card"><div class="emptyDesc">${escapeHTML(state.vipError)}</div><button type="button" class="secondary" onclick="retryVipPlans()">${t("vip_retry")}</button></div>`
     : renderProfileVip();
@@ -3201,35 +3318,44 @@ async function renderVipTab() {
 }
 
 /* ================= TAB DISPATCH ================= */
-async function renderCurrentTab() {
+async function renderCurrentTab(requestId = navigationSequence) {
+  const tab = state.activeTab;
+  const isCurrentRender = () => requestId === navigationSequence && state.activeTab === tab;
   showLoading();
   try {
-    if (state.activeTab === "home") {
+    if (tab === "home") {
       await Promise.all([loadUserData(), loadTasks()]);
+      if (!isCurrentRender()) return;
       renderHome();
       void loadReferralData();
-    } else if (state.activeTab === "tasks") {
+    } else if (tab === "tasks") {
       await loadTasks();
+      if (!isCurrentRender()) return;
       renderTasks();
       void loadReferralData();
-    } else if (state.activeTab === "daily") {
+    } else if (tab === "daily") {
       await loadUserData();
+      if (!isCurrentRender()) return;
       renderDaily();
-    } else if (state.activeTab === "vip") {
+    } else if (tab === "vip") {
       await loadUserData();
+      if (!isCurrentRender()) return;
       await renderVipTab();
-    } else if (state.activeTab === "wallet") {
+    } else if (tab === "wallet") {
       await loadUserData();
+      if (!isCurrentRender()) return;
       renderWallet();
-    } else if (state.activeTab === "profile") {
+    } else if (tab === "profile") {
       profileView = pendingProfileView || "menu";
       pendingProfileView = null;
-      if (profileView === "history") { historyList = []; historyHasMore = false; }
       await loadUserData();
-      renderProfile();
+      if (!isCurrentRender()) return;
+      await renderProfile();
+      if (!isCurrentRender()) return;
       if (profileView === "referral") void loadReferralData();
     }
   } catch (error) {
+    if (!isCurrentRender()) return;
     console.error("Render tab failed:", error);
     if (state.gateActive) return; // صفحه‌ی عضویت اجباری باز است؛ خطا رویش نوشته نشود
     $("#content").innerHTML = `
@@ -3263,11 +3389,6 @@ async function boot() {
 
   await bootstrapAuth();
   applyStaticTranslations();
-
-  if (state.maintenanceBlocked) {
-    state.initialized = true;
-    return;
-  }
 
   if (!termsAccepted()) {
     showTerms();

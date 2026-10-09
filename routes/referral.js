@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
-const { requireTelegramAuth } = require('../utils/telegramAuth');
+const { requireUnifiedAuth } = require('../utils/unifiedAuth');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
 const PointsLedger = require('../models/PointsLedger');
@@ -19,7 +19,7 @@ const {
 const { buildReferralViewData, calculateReferralEarningsTotal } = require('../utils/referralView');
 
 const { withMembership } = require('../utils/membership');
-const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
+const auth = withMembership(requireUnifiedAuth(process.env.BOT_TOKEN));
 const REFERRAL_LEDGER_TYPES = ['referral_initial', 'referral_bonus', 'referral_commission'];
 const HISTORY_LIMIT = 40;
 
@@ -193,9 +193,9 @@ router.get('/me', auth, async (req, res) => {
       waitDays: REFERRAL_WAIT_DAYS
     },
     referralTasks: buildReferralTaskProgress(u.activeInvitedCount, u.referralRewardClaims),
-    // Referral View deliberately exposes only safe display fields; Telegram IDs are omitted.
-    invited: referralView.team,
-    team: referralView.team
+    // Per-person identities, Telegram IDs, and earnings are deliberately omitted.
+    invited: [],
+    team: []
   });
 });
 

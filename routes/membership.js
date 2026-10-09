@@ -2,12 +2,12 @@
 const express = require('express');
 const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
-const { requireTelegramAuth } = require('../utils/telegramAuth');
+const { requireUnifiedAuth } = require('../utils/unifiedAuth');
 const { membership, toPublic } = require('../utils/membership');
 const RequiredChannel = require('../models/RequiredChannel');
 
 // عمداً فقط احراز هویت (بدون gate) تا کاربری که هنوز عضو نشده بتواند وضعیتش را ببیند و بررسی کند
-const auth = requireTelegramAuth(process.env.BOT_TOKEN);
+const auth = requireUnifiedAuth(process.env.BOT_TOKEN);
 
 // این مسیر عمداً عمومی است: فقط می‌گوید آیا کانال فعالی وجود دارد یا نه.
 // هیچ اطلاعات کاربر، کانال خصوصی یا وضعیت عضویت را برنمی‌گرداند.

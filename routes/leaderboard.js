@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 require('../utils/asyncHandler').wrapRouter(router);
-const { requireTelegramAuth } = require('../utils/telegramAuth');
+const { requireUnifiedAuth } = require('../utils/unifiedAuth');
 const User = require('../models/User');
 const PointsLedger = require('../models/PointsLedger');
 const Settings = require('../models/Settings');
@@ -11,7 +11,7 @@ const { settleClosedWeeks, POSITIVE_TYPES } = require('../utils/weeklyLeaderboar
 
 // احراز هویت تلگرام + بررسی عضویت فعلی در کانال‌های اجباری (روی هر درخواست محافظت‌شده)
 const { withMembership } = require('../utils/membership');
-const auth = withMembership(requireTelegramAuth(process.env.BOT_TOKEN));
+const auth = withMembership(requireUnifiedAuth(process.env.BOT_TOKEN));
 
 // GET /api/leaderboard/top
 router.get('/top', auth, async (req, res) => {
@@ -53,11 +53,11 @@ router.get('/weekly', auth, async (req, res) => {
   const rows = await PointsLedger.aggregate([
     { $match: { createdAt: { $gte: start, $lt: end }, currency: 'points', amount: { $gt: 0 }, type: { $in: POSITIVE_TYPES } } },
     { $group: { _id: '$user', points: { $sum: '$amount' } } },
+    { $sort: { points: -1, _id: 1 } },
+    { $limit: 50 },
     { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
     { $unwind: '$user' },
-    { $match: { 'user.isBanned': false } },
-    { $sort: { points: -1, _id: 1 } },
-    { $limit: 50 }
+    { $match: { 'user.isBanned': false } }
   ]);
   const myTotals = await PointsLedger.aggregate([
     { $match: { user: req.dbUser._id, createdAt: { $gte: start, $lt: end }, currency: 'points', amount: { $gt: 0 }, type: { $in: POSITIVE_TYPES } } },
@@ -67,9 +67,6 @@ router.get('/weekly', auth, async (req, res) => {
   const above = await PointsLedger.aggregate([
     { $match: { createdAt: { $gte: start, $lt: end }, currency: 'points', amount: { $gt: 0 }, type: { $in: POSITIVE_TYPES } } },
     { $group: { _id: '$user', points: { $sum: '$amount' } } },
-    { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
-    { $unwind: '$user' },
-    { $match: { 'user.isBanned': false } },
     { $match: { $or: [{ points: { $gt: myPoints } }, { points: myPoints, _id: { $lt: req.dbUser._id } }] } },
     { $count: 'count' }
   ]);

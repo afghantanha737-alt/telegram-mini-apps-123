@@ -126,6 +126,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 ========================================================= */
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/required-channels', require('./routes/membership'));
+app.use('/api/maintenance', require('./routes/maintenance'));
 app.use('/api/app-info', require('./routes/appInfo'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/points', require('./routes/points'));

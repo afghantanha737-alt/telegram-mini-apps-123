@@ -1378,7 +1378,11 @@ function renderTasks() {
         const safeUrl = safeTaskHttpUrl(task.url).replaceAll("'", "\\'");
         let actionHtml;
 
-        if (task.verifyType === "latest_post") {
+        if (task.taskKind === "vip_activation") {
+          actionHtml = status === "approved"
+            ? `<button class="taskAction done" disabled>${t("task_btn_done")}</button>`
+            : `<button class="taskAction pending" disabled>🔒 VIP ${formatPoints(task.vipPlanNumber)}</button>`;
+        } else if (task.verifyType === "latest_post") {
           const completion = completionRecord(task._id);
           const nextAvailableAt = completion?.nextAvailableAt ? new Date(completion.nextAvailableAt) : null;
           const remaining = nextAvailableAt && Number.isFinite(nextAvailableAt.getTime())

@@ -218,7 +218,9 @@ router.post('/webhook', async (req, res) => {
     }
   }
 
-  const update = req.body;
+  // Mobile login normalizes the /start message before the regular handler;
+  // this must be mutable or the webhook crashes on every new mobile challenge.
+  let update = req.body;
   const updateType = update?.channel_post ? 'channel_post'
     : update?.message_reaction ? 'message_reaction'
       : update?.callback_query ? 'callback_query'
@@ -243,14 +245,12 @@ router.post('/webhook', async (req, res) => {
   if (bot && update?.message && updateType === 'start') {
     try {
       const startCommand = parseTelegramStart(update.message.text);
-      if (startCommand?.payload && String(startCommand.payload).startsWith('mobile_')) {
-        const verified = await verifyMobileChallenge(startCommand.payload, update.message.from?.id);
-        if (verified) {
-          await bot.sendMessage(update.message.chat.id, '✅ هویت شما برای اپ Gramup تأیید شد. حالا به اپلیکیشن برگردید.');
-        }
-        // Continue through the normal /start flow so new users are created exactly once.
-        update = { ...update, message: { ...update.message, text: '/start' } };
-      }
+      const mobilePayload = startCommand?.payload && String(startCommand.payload).startsWith('mobile_')
+        ? String(startCommand.payload)
+        : '';
+      // Complete the normal /start flow first. This guarantees that a newly
+      // verified mobile user exists before /consume tries to create a session.
+      if (mobilePayload) update = { ...update, message: { ...update.message, text: '/start' } };
       const result = await handleTelegramStart({
         message: update.message,
         bot,
@@ -260,6 +260,10 @@ router.post('/webhook', async (req, res) => {
         linkReferralByCode,
         botText
       });
+      if (mobilePayload) {
+        const verified = await verifyMobileChallenge(mobilePayload, update.message.from?.id);
+        if (verified) await bot.sendMessage(update.message.chat.id, '✅ هویت شما برای اپ Gramup تأیید شد. حالا به اپلیکیشن برگردید.');
+      }
       if (result?.welcomeSent) recordStartWelcomeSent();
       console.info('Telegram /start handled', {
         updateId: update.update_id,

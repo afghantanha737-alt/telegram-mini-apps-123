@@ -12,6 +12,9 @@ const PointsLedger = require('../models/PointsLedger');
 const Deposit = require('../models/Deposit');
 const VipPlan = require('../models/VipPlan');
 const VipSubscription = require('../models/VipSubscription');
+const Task = require('../models/Task');
+const TaskCompletion = require('../models/TaskCompletion');
+const { vipActivationTaskDefinition } = require('../utils/vipActivationTasks');
 const { idempotencyTransactionId, executeIdempotently } = require('../utils/idempotency');
 const {
   DAY_MS,
@@ -853,6 +856,47 @@ router.post('/vip/purchase', auth, async (req, res) => {
           status: 'active'
         });
         await subscription.save({ session });
+
+        // A successful, paid VIP subscription completes its matching one-time task.
+        // This is deliberately inside the same transaction as the debit and purchase ledger.
+        const taskDefinition = vipActivationTaskDefinition(planNumber);
+        const vipTask = await Task.findOneAndUpdate(
+          { taskKind: 'vip_activation', vipPlanNumber: planNumber },
+          { $setOnInsert: taskDefinition },
+          { upsert: true, new: true, session, setDefaultsOnInsert: true }
+        );
+        const existingVipCompletion = await TaskCompletion.findOne({ user: user._id, task: vipTask._id }).session(session);
+        if (!existingVipCompletion) {
+          const taskCompletion = await new TaskCompletion({
+            user: user._id,
+            task: vipTask._id,
+            reward: vipTask.reward,
+            status: 'approved',
+            reviewedAt: startAt,
+            reviewedBy: 'vip-purchase-system'
+          }).save({ session });
+          const rewarded = await User.findByIdAndUpdate(
+            user._id,
+            { $inc: { points: vipTask.reward } },
+            { new: true, session }
+          );
+          if (!rewarded) throw vipError('VIP_TASK_USER_NOT_FOUND', 'کاربر برای ثبت پاداش Task پیدا نشد.', 500);
+          const taskLedger = await recordLedgerRequired({
+            user: user._id,
+            type: 'task',
+            currency: 'points',
+            amount: vipTask.reward,
+            description: vipTask.title,
+            balanceAfter: rewarded.points,
+            sourceId: `vip-task:${vipTask._id}:user:${user._id}`,
+            transactionId: idempotencyTransactionId({ userId: user._id, scope: 'vip_purchase', key: req.get('Idempotency-Key'), leg: `activation-task-${planNumber}` }),
+            session
+          });
+          if (!taskLedger.created) throw vipError('VIP_TASK_LEDGER_DUPLICATE', 'پاداش Task این خرید قبلاً ثبت شده است.', 409);
+          await Task.updateOne({ _id: vipTask._id }, { $inc: { completedCount: 1 } }, { session });
+          user.points = rewarded.points;
+          void taskCompletion;
+        }
 
         const ledger = await recordLedgerRequired({
           user: user._id,

@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 const { startRequest } = require('./utils/metrics');
+const { ensureVipActivationTasks } = require('./utils/vipActivationTasks');
 
 const app = express();
 app.disable('x-powered-by');
@@ -211,11 +212,13 @@ async function startServer() {
     await require('./models/LatestPostEngagementState').init();
     // Deposit invoices are unique per user and each TON tx hash may be credited only once.
     await require('./models/Deposit').init();
+    await require('./models/Task').init();
     // VIP plan/subscription indexes must exist before purchases or daily claims are served.
     const VipPlan = require('./models/VipPlan');
     await VipPlan.init();
     await require('./models/VipSubscription').init();
     await VipPlan.ensureDefaults();
+    await ensureVipActivationTasks();
 
     // پاک‌سازی ایندکس‌های قدیمی/ناسازگار که ممکن است از نسخه‌های قبلی
     // پروژه در دیتابیس باقی مانده باشند (مثلاً ایندکس روی فیلدهای

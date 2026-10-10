@@ -23,6 +23,9 @@ const taskSchema = new mongoose.Schema(
     url: { type: String, default: '' },
     // Latest Post Engagement: post IDs are observed from Telegram channel_post updates.
     requiredReaction: { type: String, default: '' },
+    // System tasks are completed by a verified backend event, not by Telegram membership.
+    taskKind: { type: String, enum: ['standard', 'vip_activation'], default: 'standard', index: true },
+    vipPlanNumber: { type: Number, min: 1, max: 10, default: null },
     cooldownHours: { type: Number, default: 3, min: 1, max: 720 },
     latestPostMessageId: { type: Number, default: null },
     latestPostDate: { type: Date, default: null },
@@ -51,5 +54,9 @@ const taskSchema = new mongoose.Schema(
 taskSchema.index({ isActive: 1, expiresAt: 1, isSpecialOfDay: -1, isSponsored: -1, createdAt: -1 });
 taskSchema.index({ isActive: 1, type: 1, createdAt: -1 });
 taskSchema.index({ verifyType: 1, chatId: 1 });
+taskSchema.index(
+  { taskKind: 1, vipPlanNumber: 1 },
+  { unique: true, partialFilterExpression: { taskKind: 'vip_activation', vipPlanNumber: { $type: 'number' } } }
+);
 
 module.exports = mongoose.model('Task', taskSchema);
